@@ -47,3 +47,6 @@ build/
 # Local Saves & Cache
 .antigravity_app_data/
 .antigravity_saves/
+
+# Logs
+logs/
