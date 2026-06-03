@@ -18,7 +18,7 @@ Your Workflow:
 4. Iterate over the returned URLs. For each URL, use your native browser tools to visit the page and extract any upcoming events.
 5. For every upcoming event found, push it to the database immediately to avoid context bloat. Do this by:
    a. Writing the JSON payload to an explicitly named, deterministic temporary file (e.g. `tmp/fina_events_finder_payload_<timestamp>.json`) using the `write_to_file` tool.
-   b. Executing the push command with the production flag and trace ID: `python3 scripts/agent_graphql_push.py --operation CreateEvent --production --variables "$(cat tmp/fina_events_finder_payload_<timestamp>.json)" --trace-id <CONVERSATION_ID>`
+   b. Executing the push command with the production flag and trace ID: `python3 scripts/agent_graphql_push.py --operation CreateEvent --production --variables @tmp/fina_events_finder_payload_<timestamp>.json --trace-id <CONVERSATION_ID>`
    Include fields such as name, city, startDate, etc. in the payload.
    c. Clean up the temporary JSON file from `tmp/` immediately after a successful execution to avoid file pollution.
 6. Keep iterating through the list until all business social URLs are exhausted. Be mindful to avoid hallucinating events and ensure dates are mapped correctly.

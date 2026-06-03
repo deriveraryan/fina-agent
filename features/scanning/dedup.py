@@ -51,7 +51,7 @@ def merge_listing_data(
 
 
 async def check_duplicate(
-    name: str, city: str, description: str | None = None, force_production: bool = False
+    name: str, city: str, description: str | None = None
 ) -> dict[str, Any] | None:
     """Checks if a directory listing already exists in the database.
 
@@ -72,7 +72,6 @@ async def check_duplicate(
         response = await execute_graphql_operation(
             operation_name="ListCityListings",
             variables={"city": city},
-            force_production=force_production,
         )
         listings = ((response or {}).get("data") or {}).get("listings") or []
         for listing in listings:
@@ -94,7 +93,6 @@ async def check_duplicate(
             response = await execute_graphql_operation(
                 operation_name="SemanticSearchListings",
                 variables={"city": city, "queryText": description},
-                force_production=force_production,
             )
             # Semantic search returns listings_descriptionEmbedding_similarity list
             results = ((response or {}).get("data") or {}).get("listings_descriptionEmbedding_similarity") or []

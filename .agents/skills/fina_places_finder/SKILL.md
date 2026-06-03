@@ -22,7 +22,7 @@ To accomplish your task, follow these steps exactly:
    b. Evaluate internally using your general knowledge and the provided reviews whether this place has authentic Filipino affiliation (e.g. Filipino owned, serves Filipino dishes, sells Filipino products/brands, Tagalog church services, etc.).
    c. If verified, push it to the database immediately to avoid context bloat. Do this by:
       i. Writing the JSON payload to an explicitly named, deterministic temporary file (e.g. `tmp/fina_places_finder_payload_<timestamp>.json`) using the `write_to_file` tool.
-      ii. Executing the push command with the production flag and trace ID: `python3 scripts/agent_graphql_push.py --operation CreateListing --production --variables "$(cat tmp/fina_places_finder_payload_<timestamp>.json)" --trace-id <CONVERSATION_ID>`
+      ii. Executing the push command with the production flag and trace ID: `python3 scripts/agent_graphql_push.py --operation CreateListing --production --variables @tmp/fina_places_finder_payload_<timestamp>.json --trace-id <CONVERSATION_ID>`
       Include the following fields from the candidate object in the payload:
       - name: candidate's name
       - category: candidate's category (or default)

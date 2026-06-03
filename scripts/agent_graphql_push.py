@@ -23,13 +23,19 @@ async def main() -> None:
     parser.add_argument("--operation", type=str, required=True)
     parser.add_argument("--variables", type=str, required=True)
     parser.add_argument("--trace-id", type=str, default=None, help="Trace correlation ID.")
-    parser.add_argument("--production", action="store_true", help="Force execution against the production endpoint, bypassing the local emulator.")
     args = parser.parse_args()
 
     BackendObservability.info(f"Starting agent_graphql_push.py with operation={args.operation}", conversation_id=args.trace_id)
 
     try:
-        vars_dict = json.loads(args.variables)
+        raw_variables = args.variables
+        if raw_variables.startswith("@"):
+            file_path = raw_variables[1:]
+            BackendObservability.trace(f"Loading variables from file: '{file_path}'", conversation_id=args.trace_id)
+            with open(file_path, "r") as f:
+                raw_variables = f.read()
+
+        vars_dict = json.loads(raw_variables)
         if not isinstance(vars_dict, dict):
             BackendObservability.fatal("Validation Error: Variables must be a JSON object/dictionary.", conversation_id=args.trace_id)
             sys.exit(1)
@@ -63,7 +69,7 @@ async def main() -> None:
 
         # 1. Deduplicate
         BackendObservability.trace(f"Deduplication check for listing name='{name}' in city='{city}'", conversation_id=args.trace_id)
-        existing = await check_duplicate(name=name, city=city, description=description, force_production=args.production)
+        existing = await check_duplicate(name=name, city=city, description=description)
         
         if existing:
             BackendObservability.info(f"Duplicate found: existing listing ID='{existing['id']}'. Merging...", conversation_id=args.trace_id)
@@ -78,7 +84,6 @@ async def main() -> None:
                             "id": existing["id"],
                             "verificationStatus": merged.get("verificationStatus", "UNVERIFIED"),
                         },
-                        force_production=args.production
                     )
                     await execute_graphql_operation(
                         operation_name="UpdateListingData",
@@ -95,7 +100,6 @@ async def main() -> None:
                             "tags": merged.get("tags"),
                             "sourceUrl": merged.get("sourceUrl"),
                         },
-                        force_production=args.production
                     )
                     BackendObservability.info(f"Successfully updated duplicate listing ID={existing['id']} data/status.", conversation_id=args.trace_id)
                 except Exception as exc:
@@ -130,15 +134,13 @@ async def main() -> None:
             BackendObservability.trace(f"Generating description embedding for: '{desc}'", conversation_id=args.trace_id)
             vars_dict["descriptionEmbedding"] = get_embedding(desc)
             BackendObservability.trace("Successfully generated description embedding.", conversation_id=args.trace_id)
-            
-        # Pop descriptionEmbedding since it is commented out in mutations.gql due to Vector SDK bug
-        vars_dict.pop("descriptionEmbedding", None)
+
 
         if not vars_dict.get("verificationStatus"):
             vars_dict["verificationStatus"] = "UNVERIFIED"
 
     BackendObservability.trace(f"Executing GraphQL operation: '{args.operation}' with variables: {vars_dict}", conversation_id=args.trace_id)
-    result = await execute_graphql_operation(operation_name=args.operation, variables=vars_dict, force_production=args.production)
+    result = await execute_graphql_operation(operation_name=args.operation, variables=vars_dict)
     BackendObservability.info(f"Successfully executed GraphQL operation: '{args.operation}'", conversation_id=args.trace_id)
     sys.stdout.write(json.dumps(result))
 

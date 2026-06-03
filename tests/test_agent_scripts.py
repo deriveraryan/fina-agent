@@ -115,7 +115,34 @@ class TestAgentScripts(unittest.IsolatedAsyncioTestCase):
         mock_execute.assert_called_once_with(
             operation_name="UpdateListingSocialUrls",
             variables={"id": "123", "facebookUrl": "https://facebook.com/resto"},
-            force_production=False
+        )
+
+    @patch("agent_graphql_push.execute_graphql_operation", new_callable=AsyncMock)
+    @patch("builtins.open")
+    async def test_graphql_push_executes_mutation_with_file_variable(self, mock_open: MagicMock, mock_execute: AsyncMock) -> None:
+        """Tests agent_graphql_push.py resolves the file path when variables starts with @."""
+        import agent_graphql_push
+
+        sys.argv = [
+            "agent_graphql_push.py",
+            "--operation",
+            "UpdateListingSocialUrls",
+            "--variables",
+            "@tmp/my_variables.json"
+        ]
+
+        mock_file = MagicMock()
+        mock_file.__enter__.return_value.read.return_value = '{"id": "123", "facebookUrl": "https://facebook.com/resto"}'
+        mock_open.return_value = mock_file
+
+        mock_execute.return_value = {"data": {"updateListingSocialUrls": {"id": "123"}}}
+
+        await agent_graphql_push.main()
+
+        mock_open.assert_called_once_with("tmp/my_variables.json", "r")
+        mock_execute.assert_called_once_with(
+            operation_name="UpdateListingSocialUrls",
+            variables={"id": "123", "facebookUrl": "https://facebook.com/resto"},
         )
 
     @patch("sys.stdout")
@@ -392,7 +419,6 @@ class TestAgentScripts(unittest.IsolatedAsyncioTestCase):
             name="Duplicate Resto",
             city="SYDNEY",
             description="Filipino diner",
-            force_production=False,
         )
         mock_merge.assert_called_once()
         
@@ -420,7 +446,6 @@ class TestAgentScripts(unittest.IsolatedAsyncioTestCase):
                 "tags": None,
                 "sourceUrl": None
             },
-            force_production=False
         )
         
         # Verify output matches status MERGED
@@ -460,7 +485,6 @@ class TestAgentScripts(unittest.IsolatedAsyncioTestCase):
             name="New Resto",
             city="SYDNEY",
             description="Good food",
-            force_production=False,
         )
         mock_geocode.assert_called_once_with("123 St", "SYDNEY")
         mock_embedding.assert_called_once_with("Good food")
@@ -475,9 +499,9 @@ class TestAgentScripts(unittest.IsolatedAsyncioTestCase):
                 "description": "Good food",
                 "latitude": -33.8688,
                 "longitude": 151.2093,
+                "descriptionEmbedding": [0.1, 0.2, 0.3],
                 "verificationStatus": "UNVERIFIED"
             },
-            force_production=False
         )
         written_calls = [call.args[0] for call in mock_stdout.write.call_args_list]
         combined_output = "".join(written_calls)

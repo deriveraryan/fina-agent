@@ -178,13 +178,13 @@ async def scan_city_events(city: str) -> dict[str, int]:
 # ─── Google Maps Scan Pipeline ─────────────────────────────
 
 
-async def run_maps_scan_all_cities(force_production: bool = False) -> dict[str, dict[str, Any]]:
+async def run_maps_scan_all_cities() -> dict[str, dict[str, Any]]:
     """Iterates all target cities and runs the Google Maps Places scan pipeline for each."""
     BackendObservability.info("Starting Google Maps places scan across all cities.")
     results = {}
     for city in CITIES:
         try:
-            result = await scan_city_maps_listings(city, force_production=force_production)
+            result = await scan_city_maps_listings(city)
             BackendObservability.info(
                 f"Google Maps scan completed for {city}.",
                 found=result.get("found", 0),
@@ -200,12 +200,11 @@ async def run_maps_scan_all_cities(force_production: bool = False) -> dict[str, 
     return results
 
 
-async def scan_city_maps_listings(city: str, force_production: bool = False) -> dict[str, int]:
+async def scan_city_maps_listings(city: str) -> dict[str, int]:
     """Scans Google Places for Filipino businesses/churches, deduplicates, and persists them.
 
     Args:
         city: Target city identifier (e.g. 'SYDNEY').
-        force_production: Force query/mutation against production DB instead of emulator.
 
     Returns:
         Summary dict with keys: found, created, updated, flagged, duration_ms.
@@ -230,7 +229,6 @@ async def scan_city_maps_listings(city: str, force_production: bool = False) -> 
                     name=listing["name"],
                     city=city,
                     description=listing.get("description"),
-                    force_production=force_production,
                 )
 
                 if existing:
@@ -251,7 +249,6 @@ async def scan_city_maps_listings(city: str, force_production: bool = False) -> 
                                 "tags": merged.get("tags"),
                                 "sourceUrl": merged.get("sourceUrl"),
                             },
-                            force_production=force_production,
                         )
                         updated += 1
                 else:
@@ -280,7 +277,6 @@ async def scan_city_maps_listings(city: str, force_production: bool = False) -> 
                             "verificationStatus": "UNVERIFIED",
                             "descriptionEmbedding": vector,
                         },
-                        force_production=force_production,
                     )
                     created += 1
 
@@ -309,7 +305,6 @@ async def scan_city_maps_listings(city: str, force_production: bool = False) -> 
                 "status": status,
                 "errorMessage": error_message,
             },
-            force_production=force_production,
         )
     except Exception as log_exc:
         BackendObservability.error(
