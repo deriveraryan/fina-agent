@@ -1,0 +1,49 @@
+# ==============================================================================
+#                 Fina Agent Gitignore
+# ==============================================================================
+
+# OS specific files
+.DS_Store
+.AppleDouble
+.LSOverride
+Icon\r
+._*
+.Spotlight-V100
+.Trashes
+
+# VS Code / IDEs
+.vscode/
+!.vscode/extensions.json
+!.vscode/launch.json
+!.vscode/tasks.json
+.history/
+.idea/
+*.iml
+*.ipr
+*.iws
+
+# Python (Caches & Venvs)
+__pycache__/
+*.py[cod]
+*$py.class
+.pytest_cache/
+.coverage
+htmlcov/
+.venv/
+venv/
+env/
+ENV/
+*.egg-info/
+dist/
+build/
+.mypy_cache/
+
+# Secrets and Environment Variables
+.env
+.env.local
+.env.*.local
+*.secret
+
+# Local Saves & Cache
+.antigravity_app_data/
+.antigravity_saves/
