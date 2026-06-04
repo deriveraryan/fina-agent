@@ -66,10 +66,19 @@ You can trigger a manual scan by asking the Antigravity agent directly in the ch
     > "Use the `fina_places_finder` skill to scan Google Places for all categories (`RESTAURANT`, `CAFE`, `SHOP`, `CHURCH`, `COMMUNITY`, `GOVERNMENT`) across all major Australian cities (`SYDNEY`, `MELBOURNE`, `BRISBANE`, `PERTH`, `ADELAIDE`, `DARWIN`, `HOBART`, `CANBERRA`, `GOLD COAST`)."
 *   *Missing Socials Finder*:
     > "Use the `fina_socials_finder` skill to back-fill missing social URLs in SYDNEY."
+    >
+    > **To scan all categories and cities at once:**
+    > "Use the `fina_socials_finder` skill to back-fill missing social URLs for all listing categories across all major Australian cities (`SYDNEY`, `MELBOURNE`, `BRISBANE`, `PERTH`, `ADELAIDE`, `DARWIN`, `HOBART`, `CANBERRA`, `GOLD COAST`)."
 *   *Events Finder*:
     > "Use the `fina_events_finder` skill to discover events in MELBOURNE."
+    >
+    > **To scan all categories and cities at once:**
+    > "Use the `fina_events_finder` skill to discover events for all listing categories across all major Australian cities (`SYDNEY`, `MELBOURNE`, `BRISBANE`, `PERTH`, `ADELAIDE`, `DARWIN`, `HOBART`, `CANBERRA`, `GOLD COAST`)."
 *   *Community Scanning*:
     > "Use the `fina_community_finder` skill to search Facebook and Instagram for community listings in SYDNEY."
+    >
+    > **To scan all categories and cities at once:**
+    > "Use the `fina_community_finder` skill to search Facebook and Instagram for all categories (`RESTAURANT`, `CAFE`, `SHOP`, `CHURCH`, `COMMUNITY`, `GOVERNMENT`) across all major Australian cities (`SYDNEY`, `MELBOURNE`, `BRISBANE`, `PERTH`, `ADELAIDE`, `DARWIN`, `HOBART`, `CANBERRA`, `GOLD COAST`)."
 
 ### 3. Scheduling Automatic Scans
 You can schedule the agents to run periodic background scans using the `/schedule` slash command:

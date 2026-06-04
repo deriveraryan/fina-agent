@@ -42,7 +42,7 @@ Here is the registry of the 4 specialized Antigravity subagents:
 
 ### 2. `fina_socials_finder`
 *   **Role**: Enriches existing database listings with missing Facebook and Instagram URLs.
-*   **CLI Trigger**: `python3 scripts/agent_get_seeds.py --type missing-social --city <CITY>`
+*   **CLI Trigger**: `python3 scripts/agent_fetch_targets.py --type missing-social --city <CITY>`
 *   **Logic**:
     1. Fetches seed listings missing social links.
     2. Searches the web using LLM-driven site filters.
@@ -51,7 +51,7 @@ Here is the registry of the 4 specialized Antigravity subagents:
 
 ### 3. `fina_events_finder`
 *   **Role**: Crawls social media pages of verified businesses to discover upcoming temporal events.
-*   **CLI Trigger**: `python3 scripts/agent_get_seeds.py --type business-socials --city <CITY>`
+*   **CLI Trigger**: `python3 scripts/agent_fetch_targets.py --type business-socials --city <CITY>`
 *   **Logic**:
     1. Retrieves verified social media URLs for a city.
     2. Uses native browser tools to scan the pages for upcoming events.
@@ -86,9 +86,9 @@ pip install -r requirements.txt
 ```
 
 ### CLI Script Reference
-- **Get Seeds**:
+- **Fetch Targets**:
   ```bash
-  python3 scripts/agent_get_seeds.py --type <missing-social|business-socials> --city <CITY> --trace-id <CONVERSATION_ID>
+  python3 scripts/agent_fetch_targets.py --type <missing-social|business-socials> --city <CITY> --trace-id <CONVERSATION_ID>
   ```
 - **Maps Fetch**:
   ```bash

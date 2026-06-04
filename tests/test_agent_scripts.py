@@ -33,13 +33,13 @@ class TestAgentScripts(unittest.IsolatedAsyncioTestCase):
         sys.argv = self._orig_argv
 
 
-    @patch("agent_get_seeds.execute_graphql_operation", new_callable=AsyncMock)
+    @patch("agent_fetch_targets.execute_graphql_operation", new_callable=AsyncMock)
     @patch("sys.stdout")
-    async def test_get_seeds_missing_social(self, mock_stdout: MagicMock, mock_execute: AsyncMock) -> None:
-        """Tests agent_get_seeds.py --type missing-social invokes ListListingsMissingSocial."""
-        import agent_get_seeds
+    async def test_fetch_targets_missing_social(self, mock_stdout: MagicMock, mock_execute: AsyncMock) -> None:
+        """Tests agent_fetch_targets.py --type missing-social invokes ListListingsMissingSocial."""
+        import agent_fetch_targets
 
-        sys.argv = ["agent_get_seeds.py", "--type", "missing-social", "--city", "SYDNEY"]
+        sys.argv = ["agent_fetch_targets.py", "--type", "missing-social", "--city", "SYDNEY"]
         
         mock_execute.return_value = {
             "data": {
@@ -49,7 +49,7 @@ class TestAgentScripts(unittest.IsolatedAsyncioTestCase):
             }
         }
 
-        await agent_get_seeds.main()
+        await agent_fetch_targets.main()
 
         mock_execute.assert_called_once_with(
             operation_name="ListListingsMissingSocial",
@@ -59,13 +59,13 @@ class TestAgentScripts(unittest.IsolatedAsyncioTestCase):
             json.dumps([{"id": "123", "name": "Pinoy Cafe"}])
         )
 
-    @patch("agent_get_seeds.execute_graphql_operation", new_callable=AsyncMock)
+    @patch("agent_fetch_targets.execute_graphql_operation", new_callable=AsyncMock)
     @patch("sys.stdout")
-    async def test_get_seeds_business_socials(self, mock_stdout: MagicMock, mock_execute: AsyncMock) -> None:
-        """Tests agent_get_seeds.py --type business-socials invokes ListCityListings and extracts social URLs."""
-        import agent_get_seeds
+    async def test_fetch_targets_business_socials(self, mock_stdout: MagicMock, mock_execute: AsyncMock) -> None:
+        """Tests agent_fetch_targets.py --type business-socials invokes ListCityListings and extracts social URLs."""
+        import agent_fetch_targets
 
-        sys.argv = ["agent_get_seeds.py", "--type", "business-socials", "--city", "SYDNEY"]
+        sys.argv = ["agent_fetch_targets.py", "--type", "business-socials", "--city", "SYDNEY"]
         
         mock_execute.return_value = {
             "data": {
@@ -78,7 +78,7 @@ class TestAgentScripts(unittest.IsolatedAsyncioTestCase):
             }
         }
 
-        await agent_get_seeds.main()
+        await agent_fetch_targets.main()
 
         mock_execute.assert_called_once_with(
             operation_name="ListCityListings",
@@ -636,16 +636,16 @@ class TestAgentScripts(unittest.IsolatedAsyncioTestCase):
         stderr_calls = "".join(call.args[0] for call in mock_stderr.write.call_args_list)
         self.assertIn("Validation Error: 'description' must be a string if provided.", stderr_calls)
 
-    @patch("agent_get_seeds.execute_graphql_operation", new_callable=AsyncMock)
+    @patch("agent_fetch_targets.execute_graphql_operation", new_callable=AsyncMock)
     @patch("sys.stdout.write")
     @patch("sys.stderr.write")
-    async def test_agent_get_seeds_cli_logging_to_stderr(
+    async def test_agent_fetch_targets_cli_logging_to_stderr(
         self, mock_stderr_write: MagicMock, mock_stdout_write: MagicMock, mock_execute: AsyncMock
     ) -> None:
-        """Tests that agent_get_seeds.py logs to stderr and outputs JSON to stdout."""
-        import agent_get_seeds
+        """Tests that agent_fetch_targets.py logs to stderr and outputs JSON to stdout."""
+        import agent_fetch_targets
 
-        sys.argv = ["agent_get_seeds.py", "--type", "missing-social", "--city", "SYDNEY"]
+        sys.argv = ["agent_fetch_targets.py", "--type", "missing-social", "--city", "SYDNEY"]
         mock_execute.return_value = {
             "data": {
                 "listings": [
@@ -654,7 +654,7 @@ class TestAgentScripts(unittest.IsolatedAsyncioTestCase):
             }
         }
 
-        await agent_get_seeds.main()
+        await agent_fetch_targets.main()
 
         # Check stdout has correct JSON
         mock_stdout_write.assert_called()
@@ -666,22 +666,22 @@ class TestAgentScripts(unittest.IsolatedAsyncioTestCase):
         # Check stderr has logs
         mock_stderr_write.assert_called()
         stderr_calls = "".join(call.args[0] for call in mock_stderr_write.call_args_list)
-        self.assertIn("[INFO] Starting agent_get_seeds.py with type=missing-social, city=SYDNEY", stderr_calls)
+        self.assertIn("[INFO] Starting agent_fetch_targets.py with type=missing-social, city=SYDNEY", stderr_calls)
         self.assertIn("[INFO] Retrieved 1 listings missing social media links.", stderr_calls)
 
-    @patch("agent_get_seeds.execute_graphql_operation", new_callable=AsyncMock)
+    @patch("agent_fetch_targets.execute_graphql_operation", new_callable=AsyncMock)
     @patch("sys.stdout.write")
     @patch("sys.stderr.write")
-    async def test_agent_get_seeds_with_trace_id(
+    async def test_agent_fetch_targets_with_trace_id(
         self, mock_stderr_write: MagicMock, mock_stdout_write: MagicMock, mock_execute: AsyncMock
     ) -> None:
-        """Tests that agent_get_seeds.py parses and propagates --trace-id to logs."""
-        import agent_get_seeds
+        """Tests that agent_fetch_targets.py parses and propagates --trace-id to logs."""
+        import agent_fetch_targets
 
-        sys.argv = ["agent_get_seeds.py", "--type", "missing-social", "--city", "SYDNEY", "--trace-id", "test-trace-123"]
+        sys.argv = ["agent_fetch_targets.py", "--type", "missing-social", "--city", "SYDNEY", "--trace-id", "test-trace-123"]
         mock_execute.return_value = {"data": {"listings": []}}
 
-        await agent_get_seeds.main()
+        await agent_fetch_targets.main()
 
         # Check stderr logs contain the trace/conversation ID context
         stderr_calls = "".join(call.args[0] for call in mock_stderr_write.call_args_list)

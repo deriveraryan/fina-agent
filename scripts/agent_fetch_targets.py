@@ -19,13 +19,13 @@ from features.shared.graphql_client import execute_graphql_operation
 from features.shared.observability import BackendObservability
 
 async def main() -> None:
-    parser = argparse.ArgumentParser(description="Fetch Fina seed sources from DB.")
+    parser = argparse.ArgumentParser(description="Fetch Fina target listings from DB.")
     parser.add_argument("--type", choices=["missing-social", "business-socials"], required=True)
     parser.add_argument("--city", type=str, default=None)
     parser.add_argument("--trace-id", type=str, default=None, help="Trace correlation ID.")
     args = parser.parse_args()
 
-    BackendObservability.info(f"Starting agent_get_seeds.py with type={args.type}, city={args.city}", conversation_id=args.trace_id)
+    BackendObservability.info(f"Starting agent_fetch_targets.py with type={args.type}, city={args.city}", conversation_id=args.trace_id)
 
     if args.type == "missing-social":
         variables = {}

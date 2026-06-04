@@ -79,23 +79,61 @@ async def close_crawler() -> None:
             _crawler = None
 
 
+def _clean_social_url(url: str, platform: str) -> str | None:
+    import urllib.parse
+    url = urllib.parse.unquote(url)
+    google_match = re.search(r'(?:url\?q=)(https?://[^&]+)', url)
+    if google_match:
+        url = google_match.group(1)
+        
+    if "profile.php" not in url:
+        url = url.split("?")[0].split("#")[0]
+        
+    if platform.lower() == "facebook":
+        if "profile.php" in url:
+            parsed_url = urllib.parse.urlparse(url)
+            params = urllib.parse.parse_qs(parsed_url.query)
+            if "id" in params:
+                return f"https://www.facebook.com/profile.php?id={params['id'][0]}"
+        
+        match = re.search(r'https?://(?:www\.)?facebook\.com/([^/]+)', url)
+        if match:
+            username = match.group(1)
+            if username in ("sharer", "share.php", "pages", "groups", "events", "login", "policies", "r.php", "campaign", "help", "people"):
+                pages_match = re.search(r'https?://(?:www\.)?facebook\.com/people/[^/]+/([^/]+)?', url)
+                if pages_match:
+                    return f"https://www.facebook.com/people/{pages_match.group(1)}/"
+                return None
+            return f"https://www.facebook.com/{username}/"
+            
+    elif platform.lower() == "instagram":
+        match = re.search(r'https?://(?:www\.)?instagram\.com/([^/]+)', url)
+        if match:
+            username = match.group(1)
+            if username in ("p", "explore", "reels", "developer", "about", "legal", "accounts"):
+                return None
+            return f"https://www.instagram.com/{username}/"
+            
+    return None
+
+
 async def search_social_url_google(business_name: str, city: str, platform: str) -> str | None:
     """Constructs a Google Search query for the platform and extracts matching URLs using Crawl4AI."""
     domain = PLATFORM_DOMAINS.get(platform.lower())
     if not domain:
         return None
 
-    # Construct search query, e.g. "Lola's Grill" Sydney site:facebook.com
-    search_query = f'"{business_name}" {city} site:{domain}'
+    # Construct search query, e.g. Lola's Grill Sydney site:facebook.com
+    search_query = f"{business_name} {city} site:{domain}"
     encoded_query = search_query.replace(" ", "+")
     search_url = f"https://www.google.com/search?q={encoded_query}"
 
-    # Rate limiting: space Google Searches by at least 60 seconds
+    # Rate limiting: space Google Searches by at least 2 seconds
     global _last_google_search_time
     async with _google_search_lock:
         elapsed = time.time() - _last_google_search_time
-        if elapsed < 60.0:
-            sleep_duration = 60.0 - elapsed
+        if elapsed < 2.0:
+            sleep_duration = 2.0 - elapsed
             BackendObservability.info(
                 f"Google Search rate limiter: sleeping for {sleep_duration:.2f}s to avoid rate limits."
             )
@@ -106,26 +144,21 @@ async def search_social_url_google(business_name: str, city: str, platform: str)
 
     try:
         from crawl4ai import CrawlerRunConfig, CacheMode
-        from crawl4ai.extraction_strategy import JsonCssExtractionStrategy
 
         crawler = await _get_crawler()
-        run_config = CrawlerRunConfig(
-            cache_mode=CacheMode.BYPASS,
-            extraction_strategy=JsonCssExtractionStrategy(GOOGLE_SEARCH_SCHEMA)
-        )
+        run_config = CrawlerRunConfig(cache_mode=CacheMode.BYPASS)
 
         result = await crawler.arun(url=search_url, config=run_config)
-        if not result or not result.extracted_content:
+        if not result or not result.html:
             return None
 
-        # Parse extracted JSON string from structured output
-        extracted_data = json.loads(result.extracted_content)
-        for item in extracted_data:
-            url = item.get("url")
-            if url and domain in url:
-                # Basic validation to avoid passing sub-pages if we can find direct profiles
-                # e.g., we want to avoid '/posts', '/photos', '/about' links if possible, but any domain link is a candidate
-                return url
+        # Extract all URLs matching the platform domain from the HTML
+        urls = re.findall(r'href=["\'](https?://[^"\']*)["\']', result.html)
+        for url in urls:
+            if domain in url:
+                cleaned = _clean_social_url(url, platform)
+                if cleaned:
+                    return cleaned
 
     except ImportError:
         # Graceful degradation during TDD/mock runs

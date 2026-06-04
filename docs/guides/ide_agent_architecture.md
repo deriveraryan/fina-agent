@@ -54,9 +54,9 @@ flowchart TD
 Base
     %% ════════ 2. MISSING SOCIALS FINDER FLOW (BACKFILL) ════════
     SelectSubagent -->|Missing Socials Finder| InvokeSocialsFinder["IDE Invokes fina_socials_finder Subagent"]
-    InvokeSocialsFinder --> ExecGetMissingSocial["Execute: python3 scripts/agent_get_seeds.py<br>--type missing-social"]
+    InvokeSocialsFinder --> ExecGetMissingSocial["Execute: python3 scripts/agent_fetch_targets.py<br>--type missing-social"]
     
-    subgraph agent_get_missing_social["Inside scripts/agent_get_seeds.py"]
+    subgraph agent_fetch_missing_social["Inside scripts/agent_fetch_targets.py"]
         DBQueryMissingSocial[("PostgreSQL Database<br>(ListListingsMissingSocial)")]
         ReturnMissingSocial["Returns JSON list of Listings missing URLs"]
     end
@@ -81,9 +81,9 @@ Base
     
     %% ════════ 3. EVENTS FINDER FLOW (BUSINESS PAGES) ════════
     SelectSubagent -->|Events Finder| InvokeEventsFinder["IDE Invokes fina_events_finder Subagent"]
-    InvokeEventsFinder --> ExecGetBusinessSocial["Execute: python3 scripts/agent_get_seeds.py<br>--type business-socials --city C"]
+    InvokeEventsFinder --> ExecGetBusinessSocial["Execute: python3 scripts/agent_fetch_targets.py<br>--type business-socials --city C"]
     
-    subgraph agent_get_business_social["Inside scripts/agent_get_seeds.py"]
+    subgraph agent_fetch_business_social["Inside scripts/agent_fetch_targets.py"]
         DBQueryBusinessSocial[("PostgreSQL Database<br>(ListCityListings)")]
         ReturnBusinessSocial["Returns JSON list of Business Social URLs"]
     end
@@ -157,12 +157,12 @@ This subagent automates business research on Google Maps:
 
 ### 2. The `fina_socials_finder` Subagent (Missing Socials Finder)
 This subagent focuses purely on completing existing directory entries:
-*   **Targeting**: Uses `agent_get_seeds.py --type missing-social` to query the database for existing listings that lack Facebook or Instagram URLs.
+*   **Targeting**: Uses `agent_fetch_targets.py --type missing-social` to query the database for existing listings that lack Facebook or Instagram URLs.
 *   **Web Search**: Uses LLM-driven web search tools (with site-specific filtering) to find the business's official social media pages, verifies the match, and pushes updates via the `UpdateListingSocialUrls` mutation.
 
 ### 3. The `fina_events_finder` Subagent (Listing's Events Discoverer)
 This subagent directly crawls the social pages of verified businesses to discover upcoming temporal events.
-*   **Targeting**: Uses `agent_get_seeds.py --type business-socials --city C` to pull the social URLs of all verified listings in the specified city.
+*   **Targeting**: Uses `agent_fetch_targets.py --type business-socials --city C` to pull the social URLs of all verified listings in the specified city.
 *   **Web Browsing**: Uses IDE native browser tools to scan those pages specifically for upcoming events.
 *   **Pushing**: Creates new event records via the `CreateEvent` GraphQL mutation.
 
@@ -175,7 +175,7 @@ This subagent actively searches Facebook and Instagram for Filipino community or
 
 ### 5. Database Integration Scripts
 To maintain security and ensure all data mutations pass through the authorized GraphQL layer, the subagents rely on local Python helper CLI scripts that connect to the core `fina` Firebase project:
-*   `scripts/agent_get_seeds.py`: Fetches target source URLs, missing-social listings, or business-socials from the database.
+*   `scripts/agent_fetch_targets.py`: Fetches target source URLs, missing-social listings, or business-socials from the database.
 *   `scripts/agent_graphql_push.py`: Pushes verified JSON objects or updates to the backend using GraphQL operations. Also synchronously handles geocoding and deduplication before creating new listings.
 *   `scripts/agent_maps_fetch.py`: Searches Google Places (New) Text Search with caching and pagination.
 *   `scripts/agent_social_search.py`: Searches Facebook/Instagram for community pages with caching and pagination.
