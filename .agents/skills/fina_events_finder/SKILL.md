@@ -22,4 +22,4 @@ Your Workflow:
    Include fields such as name, city, startDate, etc. in the payload.
    c. Clean up the temporary JSON file from `tmp/` immediately after a successful execution to avoid file pollution.
 6. Keep iterating through the list until all business social URLs are exhausted. Be mindful to avoid hallucinating events and ensure dates are mapped correctly.
-7. Once completed, write a final status report to a markdown file in the `logs/` directory using the filename format `logs/fina_events_finder_report_{CITY}_{YYYYMMDD}_{HHMM}.md`. Read and follow the report template in `REPORT_TEMPLATE.md` (located in the same directory as this SKILL.md) to produce the final report. You MUST follow the template structure exactly.
+7. Once completed, write a final status report to a markdown file in the `logs/{YYYYMMDD}/` directory using the filename format `logs/{YYYYMMDD}/fina_events_finder_report_{CITY}_{YYYYMMDD}_{HHMM}.md`. Read and follow the report template in `REPORT_TEMPLATE.md` (located in the same directory as this SKILL.md) to produce the final report. You MUST follow the template structure exactly.

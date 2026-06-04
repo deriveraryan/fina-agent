@@ -27,4 +27,4 @@ Your Workflow:
       iii. Clean up the temporary JSON file from `tmp/` immediately after a successful execution to avoid file pollution.
 5. If the returned JSON indicates `has_more` is true, increment offset by 10 and repeat.
 6. Once Facebook is done, repeat the entire process with `--platform instagram`.
-7. Write a final status report to a markdown file in the `logs/` directory using the filename format `logs/fina_community_finder_report_{CITY}_{YYYYMMDD}_{HHMM}.md`. Read and follow the report template in `REPORT_TEMPLATE.md` (located in the same directory as this SKILL.md) to produce the final report. You MUST follow the template structure exactly.
+7. Write a final status report to a markdown file in the `logs/{YYYYMMDD}/` directory using the filename format `logs/{YYYYMMDD}/fina_community_finder_report_{CITY}_{YYYYMMDD}_{HHMM}.md`. Read and follow the report template in `REPORT_TEMPLATE.md` (located in the same directory as this SKILL.md) to produce the final report. You MUST follow the template structure exactly.

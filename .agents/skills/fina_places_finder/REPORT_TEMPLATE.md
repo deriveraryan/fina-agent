@@ -3,7 +3,7 @@
 <!--
   TEMPLATE: Follow this structure exactly when writing the final report.
   Replace all {PLACEHOLDER} values with actual data.
-  Filename: logs/fina_places_finder_report_{CITY}_{YYYYMMDD}_{HHMM}.md
+  Filename: logs/{YYYYMMDD}/fina_places_finder_report_{CITY}_{YYYYMMDD}_{HHMM}.md
 -->
 
 ## Run Metadata
