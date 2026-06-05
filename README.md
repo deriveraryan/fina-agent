@@ -60,11 +60,17 @@ For a detailed flow diagram of how these agents operate, see the [Native IDE Age
 ### 2. Running Scans via Chat Prompts
 You can trigger a manual scan by asking the Antigravity agent directly in the chat. For large, multi-city scans, we highly recommend prefixing your prompt with the `/goal` slash command so the agent runs continuously in the background without stopping.
 
+#### 💾 Caching & Bypassing Cache (`--refresh`)
+By default, the `fina_places_finder` caches Google Places search results under `.antigravity_saves/` to minimize API costs and prevent prompt bloat. To force a live scan that bypasses the local cache, include terms like **"refresh"**, **"bypassing cache"**, or **"live scan"** in your prompt (which instructs the agent to run the underlying fetch script with the `--refresh` flag).
+
 *   *Places Discovery*:
     > "Use the `fina_places_finder` skill to scan Google Places in <CITY> for <CATEGORY>." (e.g., replacement: `DARWIN`, `RESTAURANT`).
     >
-    > **To scan a single city for all categories:**
+    > **To scan a single city for all categories (using cache):**
     > "/goal Use the `fina_places_finder` skill to scan Google Places for all categories (`RESTAURANT`, `CAFE`, `SHOP`, `CHURCH`, `COMMUNITY`, `GOVERNMENT`) in SYDNEY."
+    >
+    > **To force a fresh live scan bypassing the local cache:**
+    > "/goal Use the `fina_places_finder` skill to scan Google Places with **refresh** for RESTAURANT in SYDNEY."
     >
     > **To scan a single category across all cities:**
     > "/goal Use the `fina_places_finder` skill to scan Google Places for RESTAURANT across all major Australian cities (`SYDNEY`, `MELBOURNE`, `BRISBANE`, `PERTH`, `ADELAIDE`, `DARWIN`, `HOBART`, `CANBERRA`, `GOLD COAST`)."
@@ -93,7 +99,19 @@ You can trigger a manual scan by asking the Antigravity agent directly in the ch
     > **To scan all categories and cities at once:**
     > "/goal Use the `fina_community_finder` skill to search the web for all categories (`RESTAURANT`, `CAFE`, `SHOP`, `CHURCH`, `COMMUNITY`, `GOVERNMENT`) across all major Australian cities (`SYDNEY`, `MELBOURNE`, `BRISBANE`, `PERTH`, `ADELAIDE`, `DARWIN`, `HOBART`, `CANBERRA`, `GOLD COAST`)."
 
-### 3. Scheduling Automatic Scans
+### 3. Running Scripts via CLI
+You can execute the underlying discovery and database push scripts directly in your shell.
+
+*   **Google Places Fetch (with `--refresh` to bypass local cache and query live API)**:
+    ```bash
+    python3 scripts/agent_maps_fetch.py --city SYDNEY --category RESTAURANT --limit 10 --offset 0 --refresh --trace-id <CONVERSATION_ID>
+    ```
+*   **GraphQL Database Push**:
+    ```bash
+    python3 scripts/agent_graphql_push.py --operation CreateListing --variables @tmp/payload.json --trace-id <CONVERSATION_ID>
+    ```
+
+### 4. Scheduling Automatic Scans
 You can schedule the agents to run periodic background scans using the `/schedule` slash command:
 *   *Places Scan Schedule*:
     ```bash

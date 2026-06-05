@@ -4,7 +4,7 @@ Runs completely offline using unittest mocks.
 """
 
 import unittest
-from unittest.mock import patch, AsyncMock
+from unittest.mock import patch, AsyncMock, MagicMock
 from features.scanning.dedup import normalize_name, merge_listing_data, check_duplicate
 
 
