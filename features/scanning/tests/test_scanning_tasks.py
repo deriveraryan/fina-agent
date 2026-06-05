@@ -12,9 +12,11 @@ class TestScanningTasks(unittest.IsolatedAsyncioTestCase):
     """Offline unit test suite for task orchestration and scheduler hooks."""
 
     @patch("features.scanning.tasks.execute_graphql_operation")
+    @patch("features.shared.embeddings.get_embedding")
     @patch.dict("os.environ", {"GOOGLE_MAPS_API_KEY": "mock-key", "GEMINI_API_KEY": ""})
-    async def test_scan_city_maps_listings_execution(self, mock_execute: AsyncMock) -> None:
+    async def test_scan_city_maps_listings_execution(self, mock_embedding: MagicMock, mock_execute: AsyncMock) -> None:
         """Tests that the scan_city_maps_listings pipeline discovery and database persistence flow works."""
+        mock_embedding.return_value = [0.0] * 768
         mock_execute.return_value = {
             "data": {
                 "listings": []

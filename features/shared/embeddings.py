@@ -4,11 +4,11 @@ import logging
 def get_embedding(text: str) -> list[float]:
     """Generates a 768-dimension vector embedding for the given text using gemini-embedding-2.
     
-    If GEMINI_API_KEY is not set or in offline/mock mode, returns a list of 768 zeros.
+    Raises ValueError if GEMINI_API_KEY is not set or is 'mock-key'.
     """
     gemini_key = os.getenv("GEMINI_API_KEY")
     if not gemini_key or gemini_key == "mock-key":
-        return [0.0] * 768
+        raise ValueError("GEMINI_API_KEY is not set or is 'mock-key'. Real services are required.")
         
     try:
         from google import genai
