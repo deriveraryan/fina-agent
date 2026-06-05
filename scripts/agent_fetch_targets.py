@@ -20,7 +20,7 @@ from features.shared.observability import BackendObservability
 
 async def main() -> None:
     parser = argparse.ArgumentParser(description="Fetch Fina target listings from DB.")
-    parser.add_argument("--type", choices=["missing-social", "business-socials"], required=True)
+    parser.add_argument("--type", choices=["missing-social", "business-socials", "city-listings"], required=True)
     parser.add_argument("--city", type=str, default=None)
     parser.add_argument("--trace-id", type=str, default=None, help="Trace correlation ID.")
     args = parser.parse_args()
@@ -51,6 +51,23 @@ async def main() -> None:
                 urls.append(l["instagramUrl"])
         BackendObservability.info(f"Retrieved {len(listings)} listings for {args.city}, extracted {len(urls)} social media URLs.", conversation_id=args.trace_id)
         sys.stdout.write(json.dumps(urls))
+    elif args.type == "city-listings":
+        if not args.city:
+            BackendObservability.fatal("Validation Error: --city is required for city-listings", conversation_id=args.trace_id)
+            sys.exit(1)
+        BackendObservability.trace(f"Executing GraphQL operation ListCityListings with variables: {{'city': '{args.city}'}}", conversation_id=args.trace_id)
+        result = await execute_graphql_operation(operation_name="ListCityListings", variables={"city": args.city})
+        listings = result.get("data", {}).get("listings", [])
+        output_listings = []
+        for l in listings:
+            output_listings.append({
+                "id": l.get("id"),
+                "name": l.get("name"),
+                "facebookUrl": l.get("facebookUrl"),
+                "instagramUrl": l.get("instagramUrl")
+            })
+        BackendObservability.info(f"Retrieved {len(listings)} listings for {args.city} deduplication context.", conversation_id=args.trace_id)
+        sys.stdout.write(json.dumps(output_listings))
 
 if __name__ == "__main__":
     from features.shared.env_loader import load_env_file

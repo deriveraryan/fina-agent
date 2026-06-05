@@ -108,24 +108,11 @@ Base
     
     %% ════════ 4. COMMUNITY FINDER FLOW (SOCIAL) ════════
     SelectSubagent -->|Community Finder| InvokeCommunityFinder["IDE Invokes fina_community_finder Subagent"]
-    InvokeCommunityFinder --> ExecSocialSearch["Execute: python3 scripts/agent_social_search.py<br>--city C --category CAT --platform facebook --limit 10 --offset O"]
+    InvokeCommunityFinder --> FetchCityListings["Execute: python3 scripts/agent_fetch_targets.py<br>--type city-listings --city C"]
+    FetchCityListings --> NativeWebSearch["Subagent uses Native Web Search<br>(e.g., Google site:facebook.com)"]
+    NativeWebSearch --> FilterKnown["Filters out existing URLs/Names<br>from city-listings context"]
     
-    subgraph agent_social_search["Inside scripts/agent_social_search.py"]
-        CheckCacheSocial{"Cache File Exists?"}
-        ReadCacheSocial["Read results from local cache:<br>.antigravity_saves/social_cache_*.json"]
-        SearchSocial["Search platform live via Browser<br>Deduplicate & Write Cache"]
-        SliceSocial["Slice results by limit & offset"]
-        ReturnPageSocial["Return JSON Page (candidates, total, has_more)"]
-    end
-    
-    ExecSocialSearch --> CheckCacheSocial
-    CheckCacheSocial -->|Yes| ReadCacheSocial
-    CheckCacheSocial -->|No / --refresh| SearchSocial
-    ReadCacheSocial --> SliceSocial
-    SearchSocial --> SliceSocial
-    SliceSocial --> ReturnPageSocial
-    
-    ReturnPageSocial --> BrowserVerify["For each candidate URL:<br>Subagent uses /browser to verify affiliation"]
+    FilterKnown --> BrowserVerify["For each NEW candidate URL:<br>Subagent uses chrome-devtools to verify affiliation"]
     BrowserVerify -->|Verified Filipino| ExecPushListing["Execute: python3 scripts/agent_graphql_push.py<br>--operation CreateListing"]
     subgraph agent_graphql_push_listing["Inside scripts/agent_graphql_push.py"]
         SyncGeocodeDedupListing["Sync Geocode & Deduplicate"]
@@ -138,10 +125,9 @@ Base
     DBTransactionListing --> CheckHasMoreSocial
     BrowserVerify -->|Not Affiliated| CheckHasMoreSocial
     
-    CheckHasMoreSocial{"Has More Pages?"}
-    CheckHasMoreSocial -->|Yes| NextPageSocial["Increment offset by 10 and query again"]
-    NextPageSocial --> ExecSocialSearch
-    CheckHasMoreSocial -->|No| FinishSocial(["Community Discovery Completed"])
+    CheckHasMoreSocial{"Found 10 new listings<br>OR checked 10 pages?"}
+    CheckHasMoreSocial -->|No| NativeWebSearch
+    CheckHasMoreSocial -->|Yes| FinishSocial(["Community Discovery Completed"])
 ```
 
 ---
@@ -168,17 +154,16 @@ This subagent directly crawls the social pages of verified businesses to discove
 
 ### 4. The `fina_community_finder` Subagent (Community Scanner)
 This subagent actively searches Facebook and Instagram for Filipino community organisations:
-*   **Search-First Workflow**: Executes `scripts/agent_social_search.py` to search for organizations in a city/category.
-*   **Pagination & Caching**: Like the places finder, searches are cached in `.antigravity_saves/social_cache_{platform}_{city}_{category}.json` and served paginated (`--limit 10`).
-*   **Browser Verification**: The subagent uses the `/browser` command to inspect candidate pages one-by-one, verifying authentic Filipino affiliation.
+*   **Context Setup**: Executes `scripts/agent_fetch_targets.py --type city-listings --city C` to load existing listings for deduplication.
+*   **Web Discovery**: Uses the native web search tool (e.g., Google Search with `site:facebook.com` filters) to discover new candidates directly, skipping any already known in the database context.
+*   **Browser Verification**: The subagent uses the `chrome-devtools` skill to inspect candidate pages one-by-one, verifying authentic Filipino affiliation.
 *   **Listing Persistence**: Verified organizations are pushed directly to the `Listing` table using `CreateListing`. For online-only communities (no physical street address), the address is set to the city name with city center coordinates and tagged with `online-community`.
 
 ### 5. Database Integration Scripts
 To maintain security and ensure all data mutations pass through the authorized GraphQL layer, the subagents rely on local Python helper CLI scripts that connect to the core `fina` Firebase project:
-*   `scripts/agent_fetch_targets.py`: Fetches target source URLs, missing-social listings, or business-socials from the database.
+*   `scripts/agent_fetch_targets.py`: Fetches target source URLs, missing-social listings, business-socials, or city-listings (for deduplication context) from the database.
 *   `scripts/agent_graphql_push.py`: Pushes verified JSON objects or updates to the backend using GraphQL operations. Also synchronously handles geocoding and deduplication before creating new listings.
 *   `scripts/agent_maps_fetch.py`: Searches Google Places (New) Text Search with caching and pagination.
-*   `scripts/agent_social_search.py`: Searches Facebook/Instagram for community pages with caching and pagination.
 
 ### 6. Synchronous Geocoding & Deduplication
 To simplify the architecture and reduce cloud function dependencies, heavy transactional logic is handled synchronously by `agent_graphql_push.py` before inserting data into the database:
