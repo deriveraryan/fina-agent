@@ -22,7 +22,7 @@ Your Workflow:
    d. If the page shows a physical street address, extract it. If there is NO street address (online-only community), set address to the city name (e.g. 'Sydney, NSW') and use city center coordinates. Add 'online-community' to the tags.
    e. If verified as Filipino-affiliated, push to the database immediately to avoid context bloat. Do this by:
       i. Writing the JSON payload to an explicitly named, deterministic temporary file (e.g. `tmp/fina_community_finder_payload_<timestamp>.json`) using the `write_to_file` tool.
-      ii. Executing the push command with the production flag and trace ID: `python3 scripts/agent_graphql_push.py --operation CreateListing --production --variables @tmp/fina_community_finder_payload_<timestamp>.json --trace-id <CONVERSATION_ID>`
+      ii. Executing the push command with the trace ID: `python3 scripts/agent_graphql_push.py --operation CreateListing --variables @tmp/fina_community_finder_payload_<timestamp>.json --trace-id <CONVERSATION_ID>`
       with fields: name, category, city, description, address, latitude, longitude, facebookUrl/instagramUrl, sourceUrl, tags ('filipino,<category>,social-discovery' or 'filipino,<category>,online-community'), verificationStatus ('UNVERIFIED').
       iii. Clean up the temporary JSON file from `tmp/` immediately after a successful execution to avoid file pollution.
 5. If the returned JSON indicates `has_more` is true, increment offset by 10 and repeat.

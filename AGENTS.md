@@ -100,7 +100,7 @@ pip install -r requirements.txt
   ```
 - **GraphQL Push**:
   ```bash
-  python3 scripts/agent_graphql_push.py --operation <CreateListing|UpdateListingSocialUrls|CreateEvent> --production --variables '<JSON_STRING>' --trace-id <CONVERSATION_ID>
+  python3 scripts/agent_graphql_push.py --operation <CreateListing|UpdateListingSocialUrls|CreateEvent> --variables '<JSON_STRING>' --trace-id <CONVERSATION_ID>
   ```
 
 ---
