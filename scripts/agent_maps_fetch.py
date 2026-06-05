@@ -383,20 +383,37 @@ async def main() -> None:
         else:
             templates = SEARCH_TEMPLATES.get(args.category, [])
             seen_ids = set()
-            BackendObservability.info(f"Querying Google Places API using {len(templates)} keyword templates", conversation_id=args.trace_id)
-            for template in templates:
-                query = template.format(city=args.city.title())
-                BackendObservability.trace(f"Executing Places search for query: '{query}'", conversation_id=args.trace_id)
+            
+            # Load suburbs for the target city
+            suburbs_path = os.path.abspath(os.path.join(os.path.dirname(__file__), "../data/top_suburbs_per_city.json"))
+            suburbs = []
+            if os.path.exists(suburbs_path):
                 try:
-                    results = await _execute_places_text_search(query, api_key)
-                    BackendObservability.trace(f"Places search query '{query}' returned {len(results)} raw results", conversation_id=args.trace_id)
-                    for r in results:
-                        p_id = r.get("id")
-                        if p_id and p_id not in seen_ids:
-                            seen_ids.add(p_id)
-                            raw_places.append(r)
+                    with open(suburbs_path, "r") as f:
+                        suburbs_data = json.load(f)
+                        suburbs = suburbs_data.get(args.city.lower(), [])
                 except Exception as exc:
-                    BackendObservability.error(f"Error querying Places API for query '{query}': {exc}", exception=exc, conversation_id=args.trace_id)
+                    BackendObservability.warning(f"Failed to load top_suburbs_per_city.json: {exc}", conversation_id=args.trace_id)
+            
+            locations = [args.city.title()]
+            for sub in suburbs:
+                locations.append(f"{sub}, {args.city.title()}")
+
+            BackendObservability.info(f"Querying Google Places API using {len(templates)} keyword templates across {len(locations)} locations", conversation_id=args.trace_id)
+            for template in templates:
+                for loc in locations:
+                    query = template.format(city=loc)
+                    BackendObservability.trace(f"Executing Places search for query: '{query}'", conversation_id=args.trace_id)
+                    try:
+                        results = await _execute_places_text_search(query, api_key)
+                        BackendObservability.trace(f"Places search query '{query}' returned {len(results)} raw results", conversation_id=args.trace_id)
+                        for r in results:
+                            p_id = r.get("id")
+                            if p_id and p_id not in seen_ids:
+                                seen_ids.add(p_id)
+                                raw_places.append(r)
+                    except Exception as exc:
+                        BackendObservability.error(f"Error querying Places API for query '{query}': {exc}", exception=exc, conversation_id=args.trace_id)
 
         # Format raw places to the standardized client schema
         places = [format_place(p, args.city, args.category) for p in raw_places if p.get("displayName", {}).get("text")]
