@@ -63,6 +63,12 @@ You can trigger a manual scan by asking the Antigravity agent directly in the ch
 *   *Places Discovery*:
     > "Use the `fina_places_finder` skill to scan Google Places in <CITY> for <CATEGORY>." (e.g., replacement: `DARWIN`, `RESTAURANT`).
     >
+    > **To scan a single city for all categories:**
+    > "/goal Use the `fina_places_finder` skill to scan Google Places for all categories (`RESTAURANT`, `CAFE`, `SHOP`, `CHURCH`, `COMMUNITY`, `GOVERNMENT`) in SYDNEY."
+    >
+    > **To scan a single category across all cities:**
+    > "/goal Use the `fina_places_finder` skill to scan Google Places for RESTAURANT across all major Australian cities (`SYDNEY`, `MELBOURNE`, `BRISBANE`, `PERTH`, `ADELAIDE`, `DARWIN`, `HOBART`, `CANBERRA`, `GOLD COAST`)."
+    >
     > **To scan all categories and cities at once:**
     > "/goal Use the `fina_places_finder` skill to scan Google Places for all categories (`RESTAURANT`, `CAFE`, `SHOP`, `CHURCH`, `COMMUNITY`, `GOVERNMENT`) across all major Australian cities (`SYDNEY`, `MELBOURNE`, `BRISBANE`, `PERTH`, `ADELAIDE`, `DARWIN`, `HOBART`, `CANBERRA`, `GOLD COAST`)."
 *   *Missing Socials Finder*:
@@ -77,6 +83,12 @@ You can trigger a manual scan by asking the Antigravity agent directly in the ch
     > "/goal Use the `fina_events_finder` skill to discover events across all major Australian cities (`SYDNEY`, `MELBOURNE`, `BRISBANE`, `PERTH`, `ADELAIDE`, `DARWIN`, `HOBART`, `CANBERRA`, `GOLD COAST`)."
 *   *Community Scanning*:
     > "Use the `fina_community_finder` skill to search the web for community listings in SYDNEY."
+    >
+    > **To scan a single city for all categories:**
+    > "/goal Use the `fina_community_finder` skill to search the web for all categories (`RESTAURANT`, `CAFE`, `SHOP`, `CHURCH`, `COMMUNITY`, `GOVERNMENT`) in SYDNEY."
+    >
+    > **To scan a single category across all cities:**
+    > "/goal Use the `fina_community_finder` skill to search the web for RESTAURANT across all major Australian cities (`SYDNEY`, `MELBOURNE`, `BRISBANE`, `PERTH`, `ADELAIDE`, `DARWIN`, `HOBART`, `CANBERRA`, `GOLD COAST`)."
     >
     > **To scan all categories and cities at once:**
     > "/goal Use the `fina_community_finder` skill to search the web for all categories (`RESTAURANT`, `CAFE`, `SHOP`, `CHURCH`, `COMMUNITY`, `GOVERNMENT`) across all major Australian cities (`SYDNEY`, `MELBOURNE`, `BRISBANE`, `PERTH`, `ADELAIDE`, `DARWIN`, `HOBART`, `CANBERRA`, `GOLD COAST`)."
