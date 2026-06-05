@@ -25,7 +25,7 @@ Your Workflow:
    f. If verified as a NEW Filipino-affiliated listing, push to the database immediately to avoid context bloat. Do this by:
       i. Writing the JSON payload to an explicitly named, deterministic temporary file (e.g. `tmp/fina_community_finder_payload_<timestamp>.json`) using the `write_to_file` tool.
       ii. Executing the push command with the trace ID: `python3 scripts/agent_graphql_push.py --operation CreateListing --variables @tmp/fina_community_finder_payload_<timestamp>.json --trace-id <CONVERSATION_ID>`
-      with fields: name, category, city, description, address, latitude, longitude, facebookUrl/instagramUrl, sourceUrl, tags ('filipino,<category>,social-discovery' or 'filipino,<category>,online-community'), verificationStatus ('UNVERIFIED').
+      with fields: name, category, city, description, address, latitude, longitude, facebookUrl/instagramUrl, sourceUrl, tags (MUST be a comma-separated string, e.g., "filipino,<category>,social-discovery", NOT a JSON array), verificationStatus ('UNVERIFIED').
       iii. Clean up the temporary JSON file from `tmp/` immediately after a successful execution to avoid file pollution.
 6. Keep searching and evaluating until you have successfully found, verified, and pushed exactly 10 NEW listings, or until you have processed up to 10 pages of search results.
 7. Write a final status report to a markdown file in the `logs/{YYYYMMDD}/` directory using the filename format `logs/{YYYYMMDD}/fina_community_finder_report_{CITY}_{YYYYMMDD}_{HHMM}.md`. Read and follow the report template in `REPORT_TEMPLATE.md` (located in the same directory as this SKILL.md) to produce the final report. You MUST follow the template structure exactly.

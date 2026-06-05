@@ -44,6 +44,8 @@ async def main() -> None:
             if "category" in vars_dict and "categories" not in vars_dict:
                 cat = vars_dict.pop("category")
                 vars_dict["categories"] = [cat] if cat else []
+            if "tags" in vars_dict and isinstance(vars_dict["tags"], list):
+                vars_dict["tags"] = ",".join([str(t) for t in vars_dict["tags"]])
     except SystemExit:
         raise
     except Exception as e:
