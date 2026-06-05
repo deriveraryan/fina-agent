@@ -43,12 +43,12 @@ class TestSocialEnricher(unittest.IsolatedAsyncioTestCase):
         # Mock Crawl4AI AsyncWebCrawler
         mock_crawler = AsyncMock()
         mock_result = MagicMock()
-        mock_result.extracted_content = '[{"url": "https://www.facebook.com/lolasgrill", "title": "Lola\'s Grill - Facebook"}]'
+        mock_result.html = '<a href="https://www.facebook.com/lolasgrill">Facebook page</a>'
         mock_crawler.arun.return_value = mock_result
 
         with patch("features.scanning.sources.social_enricher._get_crawler", return_value=mock_crawler):
             url = await social_enricher.search_social_url_google("Lola's Grill", "SYDNEY", "facebook")
-            self.assertEqual(url, "https://www.facebook.com/lolasgrill")
+            self.assertEqual(url, "https://www.facebook.com/lolasgrill/")
             mock_crawler.arun.assert_called_once()
 
     async def test_search_social_url_google_no_match(self) -> None:
@@ -57,7 +57,7 @@ class TestSocialEnricher(unittest.IsolatedAsyncioTestCase):
 
         mock_crawler = AsyncMock()
         mock_result = MagicMock()
-        mock_result.extracted_content = '[{"url": "https://www.instagram.com/lolasgrill", "title": "Instagram"}]'
+        mock_result.html = '<a href="https://www.instagram.com/lolasgrill">Instagram profile</a>'
         mock_crawler.arun.return_value = mock_result
 
         with patch("features.scanning.sources.social_enricher._get_crawler", return_value=mock_crawler):

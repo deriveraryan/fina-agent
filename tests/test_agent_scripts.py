@@ -250,129 +250,44 @@ class TestAgentScripts(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(parsed_output["total"], 1)
         self.assertFalse(parsed_output["has_more"])
 
-    @patch("agent_social_search.execute_graphql_operation", new_callable=AsyncMock)
+    @patch("agent_fetch_targets.execute_graphql_operation", new_callable=AsyncMock)
     @patch("sys.stdout")
-    @patch("os.path.exists")
-    @patch("builtins.open")
-    async def test_social_search_cache_hit(self, mock_open: MagicMock, mock_exists: MagicMock, mock_stdout: MagicMock, mock_execute: AsyncMock) -> None:
-        """Tests that agent_social_search.py reads from cache on cache hit and paginates."""
-        import agent_social_search
+    async def test_fetch_targets_city_listings(self, mock_stdout: MagicMock, mock_execute: AsyncMock) -> None:
+        """Tests agent_fetch_targets.py --type city-listings invokes ListCityListings and formats ID, name, fb/ig URLs."""
+        import agent_fetch_targets
 
-        mock_exists.return_value = True
-        mock_execute.return_value = {"data": {"listings": []}}
-
-        mock_file = MagicMock()
-        mock_file.__enter__.return_value.read.return_value = json.dumps([
-            {
-                "url": "https://facebook.com/filipinoclub1",
-                "name": "Filipino Basketball League Sydney",
-                "description": "Community basketball league for Filipinos in Sydney",
-                "platform": "facebook"
-            },
-            {
-                "url": "https://facebook.com/filipinoclub2",
-                "name": "Pinoy Runners Sydney",
-                "description": "Running club for Filipino community",
-                "platform": "facebook"
-            },
-            {
-                "url": "https://facebook.com/filipinoclub3",
-                "name": "Filipino Nurses Association",
-                "description": "Professional network for Filipino nurses in Australia",
-                "platform": "facebook"
-            }
-        ])
-        mock_open.return_value = mock_file
-
-        sys.argv = ["agent_social_search.py", "--city", "SYDNEY", "--category", "COMMUNITY", "--platform", "facebook", "--limit", "2", "--offset", "0"]
-
-        await agent_social_search.main()
-
-        written_calls = [call.args[0] for call in mock_stdout.write.call_args_list]
-        combined_output = "".join(written_calls)
-        parsed_output = json.loads(combined_output)
-
-        self.assertEqual(len(parsed_output["candidates"]), 2)
-        self.assertEqual(parsed_output["candidates"][0]["name"], "Filipino Basketball League Sydney")
-        self.assertEqual(parsed_output["total"], 3)
-        self.assertTrue(parsed_output["has_more"])
-
-    @patch("agent_social_search.execute_graphql_operation", new_callable=AsyncMock)
-    @patch("sys.stdout")
-    @patch("os.path.exists")
-    @patch("builtins.open")
-    async def test_social_search_cache_miss_mock(self, mock_open: MagicMock, mock_exists: MagicMock, mock_stdout: MagicMock, mock_execute: AsyncMock) -> None:
-        """Tests that agent_social_search.py returns mock candidates on cache miss."""
-        import agent_social_search
-
-        mock_exists.return_value = False
-        mock_execute.return_value = {"data": {"listings": []}}
-
-        mock_file = MagicMock()
-        mock_open.return_value = mock_file
-
-        sys.argv = ["agent_social_search.py", "--city", "SYDNEY", "--category", "COMMUNITY", "--platform", "facebook", "--limit", "10", "--offset", "0"]
-
-        await agent_social_search.main()
-
-        # Verify cache was written
-        mock_open.assert_called_with(unittest.mock.ANY, "w")
-
-        written_calls = [call.args[0] for call in mock_stdout.write.call_args_list]
-        combined_output = "".join(written_calls)
-        parsed_output = json.loads(combined_output)
-
-        # Mock mode should return at least 1 candidate
-        self.assertGreaterEqual(len(parsed_output["candidates"]), 1)
-        self.assertIn("url", parsed_output["candidates"][0])
-        self.assertIn("name", parsed_output["candidates"][0])
-        self.assertIn("platform", parsed_output["candidates"][0])
-        self.assertIn("total", parsed_output)
-        self.assertIn("has_more", parsed_output)
-
-    @patch("agent_social_search.execute_graphql_operation", new_callable=AsyncMock)
-    @patch("sys.stdout")
-    @patch("os.path.exists")
-    @patch("builtins.open")
-    async def test_social_search_deduplication(self, mock_open: MagicMock, mock_exists: MagicMock, mock_stdout: MagicMock, mock_execute: AsyncMock) -> None:
-        """Tests that agent_social_search.py discards candidates already existing in Listing table."""
-        import agent_social_search
-
-        mock_exists.return_value = False
-        mock_file = MagicMock()
-        mock_open.return_value = mock_file
-
-        # Mock Listing table already having candidate 1
+        sys.argv = ["agent_fetch_targets.py", "--type", "city-listings", "--city", "SYDNEY"]
+        
         mock_execute.return_value = {
             "data": {
                 "listings": [
                     {
-                        "facebookUrl": "https://facebook.com/mock-filipino-community-sydney-1",
-                        "instagramUrl": None
+                        "id": "listing-1",
+                        "name": "Manila Eats",
+                        "facebookUrl": "https://facebook.com/manilaeats",
+                        "instagramUrl": "https://instagram.com/manilaeats",
+                        "otherField": "unused"
                     }
                 ]
             }
         }
 
-        sys.argv = ["agent_social_search.py", "--city", "SYDNEY", "--category", "COMMUNITY", "--platform", "facebook", "--limit", "10", "--offset", "0"]
+        await agent_fetch_targets.main()
 
-        await agent_social_search.main()
-
-        # Check that ListCitySocialUrls was called
         mock_execute.assert_called_once_with(
-            operation_name="ListCitySocialUrls",
+            operation_name="ListCityListings",
             variables={"city": "SYDNEY"}
         )
-
-        written_calls = [call.args[0] for call in mock_stdout.write.call_args_list]
-        combined_output = "".join(written_calls)
-        parsed_output = json.loads(combined_output)
-
-        # Candidates should only have candidate 2 (candidate 1 is filtered out)
-        self.assertEqual(len(parsed_output["candidates"]), 1)
-        self.assertEqual(parsed_output["candidates"][0]["url"], "https://facebook.com/mock-filipino-community-sydney-2")
-        self.assertEqual(parsed_output["total"], 1)
-        self.assertFalse(parsed_output["has_more"])
+        mock_stdout.write.assert_any_call(
+            json.dumps([
+                {
+                    "id": "listing-1",
+                    "name": "Manila Eats",
+                    "facebookUrl": "https://facebook.com/manilaeats",
+                    "instagramUrl": "https://instagram.com/manilaeats"
+                }
+            ])
+        )
 
     @patch("agent_graphql_push.execute_graphql_operation", new_callable=AsyncMock)
     @patch("features.scanning.dedup.check_duplicate", new_callable=AsyncMock)
