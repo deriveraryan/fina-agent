@@ -167,7 +167,22 @@ class TestAgentScripts(unittest.IsolatedAsyncioTestCase):
                 "website": "https://manilaeats.example.com",
                 "hours": '{"mon": "11:00 AM – 9:00 PM"}',
                 "description": "Filipino diner",
-                "reviews": ["Great food", "Loved the adobo"],
+                "reviews": [
+                    {
+                        "externalSourceId": "places/place1/reviews/0",
+                        "authorName": "John Doe",
+                        "rating": 5.0,
+                        "text": "Great food",
+                        "publishedDate": "2026-06-06T00:00:00Z"
+                    },
+                    {
+                        "externalSourceId": "places/place1/reviews/1",
+                        "authorName": "Jane Smith",
+                        "rating": 4.0,
+                        "text": "Loved the adobo",
+                        "publishedDate": "2026-06-06T00:00:00Z"
+                    }
+                ],
                 "sourceUrl": "https://www.google.com/maps/place/?q=place_id:place1"
             },
             {
@@ -181,7 +196,22 @@ class TestAgentScripts(unittest.IsolatedAsyncioTestCase):
                 "website": "https://pinoybrew.example.com",
                 "hours": '{"mon": "7:00 AM – 4:00 PM"}',
                 "description": "Specialty ube lattes",
-                "reviews": ["Best ube latte", "Pandesal was fresh"],
+                "reviews": [
+                    {
+                        "externalSourceId": "places/place2/reviews/0",
+                        "authorName": "Alice",
+                        "rating": 5.0,
+                        "text": "Best ube latte",
+                        "publishedDate": "2026-06-06T00:00:00Z"
+                    },
+                    {
+                        "externalSourceId": "places/place2/reviews/1",
+                        "authorName": "Bob",
+                        "rating": 4.5,
+                        "text": "Pandesal was fresh",
+                        "publishedDate": "2026-06-06T00:00:00Z"
+                    }
+                ],
                 "sourceUrl": "https://www.google.com/maps/place/?q=place_id:place2"
             }
         ])
@@ -225,7 +255,15 @@ class TestAgentScripts(unittest.IsolatedAsyncioTestCase):
                     "websiteUri": "https://live.example.com",
                     "regularOpeningHours": {"weekdayDescriptions": ["Monday: 9:00 AM – 5:00 PM"]},
                     "editorialSummary": {"text": "Live summary"},
-                    "reviews": [{"text": {"text": "Delicious adobo"}}]
+                    "reviews": [
+                        {
+                            "name": "places/place_live_1/reviews/0",
+                            "authorAttribution": {"displayName": "Juan Dela Cruz"},
+                            "rating": 5.0,
+                            "text": {"text": "Delicious adobo"},
+                            "publishTime": "2026-06-06T00:00:00Z"
+                        }
+                    ]
                 }
             ]
         }
@@ -304,7 +342,7 @@ class TestAgentScripts(unittest.IsolatedAsyncioTestCase):
             "--operation",
             "CreateListing",
             "--variables",
-            '{"name": "Duplicate Resto", "category": "RESTAURANT", "city": "SYDNEY", "description": "Filipino diner", "facebookUrl": "fb.com/new"}'
+            '{"name": "Duplicate Resto", "category": "RESTAURANT", "city": "SYDNEY", "description": "Filipino diner", "facebookUrl": "fb.com/new", "reviews": [{"text": "Good", "rating": 4.5, "externalSourceId": "rev1"}]}'
         ]
 
         existing_listing = {
@@ -334,6 +372,7 @@ class TestAgentScripts(unittest.IsolatedAsyncioTestCase):
             name="Duplicate Resto",
             city="SYDNEY",
             description="Filipino diner",
+            source_url=None,
         )
         mock_merge.assert_called_once()
         
@@ -344,6 +383,9 @@ class TestAgentScripts(unittest.IsolatedAsyncioTestCase):
         ]
         self.assertIn("UpdateListingStatus", update_calls)
         self.assertIn("UpdateListingData", update_calls)
+        self.assertIn("CreateReview", update_calls)
+        
+        mock_execute.assert_any_call("CreateReview", {"text": "Good", "rating": 4.5, "externalSourceId": "rev1", "listingId": "existing-123"})
         
         # Verify specific update variables include categories list
         mock_execute.assert_any_call(
@@ -386,7 +428,7 @@ class TestAgentScripts(unittest.IsolatedAsyncioTestCase):
             "--operation",
             "CreateListing",
             "--variables",
-            '{"name": "New Resto", "category": "RESTAURANT", "city": "SYDNEY", "address": "123 St", "description": "Good food"}'
+            '{"name": "New Resto", "category": "RESTAURANT", "city": "SYDNEY", "address": "123 St", "description": "Good food", "reviews": [{"text": "Nice place!", "rating": 5.0, "externalSourceId": "review1"}]}'
         ]
 
         mock_check.return_value = None
@@ -400,11 +442,12 @@ class TestAgentScripts(unittest.IsolatedAsyncioTestCase):
             name="New Resto",
             city="SYDNEY",
             description="Good food",
+            source_url=None,
         )
         mock_geocode.assert_called_once_with("123 St", "SYDNEY")
         mock_embedding.assert_called_once_with("Good food")
         
-        mock_execute.assert_called_once_with(
+        mock_execute.assert_any_call(
             operation_name="CreateListing",
             variables={
                 "name": "New Resto",
@@ -422,6 +465,8 @@ class TestAgentScripts(unittest.IsolatedAsyncioTestCase):
         combined_output = "".join(written_calls)
         parsed_output = json.loads(combined_output)
         self.assertEqual(parsed_output["data"]["createListing"]["id"], "new-999")
+        
+        mock_execute.assert_any_call("CreateReview", {"text": "Nice place!", "rating": 5.0, "externalSourceId": "review1", "listingId": "new-999"})
 
     @patch("sys.stderr")
     async def test_graphql_push_validation_missing_name(self, mock_stderr: MagicMock) -> None:
@@ -523,14 +568,14 @@ class TestAgentScripts(unittest.IsolatedAsyncioTestCase):
             "--operation",
             "CreateListing",
             "--variables",
-            '[{"name": "Some Resto", "city": "SYDNEY"}]'
+            '123'
         ]
 
         with self.assertRaises(SystemExit) as cm:
             await agent_graphql_push.main()
         self.assertEqual(cm.exception.code, 1)
         stderr_calls = "".join(call.args[0] for call in mock_stderr.write.call_args_list)
-        self.assertIn("Validation Error: Variables must be a JSON object/dictionary.", stderr_calls)
+        self.assertIn("Validation Error: Variables must be a JSON object or a list of JSON objects.", stderr_calls)
 
     @patch("sys.stderr")
     async def test_graphql_push_validation_invalid_description_type(self, mock_stderr: MagicMock) -> None:

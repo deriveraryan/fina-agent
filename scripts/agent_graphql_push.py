@@ -18,6 +18,126 @@ sys.path.insert(
 from features.shared.graphql_client import execute_graphql_operation
 from features.shared.observability import BackendObservability
 
+async def process_single_item(operation: str, item_dict: dict, trace_id: str) -> dict:
+    if operation == "CreateListing":
+        if "category" in item_dict and "categories" not in item_dict:
+            cat = item_dict.pop("category")
+            item_dict["categories"] = [cat] if cat else []
+        if "tags" in item_dict and isinstance(item_dict["tags"], list):
+            item_dict["tags"] = ",".join([str(t) for t in item_dict["tags"]])
+
+    reviews_to_push = []
+    if operation == "CreateListing":
+        from features.scanning.dedup import check_duplicate, merge_listing_data
+        
+        reviews_to_push = item_dict.pop("reviews", [])
+        
+        city = item_dict.get("city")
+        name = item_dict.get("name")
+        description = item_dict.get("description")
+        source_url = item_dict.get("sourceUrl")
+        
+        if not name or not isinstance(name, str) or not name.strip():
+            BackendObservability.error("Validation Error: 'name' is required and must be a non-empty string.", conversation_id=trace_id)
+            return {"error": "Validation Error: 'name' is required"}
+        if not city or not isinstance(city, str) or not city.strip():
+            BackendObservability.error("Validation Error: 'city' is required and must be a non-empty string.", conversation_id=trace_id)
+            return {"error": "Validation Error: 'city' is required"}
+        if description is not None and not isinstance(description, str):
+            BackendObservability.error("Validation Error: 'description' must be a string if provided.", conversation_id=trace_id)
+            return {"error": "Validation Error: 'description' must be a string"}
+
+        # 1. Deduplicate
+        BackendObservability.trace(f"Deduplication check for listing name='{name}' in city='{city}'", conversation_id=trace_id)
+        existing = await check_duplicate(name=name, city=city, description=description, source_url=source_url)
+        
+        if existing:
+            BackendObservability.info(f"Duplicate found: existing listing ID='{existing['id']}'. Merging...", conversation_id=trace_id)
+            # 2. Merge duplicate
+            merged = merge_listing_data(existing, item_dict)
+            if merged != existing:
+                BackendObservability.trace(f"Listing data changed. Pushing updates for listing ID={existing['id']}", conversation_id=trace_id)
+                try:
+                    await execute_graphql_operation(
+                        operation_name="UpdateListingStatus",
+                        variables={
+                            "id": existing["id"],
+                            "verificationStatus": merged.get("verificationStatus", "UNVERIFIED"),
+                        },
+                    )
+                    await execute_graphql_operation(
+                        operation_name="UpdateListingData",
+                        variables={
+                            "id": existing["id"],
+                            "categories": merged.get("categories"),
+                            "phone": merged.get("phone"),
+                            "website": merged.get("website"),
+                            "facebookUrl": merged.get("facebookUrl"),
+                            "instagramUrl": merged.get("instagramUrl"),
+                            "tiktokUrl": merged.get("tiktokUrl"),
+                            "operatingHours": merged.get("operatingHours"),
+                            "imageUrl": merged.get("imageUrl"),
+                            "tags": merged.get("tags"),
+                            "sourceUrl": merged.get("sourceUrl"),
+                        },
+                    )
+                    BackendObservability.info(f"Successfully updated duplicate listing ID={existing['id']} data/status.", conversation_id=trace_id)
+                except Exception as exc:
+                    BackendObservability.error(
+                        f"Failed to update duplicate listing data/status for ID {existing['id']}",
+                        exception=exc,
+                        conversation_id=trace_id
+                    )
+            else:
+                BackendObservability.info(f"Duplicate listing ID={existing['id']} matches perfectly, no data/status updates needed.", conversation_id=trace_id)
+            
+            for rev in reviews_to_push:
+                try:
+                    await execute_graphql_operation("CreateReview", {**rev, "listingId": existing["id"]})
+                except Exception as exc:
+                    BackendObservability.error(f"Failed to push review for duplicate listing ID={existing['id']}", exception=exc, conversation_id=trace_id)
+                    
+            return {"status": "MERGED", "existingId": existing["id"]}
+            
+        # 3. Create (Generate Embeddings + Geocode if missing)
+        BackendObservability.info(f"No duplicate found for '{name}'. Preparing to create new listing...", conversation_id=trace_id)
+        lat = item_dict.get("latitude")
+        lng = item_dict.get("longitude")
+        if lat is None or lng is None:
+            from features.scanning.sources.geocoder import geocode_address
+            addr = item_dict.get("address") or city
+            BackendObservability.trace(f"No coordinates provided. Geocoding address: '{addr}'", conversation_id=trace_id)
+            lat, lng = await geocode_address(addr, city)
+            item_dict["latitude"] = lat
+            item_dict["longitude"] = lng
+            BackendObservability.info(f"Geocoded address to coordinates: ({lat}, {lng})", conversation_id=trace_id)
+            
+        if not item_dict.get("descriptionEmbedding"):
+            from features.shared.embeddings import get_embedding
+            desc = description or f"Filipino listing in {city}"
+            BackendObservability.trace(f"Generating description embedding for: '{desc}'", conversation_id=trace_id)
+            item_dict["descriptionEmbedding"] = get_embedding(desc)
+            BackendObservability.trace("Successfully generated description embedding.", conversation_id=trace_id)
+
+        if not item_dict.get("verificationStatus"):
+            item_dict["verificationStatus"] = "UNVERIFIED"
+
+    BackendObservability.trace(f"Executing GraphQL operation: '{operation}' with variables: {item_dict}", conversation_id=trace_id)
+    result = await execute_graphql_operation(operation_name=operation, variables=item_dict)
+    BackendObservability.info(f"Successfully executed GraphQL operation: '{operation}'", conversation_id=trace_id)
+    
+    if operation == "CreateListing":
+        new_id = result.get("data", {}).get("createListing", {}).get("id") or result.get("data", {}).get("listing_insert", {}).get("id")
+        if new_id:
+            for rev in reviews_to_push:
+                try:
+                    await execute_graphql_operation("CreateReview", {**rev, "listingId": new_id})
+                except Exception as exc:
+                    BackendObservability.error(f"Failed to push review for new listing ID={new_id}", exception=exc, conversation_id=trace_id)
+
+    return result
+
+
 async def main() -> None:
     parser = argparse.ArgumentParser(description="Push data to Fina DB via GraphQL.")
     parser.add_argument("--operation", type=str, required=True)
@@ -35,120 +155,56 @@ async def main() -> None:
             with open(file_path, "r") as f:
                 raw_variables = f.read()
 
-        vars_dict = json.loads(raw_variables)
-        if not isinstance(vars_dict, dict):
-            BackendObservability.fatal("Validation Error: Variables must be a JSON object/dictionary.", conversation_id=args.trace_id)
-            sys.exit(1)
-        BackendObservability.trace(f"Parsed variables: {vars_dict}", conversation_id=args.trace_id)
-        if args.operation == "CreateListing":
-            if "category" in vars_dict and "categories" not in vars_dict:
-                cat = vars_dict.pop("category")
-                vars_dict["categories"] = [cat] if cat else []
-            if "tags" in vars_dict and isinstance(vars_dict["tags"], list):
-                vars_dict["tags"] = ",".join([str(t) for t in vars_dict["tags"]])
-    except SystemExit:
-        raise
+        vars_parsed = json.loads(raw_variables)
     except Exception as e:
-        BackendObservability.fatal(f"Error parsing variables JSON: {e}", exception=e, conversation_id=args.trace_id)
+        BackendObservability.fatal(f"Error reading/parsing variables: {e}", exception=e, conversation_id=args.trace_id)
         sys.exit(1)
 
-    try:
-        if args.operation == "CreateListing":
-            from features.scanning.dedup import check_duplicate, merge_listing_data
-            
-            city = vars_dict.get("city")
-            name = vars_dict.get("name")
-            description = vars_dict.get("description")
-            
-            if not name or not isinstance(name, str) or not name.strip():
-                BackendObservability.fatal("Validation Error: 'name' is required and must be a non-empty string.", conversation_id=args.trace_id)
-                sys.exit(1)
-            if not city or not isinstance(city, str) or not city.strip():
-                BackendObservability.fatal("Validation Error: 'city' is required and must be a non-empty string.", conversation_id=args.trace_id)
-                sys.exit(1)
-            if description is not None and not isinstance(description, str):
-                BackendObservability.fatal("Validation Error: 'description' must be a string if provided.", conversation_id=args.trace_id)
-                sys.exit(1)
+    is_bulk = isinstance(vars_parsed, list)
+    items_to_process = vars_parsed if is_bulk else [vars_parsed]
 
-            # 1. Deduplicate
-            BackendObservability.trace(f"Deduplication check for listing name='{name}' in city='{city}'", conversation_id=args.trace_id)
-            existing = await check_duplicate(name=name, city=city, description=description)
-            
-            if existing:
-                BackendObservability.info(f"Duplicate found: existing listing ID='{existing['id']}'. Merging...", conversation_id=args.trace_id)
-                # 2. Merge duplicate
-                merged = merge_listing_data(existing, vars_dict)
-                if merged != existing:
-                    BackendObservability.trace(f"Listing data changed. Pushing updates for listing ID={existing['id']}", conversation_id=args.trace_id)
-                    try:
-                        await execute_graphql_operation(
-                            operation_name="UpdateListingStatus",
-                            variables={
-                                "id": existing["id"],
-                                "verificationStatus": merged.get("verificationStatus", "UNVERIFIED"),
-                            },
-                        )
-                        await execute_graphql_operation(
-                            operation_name="UpdateListingData",
-                            variables={
-                                "id": existing["id"],
-                                "categories": merged.get("categories"),
-                                "phone": merged.get("phone"),
-                                "website": merged.get("website"),
-                                "facebookUrl": merged.get("facebookUrl"),
-                                "instagramUrl": merged.get("instagramUrl"),
-                                "tiktokUrl": merged.get("tiktokUrl"),
-                                "operatingHours": merged.get("operatingHours"),
-                                "imageUrl": merged.get("imageUrl"),
-                                "tags": merged.get("tags"),
-                                "sourceUrl": merged.get("sourceUrl"),
-                            },
-                        )
-                        BackendObservability.info(f"Successfully updated duplicate listing ID={existing['id']} data/status.", conversation_id=args.trace_id)
-                    except Exception as exc:
-                        BackendObservability.error(
-                            f"Failed to update duplicate listing data/status for ID {existing['id']}",
-                            exception=exc,
-                            conversation_id=args.trace_id
-                        )
-                else:
-                    BackendObservability.info(f"Duplicate listing ID={existing['id']} matches perfectly, no data/status updates needed.", conversation_id=args.trace_id)
-                
-                result = {"status": "MERGED", "existingId": existing["id"]}
-                sys.stdout.write(json.dumps(result))
-                return
-                
-            # 3. Create (Generate Embeddings + Geocode if missing)
-            BackendObservability.info(f"No duplicate found for '{name}'. Preparing to create new listing...", conversation_id=args.trace_id)
-            lat = vars_dict.get("latitude")
-            lng = vars_dict.get("longitude")
-            if lat is None or lng is None:
-                from features.scanning.sources.geocoder import geocode_address
-                addr = vars_dict.get("address") or city
-                BackendObservability.trace(f"No coordinates provided. Geocoding address: '{addr}'", conversation_id=args.trace_id)
-                lat, lng = await geocode_address(addr, city)
-                vars_dict["latitude"] = lat
-                vars_dict["longitude"] = lng
-                BackendObservability.info(f"Geocoded address to coordinates: ({lat}, {lng})", conversation_id=args.trace_id)
-                
-            if not vars_dict.get("descriptionEmbedding"):
-                from features.shared.embeddings import get_embedding
-                desc = description or f"Filipino listing in {city}"
-                BackendObservability.trace(f"Generating description embedding for: '{desc}'", conversation_id=args.trace_id)
-                vars_dict["descriptionEmbedding"] = get_embedding(desc)
-                BackendObservability.trace("Successfully generated description embedding.", conversation_id=args.trace_id)
+    if not items_to_process or not isinstance(items_to_process[0], dict):
+        BackendObservability.fatal("Validation Error: Variables must be a JSON object or a list of JSON objects.", conversation_id=args.trace_id)
+        sys.exit(1)
+        
+    actual_op = args.operation
+    if is_bulk and args.operation == "BulkCreateListing":
+        actual_op = "CreateListing"
 
-            if not vars_dict.get("verificationStatus"):
-                vars_dict["verificationStatus"] = "UNVERIFIED"
+    if actual_op == "CreateListing":
+        from features.scanning.heuristics import should_exclude_listing
+        from features.scanning.dedup import deduplicate_batch
+        
+        valid_items = []
+        for item in items_to_process:
+            if not should_exclude_listing(item):
+                valid_items.append(item)
+                
+        if is_bulk:
+            items_to_process = deduplicate_batch(valid_items)
+            BackendObservability.info(f"Bulk payload filtered and deduped from {len(vars_parsed)} down to {len(items_to_process)} items.", conversation_id=args.trace_id)
+        else:
+            items_to_process = valid_items
 
-        BackendObservability.trace(f"Executing GraphQL operation: '{args.operation}' with variables: {vars_dict}", conversation_id=args.trace_id)
-        result = await execute_graphql_operation(operation_name=args.operation, variables=vars_dict)
-        BackendObservability.info(f"Successfully executed GraphQL operation: '{args.operation}'", conversation_id=args.trace_id)
-        sys.stdout.write(json.dumps(result))
-    except SystemExit:
-        raise
-    except Exception as e:
-        BackendObservability.fatal(f"GraphQL push operation failed: {e}", exception=e, conversation_id=args.trace_id)
+    results = []
+    has_error = False
+    for item_dict in items_to_process:
+        try:
+            res = await process_single_item(actual_op, item_dict, args.trace_id)
+            if "error" in res:
+                has_error = True
+            results.append(res)
+        except Exception as e:
+            BackendObservability.error(f"GraphQL push operation failed for an item: {e}", exception=e, conversation_id=args.trace_id)
+            results.append({"error": str(e)})
+            has_error = True
+
+    if is_bulk:
+        sys.stdout.write(json.dumps(results))
+    else:
+        sys.stdout.write(json.dumps(results[0] if results else {"status": "SKIPPED"}))
+
+    if has_error and not is_bulk:
         sys.exit(1)
 
 

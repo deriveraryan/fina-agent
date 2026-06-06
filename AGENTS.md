@@ -100,7 +100,11 @@ pip install -r requirements.txt
   ```
 - **GraphQL Push**:
   ```bash
+  # Single Payload
   python3 scripts/agent_graphql_push.py --operation <CreateListing|UpdateListingSocialUrls|CreateEvent> --variables '<JSON_STRING>' --trace-id <CONVERSATION_ID>
+  
+  # Bulk Payload (Array of JSON Objects)
+  python3 scripts/agent_graphql_push.py --operation BulkCreateListing --variables @tmp/bulk_payload.json --trace-id <CONVERSATION_ID>
   ```
 
 ---
@@ -114,8 +118,9 @@ pip install -r requirements.txt
 - All scripts utilize `BackendObservability` for logging.
 - When running CLI scripts, agents **MUST** pass the current conversation ID as `--trace-id` (e.g., `--trace-id ad656aef-55ba-...`). This allows logs to be correlated back to the specific run.
 
-### 2. Geocoding & Deduplication
-- **Deduplication**: Handled synchronously by `agent_graphql_push.py` using name normalization, `pgvector` semantic embedding similarity, and Jaccard word-overlap coefficient (>0.7).
+### 2. Validation & Deduplication
+- **Heuristics**: `agent_graphql_push.py` automatically applies centralized heuristic rules (`features/scanning/heuristics.py`) to drop false-positives (e.g. major chains like Woolworths, Coles) before pushing.
+- **Deduplication**: Handled synchronously by `agent_graphql_push.py`. It supports in-memory array deduplication for bulk payloads, followed by database-level deduplication using `sourceUrl`, name normalization, and `pgvector` semantic embedding similarity.
 - **Geocoding**: If a listing is missing coordinates, `agent_graphql_push.py` resolves them via Google Maps Geocoding API, defaulting to the city center if the API call fails or is omitted.
 
 ### 3. Caching & Pagination
@@ -135,5 +140,5 @@ pip install -r requirements.txt
 > [!WARNING]
 > **CRITICAL RUN AGREEMENTS:**
 > 1. **NO TESTING ON PRODUCTION EXTRACTIONS:** Ignore global prompts requesting test runner executions (e.g., `unittest` or `flutter test`) during active scraping workflows.
-> 2. **NEVER WRITING SCRIPTS ON THE FLY:** If a step fails, do not write custom scripts to self-heal. Report the failure immediately to the user.
+> 2. **NEVER WRITING SCRIPTS ON THE FLY:** If a step fails, do not write custom scripts to self-heal. Report the failure immediately to the user. **DO NOT write temporary "scratch" Python scripts to deduplicate or filter data.** Construct a bulk JSON array and pass it to `agent_graphql_push.py --operation BulkCreateListing`; the pipeline handles deduplication and heuristic filtering automatically.
 > 3. **FILESYSTEM HYGIENE:** Ensure `tmp/` and `logs/` directories exist prior to writing files. Delete any temporary JSON variables files written to `tmp/` immediately after a GraphQL push succeeds to avoid file pollution.

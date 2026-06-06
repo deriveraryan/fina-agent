@@ -47,6 +47,27 @@ class TestDeduplication(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(merged["imageUrl"], "http://existing.img")  # Kept existing
         self.assertEqual(set(merged["categories"]), {"RESTAURANT", "CAFE"})  # Categories set union
 
+    def test_deduplicate_batch(self) -> None:
+        """Tests that deduplicate_batch merges listings with same sourceUrl or name."""
+        from features.scanning.dedup import deduplicate_batch
+        
+        batch = [
+            {"name": "Lola's Kitchen", "sourceUrl": "url1", "categories": ["RESTAURANT"], "city": "SYDNEY"},
+            {"name": "Lola's Kitchen Pty Ltd", "sourceUrl": "url1", "categories": ["CAFE"]},  # Merge by sourceUrl
+            {"name": "Lolas Kitchen", "sourceUrl": "url2", "categories": ["SHOP"]}, # Merge by norm_name since name overlaps
+            {"name": "Unique Place", "sourceUrl": "url3", "categories": ["CHURCH"]}
+        ]
+        
+        deduped = deduplicate_batch(batch)
+        self.assertEqual(len(deduped), 2)
+        
+        # Check Lola's Kitchen merged correctly
+        lola = next(item for item in deduped if item["name"] == "Lola's Kitchen")
+        self.assertEqual(set(lola["categories"]), {"RESTAURANT", "CAFE", "SHOP"})
+        
+        # Check Unique Place exists
+        unique = next(item for item in deduped if item["name"] == "Unique Place")
+        self.assertEqual(unique["categories"], ["CHURCH"])
 
     @patch("features.shared.graphql_client.execute_graphql_operation")
     async def test_check_duplicate_exact_match(self, mock_execute: AsyncMock) -> None:

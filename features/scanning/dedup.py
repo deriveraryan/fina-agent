@@ -49,14 +49,38 @@ def merge_listing_data(
     return merged
 
 
+def deduplicate_batch(listings: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Deduplicates a batch of listings in-memory.
+
+    If two listings share the same sourceUrl (if available) or the same 
+    normalized name, they are merged into one.
+    """
+    deduped = {}
+    for listing in listings:
+        source_url = listing.get("sourceUrl")
+        norm_name = normalize_name(listing.get("name", ""))
+        
+        # Prefer source_url as the grouping key, fallback to norm_name
+        key = source_url if source_url else norm_name
+        if not key:
+            continue
+            
+        if key in deduped:
+            deduped[key] = merge_listing_data(deduped[key], listing)
+        else:
+            deduped[key] = listing
+            
+    return list(deduped.values())
+
 
 async def check_duplicate(
-    name: str, city: str, description: str | None = None
+    name: str, city: str, description: str | None = None, source_url: str | None = None
 ) -> dict[str, Any] | None:
     """Checks if a directory listing already exists in the database.
 
-    1. First check: exact normalized name match in the target city.
-    2. If no exact match and description is provided: checks semantic similarity via pgvector.
+    1. First check: exact sourceUrl match (if provided).
+    2. Second check: exact normalized name match in the target city.
+    3. Third check: semantic similarity via pgvector (if description provided).
 
     Returns the duplicate listing as a dict if found, otherwise None.
     """
@@ -75,6 +99,14 @@ async def check_duplicate(
         )
         listings = ((response or {}).get("data") or {}).get("listings") or []
         for listing in listings:
+            # 1. Exact Source URL match
+            if source_url and listing.get("sourceUrl") == source_url:
+                BackendObservability.info(
+                    f"Duplicate found via exact sourceUrl match: '{listing.get('name')}' (ID: {listing.get('id')})"
+                )
+                return listing
+                
+            # 2. Exact Name match
             if normalize_name(listing.get("name", "")) == normalized_new:
                 BackendObservability.info(
                     f"Duplicate found via exact name match: '{listing.get('name')}' (ID: {listing.get('id')})"

@@ -99,11 +99,20 @@ def format_place(place: dict, city: str, category: str) -> dict:
     types = place.get("types", [])
     
     reviews_list = place.get("reviews") or []
-    review_texts = [
-        r.get("text", {}).get("text", "")
-        for r in reviews_list
-        if isinstance(r, dict) and r.get("text", {}).get("text")
-    ]
+    structured_reviews = []
+    for r in reviews_list:
+        if not isinstance(r, dict):
+            continue
+        text = r.get("text", {}).get("text")
+        if not text:
+            continue
+        structured_reviews.append({
+            "externalSourceId": r.get("name"),
+            "authorName": r.get("authorAttribution", {}).get("displayName"),
+            "rating": r.get("rating"),
+            "text": text,
+            "publishedDate": r.get("publishTime")
+        })
     
     operating_hours_json = None
     hours_obj = place.get("regularOpeningHours") or {}
@@ -126,7 +135,7 @@ def format_place(place: dict, city: str, category: str) -> dict:
         "website": place.get("websiteUri"),
         "hours": operating_hours_json,
         "description": editorial or f"A verified Filipino {category.lower()} in {city.title()}.",
-        "reviews": review_texts,
+        "reviews": structured_reviews,
         "sourceUrl": f"https://www.google.com/maps/place/?q=place_id:{place_id}"
     }
 
@@ -187,8 +196,20 @@ def _get_mock_places(city: str, category: str) -> list[dict[str, Any]]:
                 },
                 "editorialSummary": {"text": "Authentic Manila style diners serving signature lechon and adobo."},
                 "reviews": [
-                    {"text": {"text": "Great chicken inasal and helpful staff."}},
-                    {"text": {"text": "Very clean place with amazing pork sisig!"}}
+                    {
+                        "name": "places/mock_restaurant_1/reviews/0",
+                        "authorAttribution": {"displayName": "Juan Dela Cruz"},
+                        "rating": 5.0,
+                        "text": {"text": "Great chicken inasal and helpful staff."},
+                        "publishTime": "2026-06-06T00:00:00Z"
+                    },
+                    {
+                        "name": "places/mock_restaurant_1/reviews/1",
+                        "authorAttribution": {"displayName": "Maria Clara"},
+                        "rating": 4.0,
+                        "text": {"text": "Very clean place with amazing pork sisig!"},
+                        "publishTime": "2026-06-06T00:00:00Z"
+                    }
                 ]
             }
         ]
@@ -218,7 +239,13 @@ def _get_mock_places(city: str, category: str) -> list[dict[str, Any]]:
                 },
                 "editorialSummary": {"text": "Cozy café featuring specialty ube lattes and pandesal toast."},
                 "reviews": [
-                    {"text": {"text": "Fabulous ube cake and friendly barista."}}
+                    {
+                        "name": "places/mock_cafe_1/reviews/0",
+                        "authorAttribution": {"displayName": "Jose Rizal"},
+                        "rating": 5.0,
+                        "text": {"text": "Fabulous ube cake and friendly barista."},
+                        "publishTime": "2026-06-06T00:00:00Z"
+                    }
                 ]
             }
         ]
@@ -248,7 +275,13 @@ def _get_mock_places(city: str, category: str) -> list[dict[str, Any]]:
                 },
                 "editorialSummary": {"text": "Well stocked grocery store with Filipino brand goods and imported ingredients."},
                 "reviews": [
-                    {"text": {"text": "Has all the Filipino snacks and sauces I miss!"}}
+                    {
+                        "name": "places/mock_shop_1/reviews/0",
+                        "authorAttribution": {"displayName": "Andres Bonifacio"},
+                        "rating": 4.5,
+                        "text": {"text": "Has all the Filipino snacks and sauces I miss!"},
+                        "publishTime": "2026-06-06T00:00:00Z"
+                    }
                 ]
             }
         ]
@@ -272,7 +305,13 @@ def _get_mock_places(city: str, category: str) -> list[dict[str, Any]]:
                 },
                 "editorialSummary": {"text": "Filipino Christian worship service and community fellowship."},
                 "reviews": [
-                    {"text": {"text": "Very warm and welcoming community."}}
+                    {
+                        "name": "places/mock_church_1/reviews/0",
+                        "authorAttribution": {"displayName": "Gabriela Silang"},
+                        "rating": 5.0,
+                        "text": {"text": "Very warm and welcoming community."},
+                        "publishTime": "2026-06-06T00:00:00Z"
+                    }
                 ]
             }
         ]
@@ -296,7 +335,13 @@ def _get_mock_places(city: str, category: str) -> list[dict[str, Any]]:
                 },
                 "editorialSummary": {"text": f"Filipino community group in {city_title}."},
                 "reviews": [
-                    {"text": {"text": "Very active and helpful community."}}
+                    {
+                        "name": "places/mock_community_1/reviews/0",
+                        "authorAttribution": {"displayName": "Melchora Aquino"},
+                        "rating": 4.8,
+                        "text": {"text": "Very active and helpful community."},
+                        "publishTime": "2026-06-06T00:00:00Z"
+                    }
                 ]
             }
         ]
@@ -324,7 +369,13 @@ def _get_mock_places(city: str, category: str) -> list[dict[str, Any]]:
                 },
                 "editorialSummary": {"text": f"Philippine consular services office in {city_title}."},
                 "reviews": [
-                    {"text": {"text": "Fast service and friendly staff."}}
+                    {
+                        "name": "places/mock_gov_1/reviews/0",
+                        "authorAttribution": {"displayName": "Emilio Aguinaldo"},
+                        "rating": 4.2,
+                        "text": {"text": "Fast service and friendly staff."},
+                        "publishTime": "2026-06-06T00:00:00Z"
+                    }
                 ]
             }
         ]
