@@ -52,9 +52,9 @@ class TestDeduplication(unittest.IsolatedAsyncioTestCase):
         from features.scanning.dedup import deduplicate_batch
         
         batch = [
-            {"name": "Lola's Kitchen", "sourceUrl": "url1", "categories": ["RESTAURANT"], "city": "SYDNEY"},
-            {"name": "Lola's Kitchen Pty Ltd", "sourceUrl": "url1", "categories": ["CAFE"]},  # Merge by sourceUrl
-            {"name": "Lolas Kitchen", "sourceUrl": "url2", "categories": ["SHOP"]}, # Merge by norm_name since name overlaps
+            {"name": "Lola's Kitchen", "sourceUrl": None, "categories": ["RESTAURANT"], "city": "SYDNEY"},
+            {"name": "Lola's Kitchen Pty Ltd", "sourceUrl": None, "categories": ["CAFE"]},  # Merge by norm_name
+            {"name": "Lola's Kitchen", "sourceUrl": None, "categories": ["SHOP"]}, # Merge by norm_name
             {"name": "Unique Place", "sourceUrl": "url3", "categories": ["CHURCH"]}
         ]
         
@@ -115,12 +115,12 @@ class TestDeduplication(unittest.IsolatedAsyncioTestCase):
             },  # SemanticSearchListings
         ]
 
-        result = await check_duplicate("Manila Bistro", "SYDNEY", description="A cozy Filipino diner serving adobo")
+        result = await check_duplicate("Manila Bistro", "SYDNEY", description="A cozy Filipino diner serving adobo", categories=["RESTAURANT"])
 
         self.assertIsNotNone(result)
         self.assertEqual(result["id"], "def-456")
         self.assertEqual(mock_execute.call_count, 2)
-        mock_embedding.assert_called_once_with("A cozy Filipino diner serving adobo")
+        mock_embedding.assert_called_once_with("Manila Bistro is a Filipino RESTAURANT located in SYDNEY. A cozy Filipino diner serving adobo")
 
     @patch("features.shared.graphql_client.execute_graphql_operation")
     @patch("features.shared.embeddings.get_embedding")
@@ -132,11 +132,11 @@ class TestDeduplication(unittest.IsolatedAsyncioTestCase):
             {"data": {"listings_descriptionEmbedding_similarity": None}},  # SemanticSearchListings returning null
         ]
 
-        result = await check_duplicate("Manila Bistro", "SYDNEY", description="A cozy Filipino diner serving adobo")
+        result = await check_duplicate("Manila Bistro", "SYDNEY", description="A cozy Filipino diner serving adobo", categories=["RESTAURANT"])
 
         self.assertIsNone(result)
         self.assertEqual(mock_execute.call_count, 2)
-        mock_embedding.assert_called_once_with("A cozy Filipino diner serving adobo")
+        mock_embedding.assert_called_once_with("Manila Bistro is a Filipino RESTAURANT located in SYDNEY. A cozy Filipino diner serving adobo")
 
 
 if __name__ == "__main__":

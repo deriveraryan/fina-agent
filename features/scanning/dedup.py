@@ -74,13 +74,17 @@ def deduplicate_batch(listings: list[dict[str, Any]]) -> list[dict[str, Any]]:
 
 
 async def check_duplicate(
-    name: str, city: str, description: str | None = None, source_url: str | None = None
+    name: str,
+    city: str,
+    description: str | None = None,
+    source_url: str | None = None,
+    categories: list[str] | None = None,
 ) -> dict[str, Any] | None:
     """Checks if a directory listing already exists in the database.
 
     1. First check: exact sourceUrl match (if provided).
     2. Second check: exact normalized name match in the target city.
-    3. Third check: semantic similarity via pgvector (if description provided).
+    3. Third check: semantic similarity via pgvector.
 
     Returns the duplicate listing as a dict if found, otherwise None.
     """
@@ -118,40 +122,49 @@ async def check_duplicate(
         )
 
     # 2. Semantic match check via pgvector
-    if description and len(description.strip()) > 10:
-        try:
-            from features.shared.embeddings import get_embedding
-            query_vector = get_embedding(description)
-            response = await execute_graphql_operation(
-                operation_name="SemanticSearchListings",
-                variables={"city": city, "queryText": description},
-            )
-            # Semantic search returns listings_descriptionEmbedding_similarity list
-            results = ((response or {}).get("data") or {}).get("listings_descriptionEmbedding_similarity") or []
-            for result in results:
-                result_name = result.get("name", "")
-                # Enforce tight similarity check (either name matches or is a high overlap)
-                if normalize_name(result_name) == normalized_new:
+    try:
+        from features.shared.embeddings import get_embedding
+        cats_str = ",".join(categories or [])
+        base_desc = f"{name} is a Filipino {cats_str} located in {city}."
+        desc_for_embedding = f"{base_desc} {description}" if description else base_desc
+        
+        BackendObservability.trace(f"Generating description embedding for semantic check: '{desc_for_embedding}'")
+        query_vector = get_embedding(desc_for_embedding)
+        
+        response = await execute_graphql_operation(
+            operation_name="SemanticSearchListings",
+            variables={
+                "city": city,
+                "queryText": description or "",
+                "queryVector": query_vector
+            },
+        )
+        # Semantic search returns listings_descriptionEmbedding_similarity list
+        results = ((response or {}).get("data") or {}).get("listings_descriptionEmbedding_similarity") or []
+        for result in results:
+            result_name = result.get("name", "")
+            # Enforce tight similarity check (either name matches or is a high overlap)
+            if normalize_name(result_name) == normalized_new:
+                BackendObservability.info(
+                    f"Duplicate found via semantic name match: '{result_name}' (ID: {result.get('id')})"
+                )
+                return result
+
+            # Jaccard word-overlap check for fuzzy matching
+            words_new = set(normalized_new.split())
+            words_existing = set(normalize_name(result_name).split())
+            if words_new and words_existing:
+                intersection = words_new.intersection(words_existing)
+                union = words_new.union(words_existing)
+                jaccard = len(intersection) / len(union)
+                if jaccard > 0.7:
                     BackendObservability.info(
-                        f"Duplicate found via semantic name match: '{result_name}' (ID: {result.get('id')})"
+                        f"Duplicate found via fuzzy name overlap ({jaccard:.2f}): '{result_name}' (ID: {result.get('id')})"
                     )
                     return result
-
-                # Jaccard word-overlap check for fuzzy matching
-                words_new = set(normalized_new.split())
-                words_existing = set(normalize_name(result_name).split())
-                if words_new and words_existing:
-                    intersection = words_new.intersection(words_existing)
-                    union = words_new.union(words_existing)
-                    jaccard = len(intersection) / len(union)
-                    if jaccard > 0.7:
-                        BackendObservability.info(
-                            f"Duplicate found via fuzzy name overlap ({jaccard:.2f}): '{result_name}' (ID: {result.get('id')})"
-                        )
-                        return result
-        except Exception as exc:
-            BackendObservability.error(
-                "Error during semantic deduplication check.", exception=exc
-            )
+    except Exception as exc:
+        BackendObservability.error(
+            "Error during semantic deduplication check.", exception=exc
+        )
 
     return None

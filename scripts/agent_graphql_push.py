@@ -49,7 +49,13 @@ async def process_single_item(operation: str, item_dict: dict, trace_id: str) ->
 
         # 1. Deduplicate
         BackendObservability.trace(f"Deduplication check for listing name='{name}' in city='{city}'", conversation_id=trace_id)
-        existing = await check_duplicate(name=name, city=city, description=description, source_url=source_url)
+        existing = await check_duplicate(
+            name=name,
+            city=city,
+            description=description,
+            source_url=source_url,
+            categories=item_dict.get("categories", []),
+        )
         
         if existing:
             BackendObservability.info(f"Duplicate found: existing listing ID='{existing['id']}'. Merging...", conversation_id=trace_id)
@@ -114,9 +120,11 @@ async def process_single_item(operation: str, item_dict: dict, trace_id: str) ->
             
         if not item_dict.get("descriptionEmbedding"):
             from features.shared.embeddings import get_embedding
-            desc = description or f"Filipino listing in {city}"
-            BackendObservability.trace(f"Generating description embedding for: '{desc}'", conversation_id=trace_id)
-            item_dict["descriptionEmbedding"] = get_embedding(desc)
+            cats_str = ",".join(item_dict.get("categories", []))
+            base_desc = f"{name} is a Filipino {cats_str} located in {city}."
+            desc_for_embedding = f"{base_desc} {description}" if description else base_desc
+            BackendObservability.trace(f"Generating description embedding for: '{desc_for_embedding}'", conversation_id=trace_id)
+            item_dict["descriptionEmbedding"] = get_embedding(desc_for_embedding)
             BackendObservability.trace("Successfully generated description embedding.", conversation_id=trace_id)
 
         if not item_dict.get("verificationStatus"):
