@@ -13,6 +13,16 @@ warnings.filterwarnings(
 
 from features.shared.observability import BackendObservability, trace_performance
 
+# Global AsyncClient instance for connection reuse
+_client: httpx.AsyncClient | None = None
+
+def _get_client() -> httpx.AsyncClient:
+    global _client
+    if _client is None:
+        _client = httpx.AsyncClient()
+    return _client
+
+
 async def execute_graphql_operation(
     operation_name: str, variables: dict[str, Any]
 ) -> dict[str, Any]:
@@ -94,24 +104,24 @@ async def execute_graphql_operation(
 
     BackendObservability.trace(f"Executing GraphQL Operation: {operation_name}")
 
-    async with httpx.AsyncClient() as client:
-        with trace_performance("execute_graphql_operation", budget=2.0):
-            response = await client.post(
-                url, json=body, headers=headers, timeout=30.0
-            )
+    client = _get_client()
+    with trace_performance("execute_graphql_operation", budget=2.0):
+        response = await client.post(
+            url, json=body, headers=headers, timeout=30.0
+        )
 
-        if response.status_code != 200:
-            BackendObservability.error(
-                f"GraphQL execution failed ({response.status_code}): {response.text}"
-            )
-            raise RuntimeError(f"GraphQL Execution Error: {response.text}")
+    if response.status_code != 200:
+        BackendObservability.error(
+            f"GraphQL execution failed ({response.status_code}): {response.text}"
+        )
+        raise RuntimeError(f"GraphQL Execution Error: {response.text}")
 
-        res_json = response.json()
-        if "errors" in res_json and res_json["errors"]:
-            BackendObservability.error(
-                f"GraphQL returned execution errors: {res_json['errors']}"
-            )
-            raise RuntimeError(f"GraphQL Execution Error: {res_json['errors']}")
+    res_json = response.json()
+    if "errors" in res_json and res_json["errors"]:
+        BackendObservability.error(
+            f"GraphQL returned execution errors: {res_json['errors']}"
+        )
+        raise RuntimeError(f"GraphQL Execution Error: {res_json['errors']}")
 
-        return res_json
+    return res_json
 

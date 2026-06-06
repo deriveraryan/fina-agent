@@ -79,6 +79,7 @@ async def check_duplicate(
     description: str | None = None,
     source_url: str | None = None,
     categories: list[str] | None = None,
+    trace_id: str | None = None,
 ) -> dict[str, Any] | None:
     """Checks if a directory listing already exists in the database.
 
@@ -92,7 +93,8 @@ async def check_duplicate(
 
     normalized_new = normalize_name(name)
     BackendObservability.trace(
-        f"Deduplication check for '{name}' in {city} (normalized: '{normalized_new}')"
+        f"Deduplication check for '{name}' in {city} (normalized: '{normalized_new}')",
+        conversation_id=trace_id
     )
 
     # 1. Exact match check against active listings in the city
@@ -106,19 +108,23 @@ async def check_duplicate(
             # 1. Exact Source URL match
             if source_url and listing.get("sourceUrl") == source_url:
                 BackendObservability.info(
-                    f"Duplicate found via exact sourceUrl match: '{listing.get('name')}' (ID: {listing.get('id')})"
+                    f"Duplicate found via exact sourceUrl match: '{listing.get('name')}' (ID: {listing.get('id')})",
+                    conversation_id=trace_id
                 )
                 return listing
                 
             # 2. Exact Name match
             if normalize_name(listing.get("name", "")) == normalized_new:
                 BackendObservability.info(
-                    f"Duplicate found via exact name match: '{listing.get('name')}' (ID: {listing.get('id')})"
+                    f"Duplicate found via exact name match: '{listing.get('name')}' (ID: {listing.get('id')})",
+                    conversation_id=trace_id
                 )
                 return listing
     except Exception as exc:
         BackendObservability.error(
-            "Error during exact match deduplication check.", exception=exc
+            "Error during exact match deduplication check.",
+            exception=exc,
+            conversation_id=trace_id
         )
 
     # 2. Semantic match check via pgvector
@@ -128,8 +134,17 @@ async def check_duplicate(
         base_desc = f"{name} is a Filipino {cats_str} located in {city}."
         desc_for_embedding = f"{base_desc} {description}" if description else base_desc
         
-        BackendObservability.trace(f"Generating description embedding for semantic check: '{desc_for_embedding}'")
-        query_vector = get_embedding(desc_for_embedding)
+        BackendObservability.trace(
+            f"Generating description embedding for semantic check: '{desc_for_embedding}'",
+            conversation_id=trace_id
+        )
+        query_vector = get_embedding(desc_for_embedding, conversation_id=trace_id)
+        if query_vector is None:
+            BackendObservability.warning(
+                f"Skipping semantic check for '{name}' because embedding generation returned None.",
+                conversation_id=trace_id
+            )
+            return None
         
         response = await execute_graphql_operation(
             operation_name="SemanticSearchListings",
@@ -146,7 +161,8 @@ async def check_duplicate(
             # Enforce tight similarity check (either name matches or is a high overlap)
             if normalize_name(result_name) == normalized_new:
                 BackendObservability.info(
-                    f"Duplicate found via semantic name match: '{result_name}' (ID: {result.get('id')})"
+                    f"Duplicate found via semantic name match: '{result_name}' (ID: {result.get('id')})",
+                    conversation_id=trace_id
                 )
                 return result
 
@@ -159,12 +175,15 @@ async def check_duplicate(
                 jaccard = len(intersection) / len(union)
                 if jaccard > 0.7:
                     BackendObservability.info(
-                        f"Duplicate found via fuzzy name overlap ({jaccard:.2f}): '{result_name}' (ID: {result.get('id')})"
+                        f"Duplicate found via fuzzy name overlap ({jaccard:.2f}): '{result_name}' (ID: {result.get('id')})",
+                        conversation_id=trace_id
                     )
                     return result
     except Exception as exc:
         BackendObservability.error(
-            "Error during semantic deduplication check.", exception=exc
+            "Error during semantic deduplication check.",
+            exception=exc,
+            conversation_id=trace_id
         )
 
     return None

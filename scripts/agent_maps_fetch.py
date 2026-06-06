@@ -25,6 +25,16 @@ sys.path.insert(
 
 from features.shared.observability import BackendObservability
 
+# Global AsyncClient instance for connection reuse
+_client: httpx.AsyncClient | None = None
+
+def _get_client() -> httpx.AsyncClient:
+    global _client
+    if _client is None:
+        _client = httpx.AsyncClient()
+    return _client
+
+
 # Search keyword templates per category
 SEARCH_TEMPLATES: dict[str, list[str]] = {
     "RESTAURANT": [
@@ -157,14 +167,14 @@ async def _execute_places_text_search(query: str, api_key: str) -> list[dict[str
         "languageCode": "en"
     }
 
-    async with httpx.AsyncClient() as client:
-        response = await client.post(url, json=body, headers=headers, timeout=20.0)
-        if response.status_code != 200:
-            raise RuntimeError(
-                f"Places API returned status code {response.status_code}: {response.text}"
-            )
-        data = response.json()
-        return data.get("places") or []
+    client = _get_client()
+    response = await client.post(url, json=body, headers=headers, timeout=20.0)
+    if response.status_code != 200:
+        raise RuntimeError(
+            f"Places API returned status code {response.status_code}: {response.text}"
+        )
+    data = response.json()
+    return data.get("places") or []
 
 
 def _get_mock_places(city: str, category: str) -> list[dict[str, Any]]:

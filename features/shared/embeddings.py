@@ -1,16 +1,29 @@
 import os
-import logging
+from typing import Optional
+from features.shared.observability import BackendObservability, audit_token_budget
 
-def get_embedding(text: str) -> list[float]:
+def get_embedding(text: str, conversation_id: Optional[str] = None) -> list[float] | None:
     """Generates a 768-dimension vector embedding for the given text using gemini-embedding-2.
     
-    Raises ValueError if GEMINI_API_KEY is not set or is 'mock-key'.
+    Returns None if GEMINI_API_KEY is not set or is 'mock-key', or if an error occurs.
     """
     gemini_key = os.getenv("GEMINI_API_KEY")
     if not gemini_key or gemini_key == "mock-key":
-        raise ValueError("GEMINI_API_KEY is not set or is 'mock-key'. Real services are required.")
+        BackendObservability.warning(
+            "GEMINI_API_KEY is not set or is 'mock-key'. Real services are required.",
+            conversation_id=conversation_id
+        )
+        return None
         
     try:
+        # Audit token budget using estimated tokens (roughly 1 token per 4 characters)
+        prompt_tokens = (len(text or "") + 3) // 4
+        audit_token_budget(
+            conversation_id=conversation_id or "unknown",
+            prompt_tokens=prompt_tokens,
+            candidate_tokens=0
+        )
+        
         from google import genai
         from google.genai import types
         
@@ -23,7 +36,11 @@ def get_embedding(text: str) -> list[float]:
         if response and response.embeddings:
             return response.embeddings[0].values
     except Exception as e:
-        # Fallback to zero vector on network error to prevent fatal crashes
-        logging.warning(f"Embedding generation failed: {e}. Falling back to zero vector.")
+        BackendObservability.error(
+            f"Embedding generation failed: {e}.",
+            exception=e,
+            conversation_id=conversation_id
+        )
         
-    return [0.0] * 768
+    return None
+

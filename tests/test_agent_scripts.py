@@ -373,6 +373,8 @@ class TestAgentScripts(unittest.IsolatedAsyncioTestCase):
             city="SYDNEY",
             description="Filipino diner",
             source_url=None,
+            categories=["RESTAURANT"],
+            trace_id=None,
         )
         mock_merge.assert_called_once()
         
@@ -443,9 +445,14 @@ class TestAgentScripts(unittest.IsolatedAsyncioTestCase):
             city="SYDNEY",
             description="Good food",
             source_url=None,
+            categories=["RESTAURANT"],
+            trace_id=None,
         )
         mock_geocode.assert_called_once_with("123 St", "SYDNEY")
-        mock_embedding.assert_called_once_with("Good food")
+        mock_embedding.assert_called_once_with(
+            "New Resto is a Filipino RESTAURANT located in SYDNEY. Good food",
+            conversation_id=None
+        )
         
         mock_execute.assert_any_call(
             operation_name="CreateListing",

@@ -55,6 +55,7 @@ async def process_single_item(operation: str, item_dict: dict, trace_id: str) ->
             description=description,
             source_url=source_url,
             categories=item_dict.get("categories", []),
+            trace_id=trace_id,
         )
         
         if existing:
@@ -124,8 +125,12 @@ async def process_single_item(operation: str, item_dict: dict, trace_id: str) ->
             base_desc = f"{name} is a Filipino {cats_str} located in {city}."
             desc_for_embedding = f"{base_desc} {description}" if description else base_desc
             BackendObservability.trace(f"Generating description embedding for: '{desc_for_embedding}'", conversation_id=trace_id)
-            item_dict["descriptionEmbedding"] = get_embedding(desc_for_embedding)
-            BackendObservability.trace("Successfully generated description embedding.", conversation_id=trace_id)
+            emb = get_embedding(desc_for_embedding, conversation_id=trace_id)
+            if emb is not None:
+                item_dict["descriptionEmbedding"] = emb
+                BackendObservability.trace("Successfully generated description embedding.", conversation_id=trace_id)
+            else:
+                BackendObservability.warning("Could not generate description embedding. Proceeding without descriptionEmbedding.", conversation_id=trace_id)
 
         if not item_dict.get("verificationStatus"):
             item_dict["verificationStatus"] = "UNVERIFIED"
@@ -211,6 +216,15 @@ async def main() -> None:
         sys.stdout.write(json.dumps(results))
     else:
         sys.stdout.write(json.dumps(results[0] if results else {"status": "SKIPPED"}))
+
+    # Clean up the temporary variables file if one was used and execution succeeded
+    if args.variables.startswith("@") and not has_error:
+        file_path = args.variables[1:]
+        try:
+            os.remove(file_path)
+            BackendObservability.trace(f"Cleaned up temporary variables file: {file_path}", conversation_id=args.trace_id)
+        except Exception as e:
+            BackendObservability.warning(f"Failed to clean up temporary variables file {file_path}: {e}", conversation_id=args.trace_id)
 
     if has_error and not is_bulk:
         sys.exit(1)

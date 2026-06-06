@@ -35,6 +35,7 @@ To accomplish your task, follow these steps exactly:
       - website: candidate's website
       - operatingHours: candidate's hours
       - sourceUrl: candidate's sourceUrl
+      - reviews: candidate's reviews array
       - tags: 'filipino,<category>,google-maps'
       iii. Clean up the temporary JSON file from `tmp/` immediately after a successful execution to avoid file pollution.
 5. If the returned JSON indicates `has_more` is true, increment your offset by 10 and repeat the process (execute `python3 scripts/agent_maps_fetch.py` with the new offset and same trace ID) to process the next page.
