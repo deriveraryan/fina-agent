@@ -4,9 +4,74 @@ import re
 from typing import Any
 from features.shared.observability import BackendObservability
 
-# Known generic chains or false positives to exclude
+# Comprehensive list of generic chains/false positives to exclude
+BLOCKLIST_CHAINS = [
+    # Supermarkets, Groceries & Retailers
+    "Woolworths", "Coles", "Aldi", "IGA", "Foodworks", "Supabarn", 
+    "Harris Farm Markets", "Drakes Supermarkets", "Spudshed", "Woolies",
+    "Kmart", "Target", "Big W", "Myer", "David Jones", "Costco", "The Reject Shop", "Reject Shop",
+    
+    # Fast Food, Cafes & Restaurants
+    "McDonald's", "McDonalds", "KFC", "Hungry Jack's", "Hungry Jacks", 
+    "Subway", "Domino's", "Domino's Pizza", "Dominos", "Red Rooster", 
+    "Oporto", "Pizza Hut", "Grill'd", "Grilld", "Zambrero", "Guzman y Gomez", 
+    "GYG", "Nando's", "Nandos", "Schnitz", "Salsas Fresh Mex", "Gloria Jean's", 
+    "Gloria Jeans", "The Coffee Club", "Muffin Break", "Boost Juice", 
+    "Betty's Burgers", "Bettys Burgers", "Hog's Breath Cafe", "Hogs Breath Cafe", 
+    "Oliver's Real Food", "Olivers Real Food", "Bakers Delight", "Brumby's", 
+    "Brumbys", "Donut King", "Michel's Patisserie", "Starbucks", "Pie Face", 
+    "Crust Pizza", "Crust", "Mad Mex", "Roll'd", "Rolld", "Soul Origin", 
+    "Chicken Treat", "El Jannah", "Zarraffa's Coffee",
+    
+    # Pharmacies & Health/Beauty
+    "Chemist Warehouse", "Priceline", "Priceline Pharmacy", "TerryWhite Chemmart", 
+    "Amcal", "Just Cuts", "Hairhouse", "Laser Clinics Australia",
+    
+    # Hardware, Auto & Homeware
+    "Bunnings", "Bunnings Warehouse", "Mitre 10", "Home Timber & Hardware", 
+    "Total Tools", "Sydney Tools", "JB Hi-Fi", "JB HiFi", "Harvey Norman", 
+    "The Good Guys", "Officeworks", "Supercheap Auto", "Repco", "Autobarn", 
+    "BCF", "Anaconda", "Spotlight", "Kathmandu", "Adairs", "House", 
+    "Robins Kitchen", "Bed Bath N' Table", "Bed Bath N Table", "Sheridan", 
+    "IKEA", "Fantastic Furniture", "Amart Furniture", "Freedom", "Snooze", 
+    "Forty Winks", "Pillow Talk", "Dusk", "TK Maxx",
+    
+    # Apparel, Shoes & Accessories
+    "Rebel Sport", "Rebel", "Cotton On", "Cotton On Body", "Supré", "Supre", 
+    "Factorie", "Jay Jays", "Just Jeans", "Dotti", "Portmans", "Jacqui E", 
+    "Peter Alexander", "Country Road", "Witchery", "Mimco", "Seed Heritage", 
+    "Sportsgirl", "Sussan", "Suzanne Grae", "Rivers", "Best & Less", 
+    "Best and Less", "Connor", "Tarocash", "yd.", "Johnny Bigg", "Rockwear", 
+    "Platypus Shoes", "Hype DC", "The Athlete's Foot", "Skechers", "Lovisa", 
+    "Strandbags",
+    
+    # Petrol & Convenience
+    "7-Eleven", "7 Eleven", "Ampol", "BP", "Shell", "Coles Express", 
+    "Woolworths Metro", "EG Ampol", "EG Australia", "United Petroleum", 
+    "Mobil", "Liberty Oil", "Caltex", "Puma Energy", "NightOwl", "EziMart",
+    
+    # Liquor Stores
+    "Dan Murphy's", "Dan Murphys", "BWS", "Liquorland", "Vintage Cellars", 
+    "First Choice Liquor", "First Choice Liquor Market", "Cellarbrations", 
+    "The Bottle-O", "Bottle-O", "Thirsty Camel", "Liquor Stax", "Local Liquor",
+    
+    # Banking & Financial Services
+    "Commonwealth Bank", "CBA", "Westpac", "ANZ", "National Australia Bank", 
+    "NAB", "Bendigo Bank", "Suncorp", "Bank of Queensland", "BOQ", 
+    "St George Bank", "Macquarie Bank",
+    
+    # Services, Gyms & Entertainment
+    "Australia Post", "AusPost", "Anytime Fitness", "Jetts", "Plus Fitness", 
+    "F45", "Snap Fitness", "Goodlife Health Clubs", "Fitness First", 
+    "mycar", "mycar Tyre & Auto", "Bob Jane T-Marts", "Bob Jane", "JAX Tyres", 
+    "Tyrepower", "Bridgestone Select", "Flight Centre", "Helloworld", 
+    "Event Cinemas", "Hoyts", "Village Cinemas", "Timezone", "Petbarn", 
+    "Petstock", "EB Games", "Zing Pop Culture", "Toyworld", "Dymocks", "QBD Books"
+]
+
+# Compile list sorted by length descending to match longer patterns first (e.g. Bunnings Warehouse before Bunnings)
 BLOCKLIST_REGEX = re.compile(
-    r"\b(coles|woolworths|woolies|aldi|iga|kmart|target|bunnings|mcdonalds|mcdonald's|kfc|hungry jack's|hungry jacks|domino's|dominos|subway|7-eleven|seven eleven|officeworks|big w)\b",
+    r"\b(" + "|".join(re.escape(name) for name in sorted(BLOCKLIST_CHAINS, key=len, reverse=True)) + r")\b",
     re.IGNORECASE
 )
 
