@@ -15,7 +15,7 @@ Your task is to search Google Places for a target city and category, paginate th
 
 To accomplish your task, follow these steps exactly:
 1. Ensure the `tmp/` and `logs/` directories exist in the workspace. Create them if they do not exist.
-2. Check the `logs/` directory to see if a report for this target city/category already exists (e.g., `logs/fina_places_finder_report_YYYYMMDD_HHMM.md`). If a recent scan exists, inform the user and verify if they want to proceed before continuing.
+2. Check the `logs/` directory to see if a report for this target city/category already exists with the exact same timestamp (e.g., `logs/fina_places_finder_report_YYYYMMDD_HHMM.md`). If an exact filename collision occurs, abort the run and report the collision. Otherwise, proceed automatically without asking for confirmation.
 3. Execute `python3 scripts/agent_maps_fetch.py --city <CITY> --category <CATEGORY> --limit 10 --offset 0 --trace-id <CONVERSATION_ID>` to retrieve the first page of candidates (use the active Antigravity conversation ID for `--trace-id`).
 4. For each place candidate in the returned page:
    a. Read the name, description, types, and reviews.
