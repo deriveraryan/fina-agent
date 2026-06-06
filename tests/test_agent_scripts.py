@@ -248,6 +248,7 @@ class TestAgentScripts(unittest.IsolatedAsyncioTestCase):
                 {
                     "id": "place_live_1",
                     "displayName": {"text": "Live Manila Eats"},
+                    "businessStatus": "CLOSED_TEMPORARILY",
                     "types": ["restaurant", "food"],
                     "formattedAddress": "123 Live St",
                     "location": {"latitude": -33.8, "longitude": 151.2},
@@ -285,6 +286,7 @@ class TestAgentScripts(unittest.IsolatedAsyncioTestCase):
         
         self.assertEqual(len(parsed_output["places"]), 1)
         self.assertEqual(parsed_output["places"][0]["name"], "Live Manila Eats")
+        self.assertEqual(parsed_output["places"][0]["status"], "CLOSED_TEMPORARILY")
         self.assertEqual(parsed_output["total"], 1)
         self.assertFalse(parsed_output["has_more"])
 
@@ -362,7 +364,8 @@ class TestAgentScripts(unittest.IsolatedAsyncioTestCase):
             "city": "SYDNEY",
             "description": "Filipino diner",
             "facebookUrl": "fb.com/old",
-            "instagramUrl": "ig.com/new"
+            "instagramUrl": "ig.com/new",
+            "status": "CLOSED_TEMPORARILY"
         }
         mock_merge.return_value = merged_listing
 
@@ -403,7 +406,8 @@ class TestAgentScripts(unittest.IsolatedAsyncioTestCase):
                 "operatingHours": None,
                 "imageUrl": None,
                 "tags": None,
-                "sourceUrl": None
+                "sourceUrl": None,
+                "status": "CLOSED_TEMPORARILY"
             },
         )
         
@@ -430,7 +434,7 @@ class TestAgentScripts(unittest.IsolatedAsyncioTestCase):
             "--operation",
             "CreateListing",
             "--variables",
-            '{"name": "New Resto", "category": "RESTAURANT", "city": "SYDNEY", "address": "123 St", "description": "Good food", "reviews": [{"text": "Nice place!", "rating": 5.0, "externalSourceId": "review1"}]}'
+            '{"name": "New Resto", "category": "RESTAURANT", "city": "SYDNEY", "address": "123 St", "description": "Good food", "status": "OPERATIONAL", "reviews": [{"text": "Nice place!", "rating": 5.0, "externalSourceId": "review1"}]}'
         ]
 
         mock_check.return_value = None
@@ -465,7 +469,8 @@ class TestAgentScripts(unittest.IsolatedAsyncioTestCase):
                 "latitude": -33.8688,
                 "longitude": 151.2093,
                 "descriptionEmbedding": [0.1, 0.2, 0.3],
-                "verificationStatus": "UNVERIFIED"
+                "verificationStatus": "UNVERIFIED",
+                "status": "OPERATIONAL"
             },
         )
         written_calls = [call.args[0] for call in mock_stdout.write.call_args_list]

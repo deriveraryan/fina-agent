@@ -134,6 +134,9 @@ def format_place(place: dict, city: str, category: str) -> dict:
     lat = location.get("latitude")
     lng = location.get("longitude")
     
+    # Adopt the enum from the Google Places API businessStatus directly
+    status = place.get("businessStatus", "OPERATIONAL")
+    
     return {
         "id": place_id,
         "name": name,
@@ -146,7 +149,8 @@ def format_place(place: dict, city: str, category: str) -> dict:
         "hours": operating_hours_json,
         "description": editorial or f"A verified Filipino {category.lower()} in {city.title()}.",
         "reviews": structured_reviews,
-        "sourceUrl": f"https://www.google.com/maps/place/?q=place_id:{place_id}"
+        "sourceUrl": f"https://www.google.com/maps/place/?q=place_id:{place_id}",
+        "status": status
     }
 
 
@@ -159,7 +163,7 @@ async def _execute_places_text_search(query: str, api_key: str) -> list[dict[str
         "X-Goog-FieldMask": (
             "places.id,places.displayName,places.formattedAddress,places.location,"
             "places.websiteUri,places.internationalPhoneNumber,places.regularOpeningHours,"
-            "places.editorialSummary,places.types,places.reviews"
+            "places.editorialSummary,places.types,places.reviews,places.businessStatus"
         )
     }
     body = {

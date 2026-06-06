@@ -86,6 +86,7 @@ async def process_single_item(operation: str, item_dict: dict, trace_id: str) ->
                             "imageUrl": merged.get("imageUrl"),
                             "tags": merged.get("tags"),
                             "sourceUrl": merged.get("sourceUrl"),
+                            "status": merged.get("status"),
                         },
                     )
                     BackendObservability.info(f"Successfully updated duplicate listing ID={existing['id']} data/status.", conversation_id=trace_id)

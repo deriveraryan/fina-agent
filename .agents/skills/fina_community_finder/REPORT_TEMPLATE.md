@@ -29,7 +29,7 @@
 
 ### Created Listings
 
-<!-- Sort entries by platform (Facebook first, then Instagram), then alphabetically within each platform. -->
+<!-- Group entries by Category (e.g., #### RESTAURANT). Within each category, sort entries by platform (Facebook first, then Instagram), then alphabetically. -->
 
 1. **{Name}** ({Platform})
    - Category: {COMMUNITY / CHURCH / GOVERNMENT / etc.}
