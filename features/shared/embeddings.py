@@ -7,12 +7,18 @@ def get_embedding(text: str, conversation_id: Optional[str] = None) -> list[floa
     
     Returns None if GEMINI_API_KEY is not set or is 'mock-key', or if an error occurs.
     """
+    import sys
+    is_testing = "unittest" in sys.modules or "pytest" in sys.modules
+
     gemini_key = os.getenv("GEMINI_API_KEY")
     if not gemini_key or gemini_key == "mock-key":
+        err_msg = "GEMINI_API_KEY is not set or is 'mock-key'. Real services are required."
         BackendObservability.warning(
-            "GEMINI_API_KEY is not set or is 'mock-key'. Real services are required.",
+            err_msg,
             conversation_id=conversation_id
         )
+        if is_testing:
+            raise RuntimeError(err_msg)
         return None
         
     try:
@@ -41,6 +47,8 @@ def get_embedding(text: str, conversation_id: Optional[str] = None) -> list[floa
             exception=e,
             conversation_id=conversation_id
         )
+        if is_testing:
+            raise RuntimeError(f"Embedding generation failed in test: {e}") from e
         
     return None
 

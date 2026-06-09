@@ -211,26 +211,41 @@ async def process_single_item(operation: str, item_dict: dict, trace_id: str) ->
             item_dict["longitude"] = lng
             BackendObservability.info(f"Geocoded address to coordinates: ({lat}, {lng})", conversation_id=trace_id)
             
-        # Generate composite embeddingText for database-side embedding if not already provided
-        if not item_dict.get("embeddingText"):
-            cats_str = ",".join(item_dict.get("categories", []))
-            base_desc = f"{name} is a Filipino {cats_str} located in {city}."
-            item_dict["embeddingText"] = f"{base_desc} {description}" if description else base_desc
+        # Generate composite description text for embedding
+        cats_str = ",".join(item_dict.get("categories", []))
+        base_desc = f"{name} is a Filipino {cats_str} located in {city}."
+        embedding_text = f"{base_desc} {description}" if description else base_desc
+        
+        from features.shared.embeddings import get_embedding
+        embedding = get_embedding(embedding_text, trace_id)
+        if embedding is None:
+            BackendObservability.warning(
+                f"Embedding generation failed for listing '{name}'. Setting descriptionEmbedding to null.",
+                conversation_id=trace_id
+            )
+        item_dict["descriptionEmbedding"] = embedding
+        item_dict.pop("embeddingText", None)
 
         if not item_dict.get("verificationStatus"):
             item_dict["verificationStatus"] = "UNVERIFIED"
 
     if operation == "CreateEvent":
-        if not item_dict.get("embeddingText"):
-            name = item_dict.get("name")
-            city = item_dict.get("city")
-            description = item_dict.get("description")
-            if name and city:
-                base_desc = f"{name} is a Filipino community event in {city}."
-                item_dict["embeddingText"] = f"{base_desc} {description}" if description else base_desc
-
-    # Remove descriptionEmbedding since we use database-side embeddingText
-    item_dict.pop("descriptionEmbedding", None)
+        name = item_dict.get("name")
+        city = item_dict.get("city")
+        description = item_dict.get("description")
+        if name and city:
+            base_desc = f"{name} is a Filipino community event in {city}."
+            embedding_text = f"{base_desc} {description}" if description else base_desc
+            
+            from features.shared.embeddings import get_embedding
+            embedding = get_embedding(embedding_text, trace_id)
+            if embedding is None:
+                BackendObservability.warning(
+                    f"Embedding generation failed for event '{name}'. Setting descriptionEmbedding to null.",
+                    conversation_id=trace_id
+                )
+            item_dict["descriptionEmbedding"] = embedding
+            item_dict.pop("embeddingText", None)
 
     BackendObservability.trace(f"Executing GraphQL operation: '{operation}' with variables: {item_dict}", conversation_id=trace_id)
     result = await execute_graphql_operation(operation_name=operation, variables=item_dict)

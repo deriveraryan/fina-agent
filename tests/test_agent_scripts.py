@@ -28,9 +28,13 @@ class TestAgentScripts(unittest.IsolatedAsyncioTestCase):
 
     def setUp(self) -> None:
         self._orig_argv = list(sys.argv)
+        self._get_embedding_patcher = patch("features.shared.embeddings.get_embedding")
+        self.mock_get_embedding = self._get_embedding_patcher.start()
+        self.mock_get_embedding.return_value = [0.1] * 768
 
     def tearDown(self) -> None:
         sys.argv = self._orig_argv
+        self._get_embedding_patcher.stop()
 
 
     @patch("agent_fetch_targets.execute_graphql_operation", new_callable=AsyncMock)
@@ -464,7 +468,7 @@ class TestAgentScripts(unittest.IsolatedAsyncioTestCase):
                 "latitude": -33.8688,
                 "longitude": 151.2093,
                 "verificationStatus": "UNVERIFIED",
-                "embeddingText": "New Resto is a Filipino RESTAURANT located in SYDNEY. Good food",
+                "descriptionEmbedding": [0.1] * 768,
                 "status": "OPERATIONAL"
             },
         )
@@ -548,7 +552,7 @@ class TestAgentScripts(unittest.IsolatedAsyncioTestCase):
                 "latitude": -33.8688,
                 "longitude": 151.2093,
                 "verificationStatus": "UNVERIFIED",
-                "embeddingText": "New Resto is a Filipino RESTAURANT located in SYDNEY."
+                "descriptionEmbedding": [0.1] * 768
             },
         )
 
@@ -1008,7 +1012,7 @@ class TestAgentScripts(unittest.IsolatedAsyncioTestCase):
                 "latitude": -33.8688,
                 "longitude": 151.2093,
                 "verificationStatus": "UNVERIFIED",
-                "embeddingText": "New Resto is a Filipino RESTAURANT located in SYDNEY."
+                "descriptionEmbedding": [0.1] * 768
             },
         )
 
