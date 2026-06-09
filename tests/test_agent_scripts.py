@@ -934,3 +934,49 @@ class TestAgentScripts(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(parsed_output["listings"][0]["description"], "Balikbayan box cargo forwarding services to the Philippines.")
         self.assertEqual(parsed_output["listings"][0]["tags"], "filipino,community,cargo")
 
+    @patch("agent_graphql_push.execute_graphql_operation", new_callable=AsyncMock)
+    @patch("features.scanning.dedup.check_duplicate", new_callable=AsyncMock)
+    @patch("features.scanning.dedup.merge_listing_data")
+    @patch("sys.stdout")
+    async def test_graphql_push_duplicate_review_ignored(
+        self, mock_stdout: MagicMock, mock_merge: MagicMock, mock_check: AsyncMock, mock_execute: AsyncMock
+    ) -> None:
+        """Tests that agent_graphql_push.py handles review unique constraint violations gracefully."""
+        import agent_graphql_push
+
+        sys.argv = [
+            "agent_graphql_push.py",
+            "--operation",
+            "CreateListing",
+            "--variables",
+            '{"name": "Duplicate Resto", "category": "RESTAURANT", "city": "SYDNEY", "description": "Filipino diner", "facebookUrl": "fb.com/new", "reviews": [{"text": "Good", "rating": 4.5, "externalSourceId": "rev1"}]}'
+        ]
+
+        existing_listing = {
+            "id": "existing-123",
+            "name": "Duplicate Resto",
+            "categories": ["RESTAURANT"],
+            "city": "SYDNEY",
+            "description": "Filipino diner",
+            "facebookUrl": "fb.com/old"
+        }
+        mock_check.return_value = existing_listing
+        mock_merge.return_value = existing_listing
+
+        # Mock execute_graphql_operation to raise unique constraint error when calling CreateReview
+        def side_effect(operation_name, variables=None):
+            if operation_name == "CreateReview":
+                raise RuntimeError("GraphQL Execution Error: unique constraint review_externalSourceId_uidx violation")
+            return {"data": {}}
+
+        mock_execute.side_effect = side_effect
+
+        await agent_graphql_push.main()
+
+        # The script should not raise an exception and should output status MERGED
+        written_calls = [call.args[0] for call in mock_stdout.write.call_args_list]
+        combined_output = "".join(written_calls)
+        parsed_output = json.loads(combined_output)
+        self.assertEqual(parsed_output["status"], "MERGED")
+        self.assertEqual(parsed_output["existingId"], "existing-123")
+

@@ -120,7 +120,14 @@ class TestDeduplication(unittest.IsolatedAsyncioTestCase):
         self.assertIsNotNone(result)
         self.assertEqual(result["id"], "def-456")
         self.assertEqual(mock_execute.call_count, 2)
-        mock_embedding.assert_called_once_with("Manila Bistro is a Filipino RESTAURANT located in SYDNEY. A cozy Filipino diner serving adobo")
+        mock_execute.assert_any_call(
+            operation_name="SemanticSearchListings",
+            variables={
+                "city": "SYDNEY",
+                "queryVector": [0.0] * 768
+            }
+        )
+        mock_embedding.assert_called_once_with("Manila Bistro is a Filipino RESTAURANT located in SYDNEY. A cozy Filipino diner serving adobo", conversation_id=None)
 
     @patch("features.shared.graphql_client.execute_graphql_operation")
     @patch("features.shared.embeddings.get_embedding")
@@ -136,7 +143,7 @@ class TestDeduplication(unittest.IsolatedAsyncioTestCase):
 
         self.assertIsNone(result)
         self.assertEqual(mock_execute.call_count, 2)
-        mock_embedding.assert_called_once_with("Manila Bistro is a Filipino RESTAURANT located in SYDNEY. A cozy Filipino diner serving adobo")
+        mock_embedding.assert_called_once_with("Manila Bistro is a Filipino RESTAURANT located in SYDNEY. A cozy Filipino diner serving adobo", conversation_id=None)
 
 
 if __name__ == "__main__":

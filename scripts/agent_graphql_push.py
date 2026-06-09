@@ -171,7 +171,18 @@ async def process_single_item(operation: str, item_dict: dict, trace_id: str) ->
                 try:
                     await execute_graphql_operation("CreateReview", {**rev, "listingId": existing["id"]})
                 except Exception as exc:
-                    BackendObservability.error(f"Failed to push review for duplicate listing ID={existing['id']}", exception=exc, conversation_id=trace_id)
+                    err_msg = str(exc).lower()
+                    if "unique" in err_msg or "constraint" in err_msg or "already exists" in err_msg:
+                        BackendObservability.info(
+                            f"Review with externalSourceId='{rev.get('externalSourceId')}' already exists. Skipping.",
+                            conversation_id=trace_id
+                        )
+                    else:
+                        BackendObservability.error(
+                            f"Failed to push review for duplicate listing ID={existing['id']}",
+                            exception=exc,
+                            conversation_id=trace_id
+                        )
                     
             return {"status": "MERGED", "existingId": existing["id"]}
             
@@ -215,7 +226,18 @@ async def process_single_item(operation: str, item_dict: dict, trace_id: str) ->
                 try:
                     await execute_graphql_operation("CreateReview", {**rev, "listingId": new_id})
                 except Exception as exc:
-                    BackendObservability.error(f"Failed to push review for new listing ID={new_id}", exception=exc, conversation_id=trace_id)
+                    err_msg = str(exc).lower()
+                    if "unique" in err_msg or "constraint" in err_msg or "already exists" in err_msg:
+                        BackendObservability.info(
+                            f"Review with externalSourceId='{rev.get('externalSourceId')}' already exists. Skipping.",
+                            conversation_id=trace_id
+                        )
+                    else:
+                        BackendObservability.error(
+                            f"Failed to push review for new listing ID={new_id}",
+                            exception=exc,
+                            conversation_id=trace_id
+                        )
 
     return result
 

@@ -153,7 +153,6 @@ async def check_duplicate(
             operation_name="SemanticSearchListings",
             variables={
                 "city": city,
-                "queryText": description or "",
                 "queryVector": query_vector
             },
         )
