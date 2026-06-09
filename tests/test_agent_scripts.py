@@ -382,6 +382,7 @@ class TestAgentScripts(unittest.IsolatedAsyncioTestCase):
             source_url=None,
             categories=["RESTAURANT"],
             trace_id=None,
+            generate_embeddings=False,
         )
         mock_merge.assert_called_once()
         
@@ -454,6 +455,7 @@ class TestAgentScripts(unittest.IsolatedAsyncioTestCase):
             source_url=None,
             categories=["RESTAURANT"],
             trace_id=None,
+            generate_embeddings=False,
         )
         mock_geocode.assert_called_once_with("123 St", "SYDNEY")
         
@@ -468,7 +470,7 @@ class TestAgentScripts(unittest.IsolatedAsyncioTestCase):
                 "latitude": -33.8688,
                 "longitude": 151.2093,
                 "verificationStatus": "UNVERIFIED",
-                "descriptionEmbedding": [0.1] * 768,
+                "descriptionEmbedding": None,
                 "status": "OPERATIONAL"
             },
         )
@@ -478,6 +480,57 @@ class TestAgentScripts(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(parsed_output["data"]["createListing"]["id"], "new-999")
         
         mock_execute.assert_any_call("CreateReview", {"text": "Nice place!", "rating": 5.0, "externalSourceId": "review1", "listingId": "new-999"})
+
+    @patch("agent_graphql_push.execute_graphql_operation", new_callable=AsyncMock)
+    @patch("features.scanning.dedup.check_duplicate", new_callable=AsyncMock)
+    @patch("features.scanning.sources.geocoder.geocode_address", new_callable=AsyncMock)
+    @patch("sys.stdout")
+    async def test_graphql_push_with_generate_embeddings(
+        self, mock_stdout: MagicMock, mock_geocode: AsyncMock, mock_check: AsyncMock, mock_execute: AsyncMock
+    ) -> None:
+        """Tests that agent_graphql_push.py generates embeddings when --generate-embeddings is passed."""
+        import agent_graphql_push
+
+        sys.argv = [
+            "agent_graphql_push.py",
+            "--operation",
+            "CreateListing",
+            "--variables",
+            '{"name": "New Resto", "category": "RESTAURANT", "city": "SYDNEY", "address": "123 St", "description": "Good food"}',
+            "--generate-embeddings"
+        ]
+
+        mock_check.return_value = None
+        mock_geocode.return_value = (-33.8688, 151.2093)
+        mock_execute.return_value = {"data": {"createListing": {"id": "new-999"}}}
+
+        await agent_graphql_push.main()
+
+        mock_check.assert_called_once_with(
+            name="New Resto",
+            city="SYDNEY",
+            description="Good food",
+            source_url=None,
+            categories=["RESTAURANT"],
+            trace_id=None,
+            generate_embeddings=True,
+        )
+        mock_geocode.assert_called_once_with("123 St", "SYDNEY")
+        
+        mock_execute.assert_any_call(
+            operation_name="CreateListing",
+            variables={
+                "name": "New Resto",
+                "categories": ["RESTAURANT"],
+                "city": "SYDNEY",
+                "address": "123 St",
+                "description": "Good food",
+                "latitude": -33.8688,
+                "longitude": 151.2093,
+                "verificationStatus": "UNVERIFIED",
+                "descriptionEmbedding": [0.1] * 768
+            },
+        )
 
     @patch("sys.stderr")
     async def test_graphql_push_validation_missing_name(self, mock_stderr: MagicMock) -> None:
@@ -552,7 +605,7 @@ class TestAgentScripts(unittest.IsolatedAsyncioTestCase):
                 "latitude": -33.8688,
                 "longitude": 151.2093,
                 "verificationStatus": "UNVERIFIED",
-                "descriptionEmbedding": [0.1] * 768
+                "descriptionEmbedding": None
             },
         )
 
@@ -1012,7 +1065,7 @@ class TestAgentScripts(unittest.IsolatedAsyncioTestCase):
                 "latitude": -33.8688,
                 "longitude": 151.2093,
                 "verificationStatus": "UNVERIFIED",
-                "descriptionEmbedding": [0.1] * 768
+                "descriptionEmbedding": None
             },
         )
 

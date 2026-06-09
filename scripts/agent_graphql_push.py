@@ -41,7 +41,7 @@ async def load_valid_categories(trace_id: str | None = None) -> set[str]:
         _valid_categories_cache = default_categories
         return _valid_categories_cache
 
-async def process_single_item(operation: str, item_dict: dict, trace_id: str) -> dict:
+async def process_single_item(operation: str, item_dict: dict, trace_id: str, generate_embeddings: bool = False) -> dict:
     fb_followers = item_dict.get("facebookFollowers")
     if fb_followers is not None and not isinstance(fb_followers, int):
         BackendObservability.error("Validation Error: 'facebookFollowers' must be an integer if provided.", conversation_id=trace_id)
@@ -134,6 +134,7 @@ async def process_single_item(operation: str, item_dict: dict, trace_id: str) ->
             source_url=source_url,
             categories=item_dict.get("categories", []),
             trace_id=trace_id,
+            generate_embeddings=generate_embeddings,
         )
         
         if existing:
@@ -212,18 +213,21 @@ async def process_single_item(operation: str, item_dict: dict, trace_id: str) ->
             BackendObservability.info(f"Geocoded address to coordinates: ({lat}, {lng})", conversation_id=trace_id)
             
         # Generate composite description text for embedding
-        cats_str = ",".join(item_dict.get("categories", []))
-        base_desc = f"{name} is a Filipino {cats_str} located in {city}."
-        embedding_text = f"{base_desc} {description}" if description else base_desc
-        
-        from features.shared.embeddings import get_embedding
-        embedding = get_embedding(embedding_text, trace_id)
-        if embedding is None:
-            BackendObservability.warning(
-                f"Embedding generation failed for listing '{name}'. Setting descriptionEmbedding to null.",
-                conversation_id=trace_id
-            )
-        item_dict["descriptionEmbedding"] = embedding
+        if generate_embeddings:
+            cats_str = ",".join(item_dict.get("categories", []))
+            base_desc = f"{name} is a Filipino {cats_str} located in {city}."
+            embedding_text = f"{base_desc} {description}" if description else base_desc
+            
+            from features.shared.embeddings import get_embedding
+            embedding = get_embedding(embedding_text, trace_id)
+            if embedding is None:
+                BackendObservability.warning(
+                    f"Embedding generation failed for listing '{name}'. Setting descriptionEmbedding to null.",
+                    conversation_id=trace_id
+                )
+            item_dict["descriptionEmbedding"] = embedding
+        else:
+            item_dict["descriptionEmbedding"] = None
         item_dict.pop("embeddingText", None)
 
         if not item_dict.get("verificationStatus"):
@@ -234,17 +238,20 @@ async def process_single_item(operation: str, item_dict: dict, trace_id: str) ->
         city = item_dict.get("city")
         description = item_dict.get("description")
         if name and city:
-            base_desc = f"{name} is a Filipino community event in {city}."
-            embedding_text = f"{base_desc} {description}" if description else base_desc
-            
-            from features.shared.embeddings import get_embedding
-            embedding = get_embedding(embedding_text, trace_id)
-            if embedding is None:
-                BackendObservability.warning(
-                    f"Embedding generation failed for event '{name}'. Setting descriptionEmbedding to null.",
-                    conversation_id=trace_id
-                )
-            item_dict["descriptionEmbedding"] = embedding
+            if generate_embeddings:
+                base_desc = f"{name} is a Filipino community event in {city}."
+                embedding_text = f"{base_desc} {description}" if description else base_desc
+                
+                from features.shared.embeddings import get_embedding
+                embedding = get_embedding(embedding_text, trace_id)
+                if embedding is None:
+                    BackendObservability.warning(
+                        f"Embedding generation failed for event '{name}'. Setting descriptionEmbedding to null.",
+                        conversation_id=trace_id
+                    )
+                item_dict["descriptionEmbedding"] = embedding
+            else:
+                item_dict["descriptionEmbedding"] = None
             item_dict.pop("embeddingText", None)
 
     BackendObservability.trace(f"Executing GraphQL operation: '{operation}' with variables: {item_dict}", conversation_id=trace_id)
@@ -279,6 +286,7 @@ async def main() -> None:
     parser.add_argument("--operation", type=str, required=True)
     parser.add_argument("--variables", type=str, required=True)
     parser.add_argument("--trace-id", type=str, default=None, help="Trace correlation ID.")
+    parser.add_argument("--generate-embeddings", action="store_true", help="Generate vector embeddings client-side.")
     args = parser.parse_args()
 
     BackendObservability.info(f"Starting agent_graphql_push.py with operation={args.operation}", conversation_id=args.trace_id)
@@ -326,7 +334,12 @@ async def main() -> None:
     has_error = False
     for item_dict in items_to_process:
         try:
-            res = await process_single_item(actual_op, item_dict, args.trace_id)
+            res = await process_single_item(
+                operation=actual_op,
+                item_dict=item_dict,
+                trace_id=args.trace_id,
+                generate_embeddings=args.generate_embeddings,
+            )
             if "error" in res:
                 has_error = True
             results.append(res)

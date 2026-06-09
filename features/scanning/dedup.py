@@ -74,8 +74,6 @@ def deduplicate_batch(listings: list[dict[str, Any]]) -> list[dict[str, Any]]:
             deduped[key] = listing
             
     return list(deduped.values())
-
-
 async def check_duplicate(
     name: str,
     city: str,
@@ -83,6 +81,7 @@ async def check_duplicate(
     source_url: str | None = None,
     categories: list[str] | None = None,
     trace_id: str | None = None,
+    generate_embeddings: bool = False,
 ) -> dict[str, Any] | None:
     """Checks if a directory listing already exists in the database.
 
@@ -129,6 +128,9 @@ async def check_duplicate(
             exception=exc,
             conversation_id=trace_id
         )
+
+    if not generate_embeddings:
+        return None
 
     # 2. Semantic match check via pgvector (client-side embedding)
     try:

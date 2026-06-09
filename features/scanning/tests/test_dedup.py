@@ -94,9 +94,11 @@ class TestDeduplication(unittest.IsolatedAsyncioTestCase):
             variables={"city": "SYDNEY"},
         )
 
+    @patch("features.shared.embeddings.get_embedding")
     @patch("features.shared.graphql_client.execute_graphql_operation")
-    async def test_check_duplicate_semantic_match(self, mock_execute: AsyncMock) -> None:
+    async def test_check_duplicate_semantic_match(self, mock_execute: AsyncMock, mock_get_embedding: MagicMock) -> None:
         """Tests that check_duplicate falls back to semantic cosine similarity when exact match fails."""
+        mock_get_embedding.return_value = [0.1] * 768
         # Mock ListCityListings response
         mock_execute.side_effect = [
             {"data": {"listings": []}},  # ListCityListings
@@ -113,7 +115,13 @@ class TestDeduplication(unittest.IsolatedAsyncioTestCase):
             },  # SemanticSearchListings
         ]
 
-        result = await check_duplicate("Manila Bistro", "SYDNEY", description="A cozy Filipino diner serving adobo", categories=["RESTAURANT"])
+        result = await check_duplicate(
+            "Manila Bistro",
+            "SYDNEY",
+            description="A cozy Filipino diner serving adobo",
+            categories=["RESTAURANT"],
+            generate_embeddings=True,
+        )
 
         self.assertIsNotNone(result)
         self.assertEqual(result["id"], "def-456")
@@ -122,19 +130,27 @@ class TestDeduplication(unittest.IsolatedAsyncioTestCase):
             operation_name="SemanticSearchListings",
             variables={
                 "city": "SYDNEY",
-                "queryText": "Manila Bistro is a Filipino RESTAURANT located in SYDNEY. A cozy Filipino diner serving adobo"
+                "queryEmbedding": [0.1] * 768
             }
         )
 
+    @patch("features.shared.embeddings.get_embedding")
     @patch("features.shared.graphql_client.execute_graphql_operation")
-    async def test_check_duplicate_semantic_null_response(self, mock_execute: AsyncMock) -> None:
+    async def test_check_duplicate_semantic_null_response(self, mock_execute: AsyncMock, mock_get_embedding: MagicMock) -> None:
         """Tests that check_duplicate handles None/null semantic search responses gracefully without crashing."""
+        mock_get_embedding.return_value = [0.1] * 768
         mock_execute.side_effect = [
             {"data": {"listings": []}},  # ListCityListings
             {"data": {"listings_descriptionEmbedding_similarity": None}},  # SemanticSearchListings returning null
         ]
 
-        result = await check_duplicate("Manila Bistro", "SYDNEY", description="A cozy Filipino diner serving adobo", categories=["RESTAURANT"])
+        result = await check_duplicate(
+            "Manila Bistro",
+            "SYDNEY",
+            description="A cozy Filipino diner serving adobo",
+            categories=["RESTAURANT"],
+            generate_embeddings=True,
+        )
 
         self.assertIsNone(result)
         self.assertEqual(mock_execute.call_count, 2)
