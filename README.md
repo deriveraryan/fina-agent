@@ -106,8 +106,17 @@ You can execute the underlying discovery and database push scripts directly in y
     ```bash
     python3 scripts/agent_maps_fetch.py --city SYDNEY --category RESTAURANT --limit 10 --offset 0 --refresh --trace-id <CONVERSATION_ID>
     ```
+*   **Fetch Targets (e.g. retrieve social post tracker)**:
+    ```bash
+    # Retrieve scan bookmark for a listing on Facebook
+    python3 scripts/agent_fetch_targets.py --type social-post-tracker --listing-id <LISTING_UUID> --platform facebook --trace-id <CONVERSATION_ID>
+    ```
 *   **GraphQL Database Push**:
     ```bash
+    # Push/Upsert a social post tracker entry
+    python3 scripts/agent_graphql_push.py --operation UpsertSocialPostTracker --variables '{"listingId": "listing-uuid", "platform": "FACEBOOK", "lastPostDate": "2026-06-09T00:00:00Z"}' --trace-id <CONVERSATION_ID>
+
+    # Create listing or event (e.g. from variables file)
     python3 scripts/agent_graphql_push.py --operation CreateListing --variables @tmp/payload.json --trace-id <CONVERSATION_ID>
     ```
 

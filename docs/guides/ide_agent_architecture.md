@@ -92,16 +92,30 @@ Base
     DBQueryBusinessSocial -.-> ReturnBusinessSocial
     
     ReturnBusinessSocial --> HarvestLoop{"For each URL"}
-    HarvestLoop --> ReadBrowserHarvest["Subagent uses IDE Native Browser Tools<br>(view_browser, scroll)"]
-    ReadBrowserHarvest --> ExtractEventData["Extracts temporal upcoming events"]
+    HarvestLoop --> IdentifyPlatform["Identify Platform & Query Tracker:<br>python3 scripts/agent_fetch_targets.py --type social-post-tracker"]
+    IdentifyPlatform --> GetTrackerGQL["GraphQL Query:<br>GetSocialPostTracker"]
+    GetTrackerGQL --> DBQueryTracker[("PostgreSQL Database")]
+    DBQueryTracker -.-> ReturnTracker["Return lastPostDate"]
+    
+    ReturnTracker --> ReadBrowserHarvest["Subagent uses IDE Native Browser Tools<br>(visit, scroll)"]
+    ReadBrowserHarvest --> ScanLoop{"Scan posts (max 10)<br>Stop if post date <= lastPostDate"}
+    ScanLoop --> ExtractEventData["Extract events & follower count"]
     
     ExtractEventData --> ExecPushEvent["Execute: python3 scripts/agent_graphql_push.py<br>--operation CreateEvent"]
+    ExtractEventData --> ExecPushFollowers["Execute: python3 scripts/agent_graphql_push.py<br>--operation UpdateListingSocialUrls"]
+    ExtractEventData --> ExecPushTracker["Execute: python3 scripts/agent_graphql_push.py<br>--operation UpsertSocialPostTracker"]
+    
     subgraph agent_graphql_push_event["Inside scripts/agent_graphql_push.py"]
         GQLMutationEvent["GraphQL Mutation<br>(CreateEvent)"]
+        GQLMutationFollowers["GraphQL Mutation<br>(UpdateListingSocialUrls)"]
+        GQLMutationTracker["GraphQL Mutation<br>(UpsertSocialPostTracker)"]
     end
     
     ExecPushEvent --> GQLMutationEvent
-    GQLMutationEvent --> DBTransactionEvent[("PostgreSQL Database")]
+    ExecPushFollowers --> GQLMutationFollowers
+    ExecPushTracker --> GQLMutationTracker
+    
+    GQLMutationEvent & GQLMutationFollowers & GQLMutationTracker --> DBTransactionEvent[("PostgreSQL Database")]
     DBTransactionEvent --> HarvestLoop
     
     HarvestLoop -.->|No more URLs| FinishHarvest(["Events Discovery Completed"])
@@ -147,10 +161,17 @@ This subagent focuses purely on completing existing directory entries:
 *   **Web Search**: Uses LLM-driven web search tools (with site-specific filtering) to find the business's official social media pages, verifies the match, and pushes updates via the `UpdateListingSocialUrls` mutation.
 
 ### 3. The `fina_events_finder` Subagent (Listing's Events Discoverer)
-This subagent directly crawls the social pages of verified businesses to discover upcoming temporal events.
+This subagent directly crawls the social pages of verified businesses to discover upcoming temporal events, checking for new posts since the last scan date.
 *   **Targeting**: Uses `agent_fetch_targets.py --type business-socials --city C` to pull the social URLs of all verified listings in the specified city.
-*   **Web Browsing**: Uses IDE native browser tools to scan those pages specifically for upcoming events.
-*   **Pushing**: Creates new event records via the `CreateEvent` GraphQL mutation.
+*   **Bookmark Tracking**: Before scanning, it queries the database via `agent_fetch_targets.py --type social-post-tracker --listing-id L --platform P` to retrieve the `lastPostDate` (bookmark of the most recent post scanned in the previous run).
+*   **Web Browsing & Scanning Limit**: Uses IDE native browser tools (e.g. Chrome DevTools) to visit the social account page. It scans posts starting from the most recent, moving backward. It stops scanning as soon as:
+    1. A post's publish date is older than or equal to the retrieved `lastPostDate` (if any).
+    2. OR it has evaluated exactly 10 posts on the page.
+*   **Follower Extraction**: In addition to events, it extracts the current follower counts from the page.
+*   **GraphQL Updates & Bookmark Upserting**: For each listing processed:
+    1. Upcoming events are pushed via the `CreateEvent` GraphQL mutation.
+    2. Follower counts are pushed via the `UpdateListingSocialUrls` GraphQL mutation.
+    3. The newest scanned post timestamp is saved as the new bookmark by calling `agent_graphql_push.py --operation UpsertSocialPostTracker --variables '<variables>'` (which upserts the tracking entry in the `SocialPostTracker` table).
 
 ### 4. The `fina_community_finder` Subagent (Community Scanner)
 This subagent actively searches Facebook and Instagram for Filipino community organisations:
@@ -161,8 +182,8 @@ This subagent actively searches Facebook and Instagram for Filipino community or
 
 ### 5. Database Integration Scripts
 To maintain security and ensure all data mutations pass through the authorized GraphQL layer, the subagents rely on local Python helper CLI scripts that connect to the core `fina` Firebase project:
-*   `scripts/agent_fetch_targets.py`: Fetches target source URLs, missing-social listings, business-socials, or city-listings (for deduplication context) from the database.
-*   `scripts/agent_graphql_push.py`: Pushes verified JSON objects or updates to the backend using GraphQL operations. Also synchronously handles geocoding and deduplication before creating new listings.
+*   `scripts/agent_fetch_targets.py`: Fetches target source URLs, missing-social listings, business-socials, city-listings (for deduplication context), or social-post-trackers (for checking previous event scraper bookmarks) from the database.
+*   `scripts/agent_graphql_push.py`: Pushes verified JSON objects or updates to the backend using GraphQL operations (including `CreateListing`, `UpdateListingSocialUrls`, `CreateEvent`, and `UpsertSocialPostTracker`). Also normalizes platform names, and synchronously handles geocoding and deduplication before creating new listings.
 *   `scripts/agent_maps_fetch.py`: Searches Google Places (New) Text Search with caching and pagination.
 
 ### 6. Synchronous Geocoding & Deduplication
