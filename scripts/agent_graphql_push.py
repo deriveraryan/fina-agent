@@ -18,6 +18,30 @@ sys.path.insert(
 from features.shared.graphql_client import execute_graphql_operation
 from features.shared.observability import BackendObservability
 
+_valid_categories_cache: set[str] | None = None
+
+def load_valid_categories(trace_id: str | None = None) -> set[str]:
+    """Loads valid categories from data/categories.json, defaulting to standard set if loading fails."""
+    global _valid_categories_cache
+    if _valid_categories_cache is not None:
+        return _valid_categories_cache
+
+    path = os.path.abspath(os.path.join(os.path.dirname(__file__), "../data/categories.json"))
+    default_categories = {"RESTAURANT", "CAFE", "SHOP", "CHURCH", "GOVERNMENT", "COMMUNITY", "SERVICES"}
+    if not os.path.exists(path):
+        BackendObservability.warning(f"categories.json not found at {path}. Using default categories.", conversation_id=trace_id)
+        _valid_categories_cache = default_categories
+        return _valid_categories_cache
+    try:
+        with open(path, "r") as f:
+            data = json.load(f)
+            _valid_categories_cache = set(data.keys())
+            return _valid_categories_cache
+    except Exception as exc:
+        BackendObservability.warning(f"Failed to load categories.json: {exc}. Using default categories.", conversation_id=trace_id)
+        _valid_categories_cache = default_categories
+        return _valid_categories_cache
+
 async def process_single_item(operation: str, item_dict: dict, trace_id: str) -> dict:
     fb_followers = item_dict.get("facebookFollowers")
     if fb_followers is not None and not isinstance(fb_followers, int):
@@ -29,14 +53,42 @@ async def process_single_item(operation: str, item_dict: dict, trace_id: str) ->
         BackendObservability.error("Validation Error: 'instagramFollowers' must be an integer if provided.", conversation_id=trace_id)
         return {"error": "Validation Error: 'instagramFollowers' must be an integer"}
 
+    # Normalize category -> categories
+    if "category" in item_dict:
+        cat = item_dict.pop("category")
+        if "categories" not in item_dict:
+            item_dict["categories"] = [cat] if cat else []
+        elif cat and cat not in item_dict["categories"]:
+            item_dict["categories"].append(cat)
+
+    # Validate and normalize categories list
+    if "categories" in item_dict:
+        categories = item_dict.get("categories")
+        if not isinstance(categories, list):
+            BackendObservability.error("Validation Error: 'categories' must be a list.", conversation_id=trace_id)
+            return {"error": "Validation Error: 'categories' must be a list"}
+        
+        valid_cats = load_valid_categories(trace_id)
+        normalized_cats = []
+        for cat in categories:
+            if not cat or not isinstance(cat, str):
+                BackendObservability.error("Validation Error: Category must be a non-empty string.", conversation_id=trace_id)
+                return {"error": "Validation Error: Category must be a non-empty string"}
+            
+            normalized_cat = cat.strip().upper()
+            if normalized_cat not in valid_cats:
+                BackendObservability.error(f"Validation Error: Category '{cat}' is not a valid category in categories.json.", conversation_id=trace_id)
+                return {"error": f"Validation Error: Category '{cat}' is not a valid category"}
+            
+            normalized_cats.append(normalized_cat)
+        
+        item_dict["categories"] = normalized_cats
+
     if operation == "UpsertSocialPostTracker":
         if "platform" in item_dict and isinstance(item_dict["platform"], str):
             item_dict["platform"] = item_dict["platform"].upper()
 
     if operation == "CreateListing":
-        if "category" in item_dict and "categories" not in item_dict:
-            cat = item_dict.pop("category")
-            item_dict["categories"] = [cat] if cat else []
         if "tags" in item_dict and isinstance(item_dict["tags"], list):
             item_dict["tags"] = ",".join([str(t) for t in item_dict["tags"]])
 

@@ -151,6 +151,7 @@ Base
 ### 1. The `fina_refresh_listing_maps_finder` Subagent (Places Discovery)
 This subagent automates business research on Google Maps:
 *   **Discovery from Google Maps**: Specifically tuned to locate new candidate places using Google Places Text Search.
+*   **Category Validation**: To ensure alignment with [categories.json](file:///Users/ryan/.gemini/antigravity/scratch/fina-agent/data/categories.json), the subagent is instructed to read the canonical category rules at startup. Furthermore, the `--category` argument choices in `scripts/agent_maps_fetch.py` are dynamically loaded from the keys defined in the category specification file.
 *   **Pagination & Context Preservation**: Places API can return dozens of candidates. To prevent bloating the subagent's prompt context, `scripts/agent_maps_fetch.py` chunks findings into pages of 10 (`--limit 10`). The subagent processes 10 items at a time and loops until `has_more` is false.
 *   **Cost Optimization (Local Caching)**: To prevent redundant Places API costs during pagination loops, the fetch script stores all deduplicated candidates in a local cache file: `.antigravity_saves/maps_cache_{city}_{category}.json`. Pagination offsets are served instantly from the local cache. If fresh data is needed, passing `--refresh` forces a live Places API Text Search query.
 *   **Offline/Mock Testing**: Bypasses the Places API if `GOOGLE_MAPS_API_KEY` is not set or is `"mock-key"`, returning realistic offline listing stubs for local testing.
@@ -178,6 +179,7 @@ This subagent actively searches Facebook and Instagram for Filipino community or
 *   **Context Setup**: Executes `scripts/agent_fetch_targets.py --type city-listings --city C` to load existing listings for deduplication.
 *   **Web Discovery**: Uses the native web search tool (e.g., Google Search with `site:facebook.com` filters) to discover new candidates directly, skipping any already known in the database context.
 *   **Browser Verification**: The subagent uses the `chrome-devtools` skill to inspect candidate pages one-by-one, verifying authentic Filipino affiliation.
+*   **Category Standardization**: The subagent is instructed to view [categories.json](file:///Users/ryan/.gemini/antigravity/scratch/fina-agent/data/categories.json) at the beginning of its run to ensure extracted categories map precisely to canonical definitions before pushing.
 *   **Listing Persistence**: Verified organizations are pushed directly to the `Listing` table using `CreateListing`. For online-only communities (no physical street address), the address is set to the city name with city center coordinates and tagged with `online-community`.
 
 ### 5. The `fina_listing_auditor` Subagent (Category Auditor)
@@ -190,7 +192,7 @@ This subagent audits listing category assignments to ensure they conform to cano
 ### 6. Database Integration Scripts
 To maintain security and ensure all data mutations pass through the authorized GraphQL layer, the subagents rely on local Python helper CLI scripts that connect to the core `fina` Firebase project:
 *   `scripts/agent_fetch_targets.py`: Fetches target source URLs, missing-social listings, business-socials, city-listings (for deduplication context), or social-post-trackers (for checking previous event scraper bookmarks) from the database.
-*   `scripts/agent_graphql_push.py`: Pushes verified JSON objects or updates to the backend using GraphQL operations (including `CreateListing`, `UpdateListingSocialUrls`, `CreateEvent`, and `UpsertSocialPostTracker`). Also normalizes platform names, and synchronously handles geocoding and deduplication before creating new listings.
+*   `scripts/agent_graphql_push.py`: Pushes verified JSON objects or updates to the backend using GraphQL operations (including `CreateListing`, `UpdateListingSocialUrls`, `CreateEvent`, and `UpsertSocialPostTracker`). It normalizes platform names, dynamically validates and normalizes categories against [categories.json](file:///Users/ryan/.gemini/antigravity/scratch/fina-agent/data/categories.json) (enforcing case-insensitive uppercase normalization and throwing a fatal exit code 1 if invalid), caches loaded categories in module scope to prevent redundant disk reads, and synchronously handles geocoding and deduplication before creating new listings.
 *   `scripts/agent_maps_fetch.py`: Searches Google Places (New) Text Search with caching and pagination.
 *   `scripts/agent_audit_listings.py`: Evaluates, validates, and recategorizes business categories against canonical JSON specs.
 

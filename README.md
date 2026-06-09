@@ -134,6 +134,9 @@ You can execute the underlying discovery and database push scripts directly in y
     # Create listing or event (e.g. from variables file)
     python3 scripts/agent_graphql_push.py --operation CreateListing --variables @tmp/payload.json --trace-id <CONVERSATION_ID>
     ```
+    
+    > [!IMPORTANT]
+    > **Category Validation & Normalization**: The database push script strictly validates `category` and `categories` values against the canonical definitions in [categories.json](file:///Users/ryan/.gemini/antigravity/scratch/fina-agent/data/categories.json) (e.g., `RESTAURANT`, `CAFE`, etc.). Case-insensitive normalization (to uppercase) is automatically applied. Invalid categories will trigger a validation error and terminate script execution (exiting with code 1).
 
 ### 4. Scheduling Automatic Scans
 You can schedule the agents to run periodic background scans using the `/schedule` slash command:

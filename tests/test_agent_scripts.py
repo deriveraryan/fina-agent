@@ -521,6 +521,67 @@ class TestAgentScripts(unittest.IsolatedAsyncioTestCase):
 
     @patch("agent_graphql_push.execute_graphql_operation", new_callable=AsyncMock)
     @patch("features.scanning.dedup.check_duplicate", new_callable=AsyncMock)
+    @patch("features.scanning.sources.geocoder.geocode_address", new_callable=AsyncMock)
+    @patch("features.shared.embeddings.get_embedding")
+    @patch("sys.stdout")
+    async def test_graphql_push_category_validation_valid(
+        self, mock_stdout: MagicMock, mock_embedding: MagicMock, mock_geocode: AsyncMock, mock_check: AsyncMock, mock_execute: AsyncMock
+    ) -> None:
+        """Tests that agent_graphql_push.py normalizes lowercase categories and pushes successfully."""
+        import agent_graphql_push
+
+        sys.argv = [
+            "agent_graphql_push.py",
+            "--operation",
+            "CreateListing",
+            "--variables",
+            '{"name": "New Resto", "category": "restaurant", "city": "SYDNEY", "address": "123 St"}'
+        ]
+
+        mock_check.return_value = None
+        mock_geocode.return_value = (-33.8688, 151.2093)
+        mock_embedding.return_value = [0.1, 0.2, 0.3]
+        mock_execute.return_value = {"data": {"createListing": {"id": "new-999"}}}
+
+        await agent_graphql_push.main()
+
+        # The category should be normalized to uppercase RESTAURANT in variables
+        mock_execute.assert_any_call(
+            operation_name="CreateListing",
+            variables={
+                "name": "New Resto",
+                "categories": ["RESTAURANT"],
+                "city": "SYDNEY",
+                "address": "123 St",
+                "latitude": -33.8688,
+                "longitude": 151.2093,
+                "descriptionEmbedding": [0.1, 0.2, 0.3],
+                "verificationStatus": "UNVERIFIED"
+            },
+        )
+
+    @patch("sys.stderr")
+    async def test_graphql_push_category_validation_invalid(self, mock_stderr: MagicMock) -> None:
+        """Tests that agent_graphql_push.py exits with code 1 if category is invalid."""
+        import agent_graphql_push
+
+        sys.argv = [
+            "agent_graphql_push.py",
+            "--operation",
+            "CreateListing",
+            "--variables",
+            '{"name": "New Resto", "category": "NOT_A_CATEGORY", "city": "SYDNEY"}'
+        ]
+
+        with self.assertRaises(SystemExit) as cm:
+            await agent_graphql_push.main()
+        self.assertEqual(cm.exception.code, 1)
+        stderr_calls = "".join(call.args[0] for call in mock_stderr.write.call_args_list)
+        self.assertIn("Validation Error: Category 'NOT_A_CATEGORY' is not a valid category in categories.json.", stderr_calls)
+
+
+    @patch("agent_graphql_push.execute_graphql_operation", new_callable=AsyncMock)
+    @patch("features.scanning.dedup.check_duplicate", new_callable=AsyncMock)
     @patch("features.scanning.dedup.merge_listing_data")
     @patch("sys.stdout")
     @patch("sys.stderr")

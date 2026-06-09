@@ -438,10 +438,24 @@ def _get_mock_places(city: str, category: str) -> list[dict[str, Any]]:
     return []
 
 
+def load_valid_categories() -> list[str]:
+    """Loads valid categories from data/categories.json, defaulting to standard set if loading fails."""
+    path = os.path.abspath(os.path.join(os.path.dirname(__file__), "../data/categories.json"))
+    default_categories = ["RESTAURANT", "CAFE", "SHOP", "CHURCH", "GOVERNMENT", "COMMUNITY", "SERVICES"]
+    if not os.path.exists(path):
+        return default_categories
+    try:
+        with open(path, "r") as f:
+            data = json.load(f)
+            return list(data.keys())
+    except Exception:
+        return default_categories
+
+
 async def main() -> None:
     parser = argparse.ArgumentParser(description="Query Google Places API candidates with caching and pagination.")
     parser.add_argument("--city", type=str, required=True, help="Target city name.")
-    parser.add_argument("--category", type=str, required=True, choices=["RESTAURANT", "CAFE", "SHOP", "CHURCH", "GOVERNMENT", "COMMUNITY", "SERVICES"], help="Target category.")
+    parser.add_argument("--category", type=str, required=True, choices=load_valid_categories(), help="Target category.")
     parser.add_argument("--limit", type=int, default=10, help="Number of results to return.")
     parser.add_argument("--offset", type=int, default=0, help="Offset to start returning results from.")
     parser.add_argument("--refresh", action="store_true", help="Bypass local cache and query live Places API.")
