@@ -1,6 +1,6 @@
 # Fina Native IDE Agent Architecture & Runbook
 
-This reference document provides a comprehensive overview of the design, logic, and operational execution flow of the Fina Native IDE Agent pipeline. It details how the `fina_places_finder`, `fina_socials_finder`, `fina_events_finder`, and `fina_community_finder` subagents interact with the Google Places API and the Firebase SQL Connect database (hosted in the core `fina` repository) to automate discovery tasks without paid Gemini API keys.
+This reference document provides a comprehensive overview of the design, logic, and operational execution flow of the Fina Native IDE Agent pipeline. It details how the `fina_refresh_listing_maps_finder`, `fina_enrich_listing_socials_finder`, `fina_events_finder`, and `fina_new_listing_web_finder` subagents interact with the Google Places API and the Firebase SQL Connect database (hosted in the core `fina` repository) to automate discovery tasks without paid Gemini API keys.
 
 ---
 
@@ -14,8 +14,8 @@ flowchart TD
     Start(["Trigger: Manual /schedule or Direct Prompt"]) --> SelectSubagent{"Which Agent Flow?"}
     
     %% ════════ 1. PLACES FINDER FLOW (PLACES) ════════
-    SelectSubagent -->|Places Finder| InvokePlacesFinder["IDE Invokes fina_places_finder Subagent"]
-    InvokePlacesFinder --> ExecMapsFetch["Execute: python3 scripts/agent_maps_fetch.py<br>--city C --category CAT --limit 10 --offset O"]
+    SelectSubagent -->|Refresh Listing Maps Finder| InvokeRefreshListingMapsFinder["IDE Invokes fina_refresh_listing_maps_finder Subagent"]
+    InvokeRefreshListingMapsFinder --> ExecMapsFetch["Execute: python3 scripts/agent_maps_fetch.py<br>--city C --category CAT --limit 10 --offset O"]
     
     subgraph agent_maps_fetch["Inside scripts/agent_maps_fetch.py"]
         CheckCache{"Cache File Exists?"}
@@ -50,11 +50,11 @@ flowchart TD
     CheckHasMore{"Has More Pages?"}
     CheckHasMore -->|Yes| NextPage["Increment offset by 10 and query again"]
     NextPage --> ExecMapsFetch
-    CheckHasMore -->|No| FinishMaps(["Places Discovery Completed"])
+    CheckHasMore -->|No| FinishMaps(["Maps Refresh/Discovery Completed"])
 Base
     %% ════════ 2. MISSING SOCIALS FINDER FLOW (BACKFILL) ════════
-    SelectSubagent -->|Missing Socials Finder| InvokeSocialsFinder["IDE Invokes fina_socials_finder Subagent"]
-    InvokeSocialsFinder --> ExecGetMissingSocial["Execute: python3 scripts/agent_fetch_targets.py<br>--type missing-social"]
+    SelectSubagent -->|Enrich Listing Socials Finder| InvokeEnrichListingSocialsFinder["IDE Invokes fina_enrich_listing_socials_finder Subagent"]
+    InvokeEnrichListingSocialsFinder --> ExecGetMissingSocial["Execute: python3 scripts/agent_fetch_targets.py<br>--type missing-social"]
     
     subgraph agent_fetch_missing_social["Inside scripts/agent_fetch_targets.py"]
         DBQueryMissingSocial[("PostgreSQL Database<br>(ListListingsMissingSocial)")]
@@ -121,8 +121,8 @@ Base
     HarvestLoop -.->|No more URLs| FinishHarvest(["Events Discovery Completed"])
     
     %% ════════ 4. COMMUNITY FINDER FLOW (SOCIAL) ════════
-    SelectSubagent -->|Community Finder| InvokeCommunityFinder["IDE Invokes fina_community_finder Subagent"]
-    InvokeCommunityFinder --> FetchCityListings["Execute: python3 scripts/agent_fetch_targets.py<br>--type city-listings --city C"]
+    SelectSubagent -->|New Listing Web Finder| InvokeNewListingWebFinder["IDE Invokes fina_new_listing_web_finder Subagent"]
+    InvokeNewListingWebFinder --> FetchCityListings["Execute: python3 scripts/agent_fetch_targets.py<br>--type city-listings --city C"]
     FetchCityListings --> NativeWebSearch["Subagent uses Native Web Search<br>(e.g., Google site:facebook.com)"]
     NativeWebSearch --> FilterKnown["Filters out existing URLs/Names<br>from city-listings context"]
     
@@ -141,21 +141,21 @@ Base
     
     CheckHasMoreSocial{"Found 10 new listings<br>OR checked 10 pages?"}
     CheckHasMoreSocial -->|No| NativeWebSearch
-    CheckHasMoreSocial -->|Yes| FinishSocial(["Community Discovery Completed"])
+    CheckHasMoreSocial -->|Yes| FinishSocial(["Web Discovery Completed"])
 ```
 
 ---
 
 ## 🛠️ Essential Components & Mechanics
 
-### 1. The `fina_places_finder` Subagent (Places Discovery)
+### 1. The `fina_refresh_listing_maps_finder` Subagent (Places Discovery)
 This subagent automates business research on Google Maps:
 *   **Discovery from Google Maps**: Specifically tuned to locate new candidate places using Google Places Text Search.
 *   **Pagination & Context Preservation**: Places API can return dozens of candidates. To prevent bloating the subagent's prompt context, `scripts/agent_maps_fetch.py` chunks findings into pages of 10 (`--limit 10`). The subagent processes 10 items at a time and loops until `has_more` is false.
 *   **Cost Optimization (Local Caching)**: To prevent redundant Places API costs during pagination loops, the fetch script stores all deduplicated candidates in a local cache file: `.antigravity_saves/maps_cache_{city}_{category}.json`. Pagination offsets are served instantly from the local cache. If fresh data is needed, passing `--refresh` forces a live Places API Text Search query.
 *   **Offline/Mock Testing**: Bypasses the Places API if `GOOGLE_MAPS_API_KEY` is not set or is `"mock-key"`, returning realistic offline listing stubs for local testing.
 
-### 2. The `fina_socials_finder` Subagent (Missing Socials Finder)
+### 2. The `fina_enrich_listing_socials_finder` Subagent (Missing Socials Finder)
 This subagent focuses purely on completing existing directory entries:
 *   **Targeting**: Uses `agent_fetch_targets.py --type missing-social` to query the database for existing listings that lack Facebook or Instagram URLs.
 *   **Web Search**: Uses LLM-driven web search tools (with site-specific filtering) to find the business's official social media pages, verifies the match, and pushes updates via the `UpdateListingSocialUrls` mutation.
@@ -173,7 +173,7 @@ This subagent directly crawls the social pages of verified businesses to discove
     2. Follower counts are pushed via the `UpdateListingSocialUrls` GraphQL mutation.
     3. The newest scanned post timestamp is saved as the new bookmark by calling `agent_graphql_push.py --operation UpsertSocialPostTracker --variables '<variables>'` (which upserts the tracking entry in the `SocialPostTracker` table).
 
-### 4. The `fina_community_finder` Subagent (Community Scanner)
+### 4. The `fina_new_listing_web_finder` Subagent (Community Scanner)
 This subagent actively searches Facebook and Instagram for Filipino community organisations:
 *   **Context Setup**: Executes `scripts/agent_fetch_targets.py --type city-listings --city C` to load existing listings for deduplication.
 *   **Web Discovery**: Uses the native web search tool (e.g., Google Search with `site:facebook.com` filters) to discover new candidates directly, skipping any already known in the database context.
@@ -195,4 +195,4 @@ To simplify the architecture and reduce cloud function dependencies, heavy trans
 
 ## 💻 Operational Runbook
 
-For instructions on how to trigger or schedule the `fina_places_finder`, `fina_socials_finder`, `fina_events_finder`, and `fina_community_finder` subagents, refer to the Operational Guide in the main repository `README.md`.
+For instructions on how to trigger or schedule the `fina_refresh_listing_maps_finder`, `fina_enrich_listing_socials_finder`, `fina_events_finder`, and `fina_new_listing_web_finder` subagents, refer to the Operational Guide in the main repository `README.md`.

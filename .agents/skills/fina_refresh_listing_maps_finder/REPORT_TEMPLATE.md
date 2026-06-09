@@ -3,14 +3,14 @@
 <!--
   TEMPLATE: Follow this structure exactly when writing the final report.
   Replace all {PLACEHOLDER} values with actual data.
-  Filename: logs/{YYYYMMDD}/fina_places_finder_report_{CITY}_{YYYYMMDD}_{HHMM}.md
+  Filename: logs/{YYYYMMDD}/fina_refresh_listing_maps_finder_report_{CITY}_{YYYYMMDD}_{HHMM}.md
 -->
 
 ## Run Metadata
 
 | Field | Value |
 | :--- | :--- |
-| **Agent** | fina_places_finder |
+| **Agent** | fina_refresh_listing_maps_finder |
 | **Target City** | {CITY} |
 | **Categories Scanned** | {COMMA_SEPARATED_CATEGORIES e.g. RESTAURANT, CAFE, SHOP, CHURCH, COMMUNITY, GOVERNMENT} |
 | **Execution Date** | {YYYY-MM-DD HH:MM AEST} |

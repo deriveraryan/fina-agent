@@ -3,14 +3,14 @@
 <!--
   TEMPLATE: Follow this structure exactly when writing the final report.
   Replace all {PLACEHOLDER} values with actual data.
-  Filename: logs/{YYYYMMDD}/fina_socials_finder_report_{CITY}_{YYYYMMDD}_{HHMM}.md
+  Filename: logs/{YYYYMMDD}/fina_enrich_listing_socials_finder_report_{CITY}_{YYYYMMDD}_{HHMM}.md
 -->
 
 ## Run Metadata
 
 | Field | Value |
 | :--- | :--- |
-| **Agent** | fina_socials_finder |
+| **Agent** | fina_enrich_listing_socials_finder |
 | **Target City** | {CITY} |
 | **Execution Date** | {YYYY-MM-DD HH:MM AEST} |
 | **Trace ID** | `{TRACE_ID}` |
@@ -25,8 +25,6 @@
 | **Errors Encountered** | {N} |
 
 ## Enriched Listings
-
-<!-- List all listings where at least one social URL was discovered and pushed. Use — for platforms where no URL was found. -->
 
 | Listing Name | Address | DB ID | Facebook URL | Instagram URL |
 | :--- | :--- | :--- | :--- | :--- |

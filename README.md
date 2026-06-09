@@ -50,10 +50,10 @@ You can trigger these discovery scans manually through the Antigravity Chat UI o
 
 ### 1. The Scraper Agents
 
-* **`fina_places_finder`**: Queries Google Places Text Search.
-* **`fina_socials_finder`**: Enriches existing listings with missing Facebook/Instagram URLs.
+* **`fina_refresh_listing_maps_finder`**: Queries Google Places Text Search.
+* **`fina_enrich_listing_socials_finder`**: Enriches existing listings with missing Facebook/Instagram URLs.
 * **`fina_events_finder`**: Crawls business social media pages to harvest upcoming events.
-* **`fina_community_finder`**: Searches social platforms for Filipino community pages.
+* **`fina_new_listing_web_finder`**: Searches social platforms for Filipino community pages.
 
 For a detailed flow diagram of how these agents operate, see the [Native IDE Agent Architecture Guide](docs/guides/ide_agent_architecture.md).
 
@@ -61,43 +61,43 @@ For a detailed flow diagram of how these agents operate, see the [Native IDE Age
 You can trigger a manual scan by asking the Antigravity agent directly in the chat. For large, multi-city scans, we highly recommend prefixing your prompt with the `/goal` slash command so the agent runs continuously in the background without stopping.
 
 #### 💾 Caching & Bypassing Cache (`--refresh`)
-By default, the `fina_places_finder` caches Google Places search results under `.antigravity_saves/` to minimize API costs and prevent prompt bloat. To force a live scan that bypasses the local cache, include terms like **"refresh"**, **"bypassing cache"**, or **"live scan"** in your prompt (which instructs the agent to run the underlying fetch script with the `--refresh` flag).
+By default, the `fina_refresh_listing_maps_finder` caches Google Places search results under `.antigravity_saves/` to minimize API costs and prevent prompt bloat. To force a live scan that bypasses the local cache, include terms like **"refresh"**, **"bypassing cache"**, or **"live scan"** in your prompt (which instructs the agent to run the underlying fetch script with the `--refresh` flag).
 
 *   *Places Discovery*:
-    > "Use the `fina_places_finder` skill to scan Google Places in <CITY> for <CATEGORY>." (e.g., replacement: `DARWIN`, `RESTAURANT`).
+    > "Use the `fina_refresh_listing_maps_finder` skill to scan Google Places in <CITY> for <CATEGORY>." (e.g., replacement: `DARWIN`, `RESTAURANT`).
     >
     > **To scan a single city for all categories (using cache):**
-    > "/goal Use the `fina_places_finder` skill to scan Google Places for all categories (`RESTAURANT`, `CAFE`, `SHOP`, `CHURCH`, `COMMUNITY`, `GOVERNMENT`) in SYDNEY."
+    > "/goal Use the `fina_refresh_listing_maps_finder` skill to scan Google Places for all categories (`RESTAURANT`, `CAFE`, `SHOP`, `CHURCH`, `COMMUNITY`, `GOVERNMENT`) in SYDNEY."
     >
     > **To force a fresh live scan bypassing the local cache:**
-    > "/goal Use the `fina_places_finder` skill to scan Google Places with **refresh** for RESTAURANT in SYDNEY."
+    > "/goal Use the `fina_refresh_listing_maps_finder` skill to scan Google Places with **refresh** for RESTAURANT in SYDNEY."
     >
     > **To scan a single category across all cities:**
-    > "/goal Use the `fina_places_finder` skill to scan Google Places for RESTAURANT across all major Australian cities (`SYDNEY`, `MELBOURNE`, `BRISBANE`, `PERTH`, `ADELAIDE`, `DARWIN`, `HOBART`, `CANBERRA`, `GOLD COAST`)."
+    > "/goal Use the `fina_refresh_listing_maps_finder` skill to scan Google Places for RESTAURANT across all major Australian cities (`SYDNEY`, `MELBOURNE`, `BRISBANE`, `PERTH`, `ADELAIDE`, `DARWIN`, `HOBART`, `CANBERRA`, `GOLD COAST`)."
     >
     > **To scan all categories and cities at once:**
-    > "/goal Use the `fina_places_finder` skill to scan Google Places for all categories (`RESTAURANT`, `CAFE`, `SHOP`, `CHURCH`, `COMMUNITY`, `GOVERNMENT`) across all major Australian cities (`SYDNEY`, `MELBOURNE`, `BRISBANE`, `PERTH`, `ADELAIDE`, `DARWIN`, `HOBART`, `CANBERRA`, `GOLD COAST`)."
+    > "/goal Use the `fina_refresh_listing_maps_finder` skill to scan Google Places for all categories (`RESTAURANT`, `CAFE`, `SHOP`, `CHURCH`, `COMMUNITY`, `GOVERNMENT`) across all major Australian cities (`SYDNEY`, `MELBOURNE`, `BRISBANE`, `PERTH`, `ADELAIDE`, `DARWIN`, `HOBART`, `CANBERRA`, `GOLD COAST`)."
 *   *Missing Socials Finder*:
-    > "Use the `fina_socials_finder` skill to back-fill missing social URLs in SYDNEY."
+    > "Use the `fina_enrich_listing_socials_finder` skill to back-fill missing social URLs in SYDNEY."
     >
     > **To scan all cities at once:**
-    > "/goal Use the `fina_socials_finder` skill to back-fill missing social URLs across all major Australian cities (`SYDNEY`, `MELBOURNE`, `BRISBANE`, `PERTH`, `ADELAIDE`, `DARWIN`, `HOBART`, `CANBERRA`, `GOLD COAST`)."
+    > "/goal Use the `fina_enrich_listing_socials_finder` skill to back-fill missing social URLs across all major Australian cities (`SYDNEY`, `MELBOURNE`, `BRISBANE`, `PERTH`, `ADELAIDE`, `DARWIN`, `HOBART`, `CANBERRA`, `GOLD COAST`)."
 *   *Events Finder*:
     > "Use the `fina_events_finder` skill to discover events in MELBOURNE."
     >
     > **To scan all cities at once:**
     > "/goal Use the `fina_events_finder` skill to discover events across all major Australian cities (`SYDNEY`, `MELBOURNE`, `BRISBANE`, `PERTH`, `ADELAIDE`, `DARWIN`, `HOBART`, `CANBERRA`, `GOLD COAST`)."
 *   *Community Scanning*:
-    > "Use the `fina_community_finder` skill to search the web for community listings in SYDNEY."
+    > "Use the `fina_new_listing_web_finder` skill to search the web for community listings in SYDNEY."
     >
     > **To scan a single city for all categories:**
-    > "/goal Use the `fina_community_finder` skill to search the web for all categories (`RESTAURANT`, `CAFE`, `SHOP`, `CHURCH`, `COMMUNITY`, `GOVERNMENT`) in SYDNEY."
+    > "/goal Use the `fina_new_listing_web_finder` skill to search the web for all categories (`RESTAURANT`, `CAFE`, `SHOP`, `CHURCH`, `COMMUNITY`, `GOVERNMENT`) in SYDNEY."
     >
     > **To scan a single category across all cities:**
-    > "/goal Use the `fina_community_finder` skill to search the web for RESTAURANT across all major Australian cities (`SYDNEY`, `MELBOURNE`, `BRISBANE`, `PERTH`, `ADELAIDE`, `DARWIN`, `HOBART`, `CANBERRA`, `GOLD COAST`)."
+    > "/goal Use the `fina_new_listing_web_finder` skill to search the web for RESTAURANT across all major Australian cities (`SYDNEY`, `MELBOURNE`, `BRISBANE`, `PERTH`, `ADELAIDE`, `DARWIN`, `HOBART`, `CANBERRA`, `GOLD COAST`)."
     >
     > **To scan all categories and cities at once:**
-    > "/goal Use the `fina_community_finder` skill to search the web for all categories (`RESTAURANT`, `CAFE`, `SHOP`, `CHURCH`, `COMMUNITY`, `GOVERNMENT`) across all major Australian cities (`SYDNEY`, `MELBOURNE`, `BRISBANE`, `PERTH`, `ADELAIDE`, `DARWIN`, `HOBART`, `CANBERRA`, `GOLD COAST`)."
+    > "/goal Use the `fina_new_listing_web_finder` skill to search the web for all categories (`RESTAURANT`, `CAFE`, `SHOP`, `CHURCH`, `COMMUNITY`, `GOVERNMENT`) across all major Australian cities (`SYDNEY`, `MELBOURNE`, `BRISBANE`, `PERTH`, `ADELAIDE`, `DARWIN`, `HOBART`, `CANBERRA`, `GOLD COAST`)."
 
 ### 3. Running Scripts via CLI
 You can execute the underlying discovery and database push scripts directly in your shell.
@@ -124,11 +124,11 @@ You can execute the underlying discovery and database push scripts directly in y
 You can schedule the agents to run periodic background scans using the `/schedule` slash command:
 *   *Places Scan Schedule*:
     ```bash
-    /schedule CronExpression="0 12 * * *" Prompt="Use the fina_places_finder skill to scan Google Places for restaurants in all cities."
+    /schedule CronExpression="0 12 * * *" Prompt="Use the fina_refresh_listing_maps_finder skill to scan Google Places for restaurants in all cities."
     ```
 *   *Community Scan Schedule*:
     ```bash
-    /schedule CronExpression="0 0 * * *" Prompt="Use the fina_community_finder skill to scan for events and listings across all cities."
+    /schedule CronExpression="0 0 * * *" Prompt="Use the fina_new_listing_web_finder skill to scan for events and listings across all cities."
     ```
 *(Note: The Antigravity IDE window must remain active for scheduled subagents to execute).*
 

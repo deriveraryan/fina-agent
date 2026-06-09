@@ -1,16 +1,16 @@
-# Fina Community Finder Report — {CITY}
+# Fina New Listing Web Finder Report — {CITY}
 
 <!--
   TEMPLATE: Follow this structure exactly when writing the final report.
   Replace all {PLACEHOLDER} values with actual data.
-  Filename: logs/{YYYYMMDD}/fina_community_finder_report_{CITY}_{YYYYMMDD}_{HHMM}.md
+  Filename: logs/{YYYYMMDD}/fina_new_listing_web_finder_report_{CITY}_{YYYYMMDD}_{HHMM}.md
 -->
 
 ## Run Metadata
 
 | Field | Value |
 | :--- | :--- |
-| **Agent** | fina_community_finder |
+| **Agent** | fina_new_listing_web_finder |
 | **Target City** | {CITY} |
 | **Platforms Searched** | {Facebook, Instagram} |
 | **Execution Date** | {YYYY-MM-DD HH:MM AEST} |

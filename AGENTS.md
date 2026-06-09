@@ -12,10 +12,10 @@ The `fina-agent` repository houses a pipeline of data discovery, verification, a
 flowchart TD
     Start(["Trigger: Manual or Schedule"]) --> AgentSelect{"Choose Subagent"}
     
-    AgentSelect -->|fina_places_finder| PlacesFlow["Google Places Discovery"]
-    AgentSelect -->|fina_socials_finder| SocialsFlow["Missing Socials Enrichment"]
+    AgentSelect -->|fina_refresh_listing_maps_finder| PlacesFlow["Google Places Discovery"]
+    AgentSelect -->|fina_enrich_listing_socials_finder| SocialsFlow["Missing Socials Enrichment"]
     AgentSelect -->|fina_events_finder| EventsFlow["Upcoming Events Scraper"]
-    AgentSelect -->|fina_community_finder| CommFlow["Social Community Discovery"]
+    AgentSelect -->|fina_new_listing_web_finder| CommFlow["Social Community Discovery"]
 
     %% Shared logic
     PlacesFlow & SocialsFlow & EventsFlow & CommFlow --> PythonCLI["Execute Python CLI Scripts"]
@@ -30,8 +30,8 @@ flowchart TD
 
 Here is the registry of the 4 specialized Antigravity subagents:
 
-### 1. `fina_places_finder`
-*   **Role**: Locates and verifies physical businesses (restaurants, cafes, shops, etc.) on Google Maps.
+### 1. `fina_refresh_listing_maps_finder`
+*   **Role**: Locates and verifies/refreshes physical businesses (restaurants, cafes, shops, etc.) on Google Maps.
 *   **CLI Trigger**: `python3 scripts/agent_maps_fetch.py --city <CITY> --category <CATEGORY> --limit 10 --offset <OFFSET>`
 *   **Logic**:
     1. Queries Google Places (New) Text Search with category templates.
@@ -40,7 +40,7 @@ Here is the registry of the 4 specialized Antigravity subagents:
     4. Evaluates place reviews internally to verify authentic Filipino affiliation.
     5. Pushes verified listings using the `CreateListing` mutation.
 
-### 2. `fina_socials_finder`
+### 2. `fina_enrich_listing_socials_finder`
 *   **Role**: Enriches existing database listings with missing Facebook and Instagram URLs.
 *   **CLI Trigger**: `python3 scripts/agent_fetch_targets.py --type missing-social --city <CITY>`
 *   **Logic**:
@@ -58,8 +58,8 @@ Here is the registry of the 4 specialized Antigravity subagents:
     3. Standardizes dates and structures payloads.
     4. Pushes discovered events using the `CreateEvent` mutation.
 
-### 4. `fina_community_finder`
-*   **Role**: Discovers Facebook and Instagram community groups/organizations.
+### 4. `fina_new_listing_web_finder`
+*   **Role**: Discovers new listing candidates on Facebook, Instagram, and web platforms.
 *   **CLI Trigger**: `python3 scripts/agent_social_search.py --city <CITY> --category COMMUNITY --platform <facebook|instagram> --limit 10 --offset <OFFSET>`
 *   **Logic**:
     1. Searches platforms for candidate group pages, paginated via limit and offset.
