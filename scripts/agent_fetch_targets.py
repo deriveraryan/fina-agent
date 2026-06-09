@@ -20,8 +20,10 @@ from features.shared.observability import BackendObservability
 
 async def main() -> None:
     parser = argparse.ArgumentParser(description="Fetch Fina target listings from DB.")
-    parser.add_argument("--type", choices=["missing-social", "business-socials", "city-listings"], required=True)
+    parser.add_argument("--type", choices=["missing-social", "business-socials", "city-listings", "social-post-tracker"], required=True)
     parser.add_argument("--city", type=str, default=None)
+    parser.add_argument("--listing-id", type=str, default=None, help="Listing UUID for social-post-tracker query.")
+    parser.add_argument("--platform", choices=["facebook", "instagram", "tiktok", "FACEBOOK", "INSTAGRAM", "TIKTOK"], type=str, default=None, help="Platform for social-post-tracker query.")
     parser.add_argument("--trace-id", type=str, default=None, help="Trace correlation ID.")
     args = parser.parse_args()
 
@@ -68,6 +70,21 @@ async def main() -> None:
             })
         BackendObservability.info(f"Retrieved {len(listings)} listings for {args.city} deduplication context.", conversation_id=args.trace_id)
         sys.stdout.write(json.dumps(output_listings))
+    elif args.type == "social-post-tracker":
+        if not args.listing_id or not args.platform:
+            BackendObservability.fatal("Validation Error: --listing-id and --platform are required for social-post-tracker", conversation_id=args.trace_id)
+            sys.exit(1)
+        platform_upper = args.platform.upper()
+        variables = {
+            "listingId": args.listing_id,
+            "platform": platform_upper
+        }
+        BackendObservability.trace(f"Executing GraphQL operation GetSocialPostTracker with variables: {variables}", conversation_id=args.trace_id)
+        result = await execute_graphql_operation(operation_name="GetSocialPostTracker", variables=variables)
+        trackers = result.get("data", {}).get("socialPostTrackers", [])
+        output_data = trackers[0] if trackers else None
+        BackendObservability.info(f"Retrieved social post tracker for listing={args.listing_id}, platform={platform_upper}. Found: {output_data is not None}", conversation_id=args.trace_id)
+        sys.stdout.write(json.dumps(output_data))
 
 if __name__ == "__main__":
     from features.shared.env_loader import load_env_file

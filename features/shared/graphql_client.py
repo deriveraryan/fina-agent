@@ -56,6 +56,7 @@ async def execute_graphql_operation(
         "ListUnverifiedListings",
         "ListListingsMissingSocial",
         "ListCitySocialUrls",
+        "GetSocialPostTracker",
     }
 
 

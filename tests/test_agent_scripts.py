@@ -741,3 +741,68 @@ class TestAgentScripts(unittest.IsolatedAsyncioTestCase):
         merged = merge_listing_data(existing, new_data)
         self.assertEqual(merged["facebookFollowers"], 150)
         self.assertEqual(merged["instagramFollowers"], 200)
+
+    @patch("agent_fetch_targets.execute_graphql_operation", new_callable=AsyncMock)
+    @patch("sys.stdout")
+    async def test_fetch_targets_social_post_tracker_success(self, mock_stdout: MagicMock, mock_execute: AsyncMock) -> None:
+        """Tests agent_fetch_targets.py --type social-post-tracker invokes GetSocialPostTracker and formats output."""
+        import agent_fetch_targets
+
+        sys.argv = [
+            "agent_fetch_targets.py",
+            "--type",
+            "social-post-tracker",
+            "--listing-id",
+            "listing-abc",
+            "--platform",
+            "facebook"
+        ]
+
+        mock_execute.return_value = {
+            "data": {
+                "socialPostTrackers": [
+                    {
+                        "id": "tracker-123",
+                        "listingId": "listing-abc",
+                        "platform": "FACEBOOK",
+                        "lastPostDate": "2026-06-09T00:00:00Z"
+                    }
+                ]
+            }
+        }
+
+        await agent_fetch_targets.main()
+
+        mock_execute.assert_called_once_with(
+            operation_name="GetSocialPostTracker",
+            variables={"listingId": "listing-abc", "platform": "FACEBOOK"}
+        )
+        mock_stdout.write.assert_any_call(
+            json.dumps({
+                "id": "tracker-123",
+                "listingId": "listing-abc",
+                "platform": "FACEBOOK",
+                "lastPostDate": "2026-06-09T00:00:00Z"
+            })
+        )
+
+    @patch("sys.stderr")
+    async def test_fetch_targets_social_post_tracker_missing_args(self, mock_stderr: MagicMock) -> None:
+        """Tests agent_fetch_targets.py --type social-post-tracker validation fails when listing-id or platform is missing."""
+        import agent_fetch_targets
+
+        sys.argv = [
+            "agent_fetch_targets.py",
+            "--type",
+            "social-post-tracker",
+            "--listing-id",
+            "listing-abc"
+        ]
+
+        with self.assertRaises(SystemExit) as cm:
+            await agent_fetch_targets.main()
+        self.assertEqual(cm.exception.code, 1)
+
+        stderr_calls = "".join(call.args[0] for call in mock_stderr.write.call_args_list)
+        self.assertIn("Validation Error: --listing-id and --platform are required for social-post-tracker", stderr_calls)
+
