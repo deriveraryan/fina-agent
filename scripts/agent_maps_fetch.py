@@ -65,6 +65,14 @@ SEARCH_TEMPLATES: dict[str, list[str]] = {
         "Philippine consulate in {city}",
         "Philippine embassy in {city}",
         "Philippine honorary consulate in {city}"
+    ],
+    "SERVICES": [
+        "Filipino services in {city}",
+        "Filipino business in {city}",
+        "Filipino accountant in {city}",
+        "Filipino logistics in {city}",
+        "Filipino freight in {city}",
+        "Filipino travel agency in {city}"
     ]
 }
 
@@ -393,13 +401,47 @@ def _get_mock_places(city: str, category: str) -> list[dict[str, Any]]:
                 ]
             }
         ]
+    elif category == "SERVICES":
+        return [
+            {
+                "id": "mock_services_1",
+                "displayName": {"text": f"Mock Services Business {city_title}"},
+                "types": ["professional_service", "establishment"],
+                "formattedAddress": f"20 Pitt St, {city_title} NSW 2000" if city == "SYDNEY" else f"20 Collins St, {city_title} VIC 3000",
+                "location": {
+                    "latitude": -33.8690 if city == "SYDNEY" else -37.8140,
+                    "longitude": 151.2105 if city == "SYDNEY" else 144.9645
+                },
+                "internationalPhoneNumber": "+61 2 9999 7777",
+                "websiteUri": "https://services.example.com",
+                "regularOpeningHours": {
+                    "weekdayDescriptions": [
+                        "Monday: 9:00 AM – 5:00 PM",
+                        "Tuesday: 9:00 AM – 5:00 PM",
+                        "Wednesday: 9:00 AM – 5:00 PM",
+                        "Thursday: 9:00 AM – 5:00 PM",
+                        "Friday: 9:00 AM – 5:00 PM"
+                    ]
+                },
+                "editorialSummary": {"text": f"A verified Filipino services in {city_title}."},
+                "reviews": [
+                    {
+                        "name": "places/mock_services_1/reviews/0",
+                        "authorAttribution": {"displayName": "Ramon Magsaysay"},
+                        "rating": 4.9,
+                        "text": {"text": "Excellent tax and accounting consultation service."},
+                        "publishTime": "2026-06-06T00:00:00Z"
+                    }
+                ]
+            }
+        ]
     return []
 
 
 async def main() -> None:
     parser = argparse.ArgumentParser(description="Query Google Places API candidates with caching and pagination.")
     parser.add_argument("--city", type=str, required=True, help="Target city name.")
-    parser.add_argument("--category", type=str, required=True, choices=["RESTAURANT", "CAFE", "SHOP", "CHURCH", "GOVERNMENT", "COMMUNITY"], help="Target category.")
+    parser.add_argument("--category", type=str, required=True, choices=["RESTAURANT", "CAFE", "SHOP", "CHURCH", "GOVERNMENT", "COMMUNITY", "SERVICES"], help="Target category.")
     parser.add_argument("--limit", type=int, default=10, help="Number of results to return.")
     parser.add_argument("--offset", type=int, default=0, help="Offset to start returning results from.")
     parser.add_argument("--refresh", action="store_true", help="Bypass local cache and query live Places API.")

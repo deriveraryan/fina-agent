@@ -118,6 +118,7 @@ async def send_summary_email(
         "CAFE": {"created": 0, "updated": 0},
         "SHOP": {"created": 0, "updated": 0},
         "CHURCH": {"created": 0, "updated": 0},
+        "SERVICES": {"created": 0, "updated": 0},
     }
 
     for l in recent_listings:

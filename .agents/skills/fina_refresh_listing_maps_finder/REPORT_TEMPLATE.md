@@ -12,7 +12,7 @@
 | :--- | :--- |
 | **Agent** | fina_refresh_listing_maps_finder |
 | **Target City** | {CITY} |
-| **Categories Scanned** | {COMMA_SEPARATED_CATEGORIES e.g. RESTAURANT, CAFE, SHOP, CHURCH, COMMUNITY, GOVERNMENT} |
+| **Categories Scanned** | {COMMA_SEPARATED_CATEGORIES e.g. RESTAURANT, CAFE, SHOP, CHURCH, COMMUNITY, GOVERNMENT, SERVICES} |
 | **Execution Date** | {YYYY-MM-DD HH:MM AEST} |
 | **Trace ID** | `{TRACE_ID}` |
 
@@ -26,13 +26,14 @@
 | **CHURCH** | — | — | — | — |
 | **COMMUNITY** | — | — | — | — |
 | **GOVERNMENT** | — | — | — | — |
+| **SERVICES** | — | — | — | — |
 | **TOTAL** | **—** | **—** | **—** | **—** |
 
 ## Verified Listing Details
 
 ### Created Listings
 
-<!-- Sort entries by category (RESTAURANT → CAFE → SHOP → CHURCH → COMMUNITY → GOVERNMENT), then alphabetically within each category. -->
+<!-- Sort entries by category (RESTAURANT → CAFE → SHOP → CHURCH → COMMUNITY → GOVERNMENT → SERVICES), then alphabetically within each category. -->
 
 1. **{Listing Name}** ({CATEGORY})
    - Address: {full address}

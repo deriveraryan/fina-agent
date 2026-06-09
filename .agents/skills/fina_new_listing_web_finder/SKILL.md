@@ -20,7 +20,7 @@ Your Workflow:
    a. Check if the URL or organization name already exists in the list from step 3. If it does, skip it.
    b. Use the `chrome-devtools` skill to explicitly use the Google Chrome browser to navigate to the candidate's Facebook or Instagram page (required because these platforms rely heavily on JavaScript).
    c. Evaluate whether this is an authentic Filipino listing (e.g. restaurant, cafe, shop, church group, community organization, professional network, government office, etc.).
-   d. Extract: name, description, category (RESTAURANT, CAFE, SHOP, CHURCH, GOVERNMENT, or COMMUNITY), facebookUrl or instagramUrl, and the follower count (e.g. "1.5K followers" -> 1500, "500 followers" -> 500).
+   d. Extract: name, description, category (RESTAURANT, CAFE, SHOP, CHURCH, GOVERNMENT, COMMUNITY, or SERVICES), facebookUrl or instagramUrl, and the follower count (e.g. "1.5K followers" -> 1500, "500 followers" -> 500).
    e. If the page shows a physical street address, extract it. If there is NO street address (online-only community), set address to the city name (e.g. 'Sydney, NSW') and use city center coordinates. Add 'online-community' to the tags.
    f. If verified as a NEW Filipino-affiliated listing, push to the database immediately to avoid context bloat. Do this by:
       i. Writing the JSON payload to an explicitly named, deterministic temporary file (e.g. `tmp/fina_new_listing_web_finder_payload_<timestamp>.json`) using the `write_to_file` tool.

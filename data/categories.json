@@ -1,0 +1,66 @@
+{
+  "RESTAURANT": {
+    "displayName": "Restaurants",
+    "description": "Dine-in restaurants, food trucks, caterers, food stalls, or eateries serving main meals.",
+    "rules": [
+      "Must offer prepared meals or dining experiences.",
+      "Includes traditional Filipino restaurants, diners, buffet spaces, and specialized food trucks."
+    ],
+    "examples": ["Manila Sunset Diner", "Filipino BBQ Grill", "Adobo Food Truck"]
+  },
+  "CAFE": {
+    "displayName": "Cafés",
+    "description": "Coffee shops, bakeries (panaderya), bubble tea shops, dessert parlors, cake shops.",
+    "rules": [
+      "Primarily serves coffee, tea, pastries, bakery goods, or light desserts.",
+      "Includes panaderias baking fresh pandesal, ube cake makers, and halo-halo dessert stalls."
+    ],
+    "examples": ["Pandesal & Co.", "Pinoy Brew Cafe", "Ube Desserts Parlor"]
+  },
+  "SHOP": {
+    "displayName": "Shops",
+    "description": "Retail stores, grocery shops, Asian/Filipino supermarkets, convenience stores, sari-sari shops selling imported ingredients or goods.",
+    "rules": [
+      "Sells physical packaged ingredients, imported groceries, clothing, or merchandise directly to consumers.",
+      "Must be a retail store or supermarket space."
+    ],
+    "examples": ["Luzon Sari-Sari Store", "Manila Asian Groceries", "Pinoy Supermarket"]
+  },
+  "CHURCH": {
+    "displayName": "Churches",
+    "description": "Christian and Catholic churches, Tagalog mass fellowships, religious groups.",
+    "rules": [
+      "A house of worship or organized religious community group holding regular services.",
+      "Provides chaplaincy or mass services tailored to the Filipino community."
+    ],
+    "examples": ["St. Mary Filipino Fellowship", "Tagalog mass community", "Filipino Christian Church"]
+  },
+  "GOVERNMENT": {
+    "displayName": "Government",
+    "description": "Official Philippine government listings, consulates, embassies, and honorary consular services.",
+    "rules": [
+      "Must be an official department, embassy, consulate, or designated consular service of the Republic of the Philippines."
+    ],
+    "examples": ["Philippine Consulate General Sydney", "Philippine Embassy Canberra"]
+  },
+  "COMMUNITY": {
+    "displayName": "Community",
+    "description": "Organized clubs, community associations, non-profits, student clubs, and structured support groups.",
+    "rules": [
+      "An organized group of individuals collaborating for community welfare, cultural preservation, support, or advocacy.",
+      "Must be a non-profit association, club, or community organization.",
+      "DOES NOT include local commercial business services (like tax services, travel agencies, cargo forwarders, etc.)."
+    ],
+    "examples": ["Filipino Student Association", "Filipino-Australian Community Club", "Bayanihan Cultural Group"]
+  },
+  "SERVICES": {
+    "displayName": "Services",
+    "description": "Professional and local business services that are not shops, food venues, government offices, or churches.",
+    "rules": [
+      "A commercial entity offering professional, trade, or personal services to the community.",
+      "Includes tax accountants, migration agents, mechanics, logistics/freight providers (balikbayan boxes), hair salons, and travel agencies.",
+      "DOES NOT include grocery shops or restaurants."
+    ],
+    "examples": ["Pinoy Tax & Accounting", "Balikbayan Cargo Express", "Filo Migration Services"]
+  }
+}
