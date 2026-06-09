@@ -29,6 +29,10 @@ async def process_single_item(operation: str, item_dict: dict, trace_id: str) ->
         BackendObservability.error("Validation Error: 'instagramFollowers' must be an integer if provided.", conversation_id=trace_id)
         return {"error": "Validation Error: 'instagramFollowers' must be an integer"}
 
+    if operation == "UpsertSocialPostTracker":
+        if "platform" in item_dict and isinstance(item_dict["platform"], str):
+            item_dict["platform"] = item_dict["platform"].upper()
+
     if operation == "CreateListing":
         if "category" in item_dict and "categories" not in item_dict:
             cat = item_dict.pop("category")
