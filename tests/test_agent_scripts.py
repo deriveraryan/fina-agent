@@ -826,12 +826,11 @@ class TestAgentScripts(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(parsed_output["places"][0]["description"], "A verified Filipino services in Sydney.")
 
     @patch("agent_audit_listings.execute_graphql_operation", new_callable=AsyncMock)
-    @patch("google.genai.Client")
-    @patch("os.makedirs")
+    @patch("sys.stdout")
     async def test_audit_listings_success(
-        self, mock_makedirs: MagicMock, mock_genai_client: MagicMock, mock_execute: AsyncMock
+        self, mock_stdout: MagicMock, mock_execute: AsyncMock
     ) -> None:
-        """Tests that agent_audit_listings.py queries listings, audits categories via LLM, recategorizes, and logs report."""
+        """Tests that agent_audit_listings.py queries listings and outputs paginated JSON to stdout."""
         import agent_audit_listings
 
         # Mock listing data from GraphQL query
@@ -850,64 +849,27 @@ class TestAgentScripts(unittest.IsolatedAsyncioTestCase):
             }
         }
 
-        # Mock Gemini structured JSON response
-        mock_response = MagicMock()
-        mock_response.text = json.dumps({
-            "recategorize": True,
-            "categories": ["SERVICES"],
-            "reason": "Balikbayan cargo is a commercial logistics service, not a non-profit community group."
-        })
-        
-        mock_client_instance = MagicMock()
-        mock_client_instance.models.generate_content.return_value = mock_response
-        mock_genai_client.return_value = mock_client_instance
-
-        # Mock open() for categories.json loading and report writing
-        mock_file_categories = MagicMock()
-        mock_file_categories.__enter__.return_value.read.return_value = json.dumps({
-            "COMMUNITY": {"description": "Non-profit community group"},
-            "SERVICES": {"description": "Commercial business services"}
-        })
-        
-        mock_file_report = MagicMock()
-        
-        import builtins
-        real_open = builtins.open
-        def mock_open_side_effect(file_path, *args, **kwargs):
-            if "categories.json" in str(file_path):
-                return mock_file_categories
-            elif "report" in str(file_path) or "logs" in str(file_path):
-                return mock_file_report
-            return real_open(file_path, *args, **kwargs)
-
         sys.argv = ["agent_audit_listings.py", "--city", "SYDNEY", "--limit", "10", "--offset", "0"]
         
-        with patch("builtins.open", new_callable=MagicMock) as mock_open:
-            mock_open.side_effect = mock_open_side_effect
-            
-            # Override the GEMINI_API_KEY environment variable to enable client initialization
-            with patch.dict("os.environ", {"GEMINI_API_KEY": "fake-gemini-key"}):
-                await agent_audit_listings.main()
+        await agent_audit_listings.main()
 
-            # Check GraphQL queries and mutations
-            mock_execute.assert_any_call(
-                operation_name="ListCityListings",
-                variables={"city": "SYDNEY"}
-            )
-            mock_execute.assert_any_call(
-                operation_name="UpdateListingData",
-                variables={
-                    "id": "listing-abc",
-                    "categories": ["SERVICES"]
-                }
-            )
+        # Check GraphQL query
+        mock_execute.assert_called_once_with(
+            operation_name="ListCityListings",
+            variables={"city": "SYDNEY"}
+        )
 
-            # Check report was written
-            mock_open.assert_any_call(unittest.mock.ANY, "w", encoding="utf-8")
-            write_calls = mock_file_report.__enter__.return_value.write.call_args_list
-            written_report = "".join(call.args[0] for call in write_calls)
-            self.assertIn("Fina Listing Auditor Report — SYDNEY", written_report)
-            self.assertIn("Pinoy Freight Sydney", written_report)
-            self.assertIn("COMMUNITY", written_report)
-            self.assertIn("SERVICES", written_report)
-            self.assertIn("Balikbayan cargo is a commercial logistics service, not a non-profit community group.", written_report)
+        # Check output printed to stdout
+        written_calls = [call.args[0] for call in mock_stdout.write.call_args_list]
+        combined_output = "".join(written_calls)
+        parsed_output = json.loads(combined_output)
+        
+        self.assertEqual(parsed_output["total"], 1)
+        self.assertFalse(parsed_output["has_more"])
+        self.assertEqual(len(parsed_output["listings"]), 1)
+        self.assertEqual(parsed_output["listings"][0]["id"], "listing-abc")
+        self.assertEqual(parsed_output["listings"][0]["name"], "Pinoy Freight Sydney")
+        self.assertEqual(parsed_output["listings"][0]["categories"], ["COMMUNITY"])
+        self.assertEqual(parsed_output["listings"][0]["description"], "Balikbayan box cargo forwarding services to the Philippines.")
+        self.assertEqual(parsed_output["listings"][0]["tags"], "filipino,community,cargo")
+
