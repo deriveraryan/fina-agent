@@ -19,6 +19,16 @@ from features.shared.graphql_client import execute_graphql_operation
 from features.shared.observability import BackendObservability
 
 async def process_single_item(operation: str, item_dict: dict, trace_id: str) -> dict:
+    fb_followers = item_dict.get("facebookFollowers")
+    if fb_followers is not None and not isinstance(fb_followers, int):
+        BackendObservability.error("Validation Error: 'facebookFollowers' must be an integer if provided.", conversation_id=trace_id)
+        return {"error": "Validation Error: 'facebookFollowers' must be an integer"}
+
+    ig_followers = item_dict.get("instagramFollowers")
+    if ig_followers is not None and not isinstance(ig_followers, int):
+        BackendObservability.error("Validation Error: 'instagramFollowers' must be an integer if provided.", conversation_id=trace_id)
+        return {"error": "Validation Error: 'instagramFollowers' must be an integer"}
+
     if operation == "CreateListing":
         if "category" in item_dict and "categories" not in item_dict:
             cat = item_dict.pop("category")
@@ -87,6 +97,8 @@ async def process_single_item(operation: str, item_dict: dict, trace_id: str) ->
                             "tags": merged.get("tags"),
                             "sourceUrl": merged.get("sourceUrl"),
                             "status": merged.get("status"),
+                            "facebookFollowers": merged.get("facebookFollowers"),
+                            "instagramFollowers": merged.get("instagramFollowers"),
                         },
                     )
                     BackendObservability.info(f"Successfully updated duplicate listing ID={existing['id']} data/status.", conversation_id=trace_id)

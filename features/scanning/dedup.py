@@ -42,6 +42,9 @@ def merge_listing_data(
             new_cats = value or []
             # Unique union preserving order
             merged[key] = list(dict.fromkeys(existing_cats + new_cats))
+        elif key in ("facebookFollowers", "instagramFollowers"):
+            if value is not None:
+                merged[key] = value
         elif value is not None and value != "":
             existing_value = merged.get(key)
             if existing_value is None or existing_value == "":

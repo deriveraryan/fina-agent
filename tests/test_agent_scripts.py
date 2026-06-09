@@ -84,15 +84,15 @@ class TestAgentScripts(unittest.IsolatedAsyncioTestCase):
             operation_name="ListCityListings",
             variables={"city": "SYDNEY"}
         )
-        # Should flatten and filter out None values
-        expected_urls = [
-            "https://facebook.com/1",
-            "https://instagram.com/1",
-            "https://instagram.com/2",
-            "https://facebook.com/3"
+        # Should flatten and filter out None values, returning objects with id and url
+        expected_targets = [
+            {"id": "1", "url": "https://facebook.com/1"},
+            {"id": "1", "url": "https://instagram.com/1"},
+            {"id": "2", "url": "https://instagram.com/2"},
+            {"id": "3", "url": "https://facebook.com/3"}
         ]
         mock_stdout.write.assert_any_call(
-            json.dumps(expected_urls)
+            json.dumps(expected_targets)
         )
 
     @patch("agent_graphql_push.execute_graphql_operation", new_callable=AsyncMock)
@@ -392,7 +392,6 @@ class TestAgentScripts(unittest.IsolatedAsyncioTestCase):
         
         mock_execute.assert_any_call("CreateReview", {"text": "Good", "rating": 4.5, "externalSourceId": "rev1", "listingId": "existing-123"})
         
-        # Verify specific update variables include categories list
         mock_execute.assert_any_call(
             operation_name="UpdateListingData",
             variables={
@@ -407,7 +406,9 @@ class TestAgentScripts(unittest.IsolatedAsyncioTestCase):
                 "imageUrl": None,
                 "tags": None,
                 "sourceUrl": None,
-                "status": "CLOSED_TEMPORARILY"
+                "status": "CLOSED_TEMPORARILY",
+                "facebookFollowers": None,
+                "instagramFollowers": None
             },
         )
         
@@ -683,3 +684,60 @@ class TestAgentScripts(unittest.IsolatedAsyncioTestCase):
 
         stderr_calls = "".join(call.args[0] for call in mock_stderr_write.call_args_list)
         self.assertIn("[Conv: trace-456]", stderr_calls)
+
+    @patch("sys.stderr")
+    async def test_graphql_push_validation_invalid_facebook_followers_type(self, mock_stderr: MagicMock) -> None:
+        """Tests agent_graphql_push.py exits with code 1 if facebookFollowers is not an integer."""
+        import agent_graphql_push
+
+        sys.argv = [
+            "agent_graphql_push.py",
+            "--operation",
+            "CreateListing",
+            "--variables",
+            '{"name": "Some Resto", "city": "SYDNEY", "facebookFollowers": "not-an-int"}'
+        ]
+
+        with self.assertRaises(SystemExit) as cm:
+            await agent_graphql_push.main()
+        self.assertEqual(cm.exception.code, 1)
+        stderr_calls = "".join(call.args[0] for call in mock_stderr.write.call_args_list)
+        self.assertIn("Validation Error: 'facebookFollowers' must be an integer if provided.", stderr_calls)
+
+    @patch("sys.stderr")
+    async def test_graphql_push_validation_invalid_instagram_followers_type(self, mock_stderr: MagicMock) -> None:
+        """Tests agent_graphql_push.py exits with code 1 if instagramFollowers is not an integer."""
+        import agent_graphql_push
+
+        sys.argv = [
+            "agent_graphql_push.py",
+            "--operation",
+            "CreateListing",
+            "--variables",
+            '{"name": "Some Resto", "city": "SYDNEY", "instagramFollowers": "not-an-int"}'
+        ]
+
+        with self.assertRaises(SystemExit) as cm:
+            await agent_graphql_push.main()
+        self.assertEqual(cm.exception.code, 1)
+        stderr_calls = "".join(call.args[0] for call in mock_stderr.write.call_args_list)
+        self.assertIn("Validation Error: 'instagramFollowers' must be an integer if provided.", stderr_calls)
+
+    def test_merge_listing_data_overwrites_followers(self) -> None:
+        """Tests that merge_listing_data overwrites existing follower counts with new ones."""
+        from features.scanning.dedup import merge_listing_data
+
+        existing = {
+            "id": "123",
+            "name": "Test Resto",
+            "facebookFollowers": 100,
+            "instagramFollowers": 200,
+        }
+        new_data = {
+            "facebookFollowers": 150,
+            "instagramFollowers": None,
+        }
+
+        merged = merge_listing_data(existing, new_data)
+        self.assertEqual(merged["facebookFollowers"], 150)
+        self.assertEqual(merged["instagramFollowers"], 200)

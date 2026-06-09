@@ -43,14 +43,14 @@ async def main() -> None:
         BackendObservability.trace(f"Executing GraphQL operation ListCityListings with variables: {{'city': '{args.city}'}}", conversation_id=args.trace_id)
         result = await execute_graphql_operation(operation_name="ListCityListings", variables={"city": args.city})
         listings = result.get("data", {}).get("listings", [])
-        urls = []
+        targets = []
         for l in listings:
             if l.get("facebookUrl"):
-                urls.append(l["facebookUrl"])
+                targets.append({"id": l["id"], "url": l["facebookUrl"]})
             if l.get("instagramUrl"):
-                urls.append(l["instagramUrl"])
-        BackendObservability.info(f"Retrieved {len(listings)} listings for {args.city}, extracted {len(urls)} social media URLs.", conversation_id=args.trace_id)
-        sys.stdout.write(json.dumps(urls))
+                targets.append({"id": l["id"], "url": l["instagramUrl"]})
+        BackendObservability.info(f"Retrieved {len(listings)} listings for {args.city}, extracted {len(targets)} social media targets.", conversation_id=args.trace_id)
+        sys.stdout.write(json.dumps(targets))
     elif args.type == "city-listings":
         if not args.city:
             BackendObservability.fatal("Validation Error: --city is required for city-listings", conversation_id=args.trace_id)
