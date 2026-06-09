@@ -180,13 +180,21 @@ This subagent actively searches Facebook and Instagram for Filipino community or
 *   **Browser Verification**: The subagent uses the `chrome-devtools` skill to inspect candidate pages one-by-one, verifying authentic Filipino affiliation.
 *   **Listing Persistence**: Verified organizations are pushed directly to the `Listing` table using `CreateListing`. For online-only communities (no physical street address), the address is set to the city name with city center coordinates and tagged with `online-community`.
 
-### 5. Database Integration Scripts
+### 5. The `fina_listing_auditor` Subagent (Category Auditor)
+This subagent audits listing category assignments to ensure they conform to canonical definition specs:
+*   **Evaluation against definitions**: Compares existing listing data (name, description, tags, current categories) against rules in `data/categories.json`.
+*   **LLM Validation**: Uses Gemini LLM structured JSON output schema validation to determine if category corrections are needed.
+*   **Recategorization**: Performs recategorizations using the `UpdateListingData` mutation.
+*   **Run Report Consolidation**: Formats and writes run reports under `logs/` directory, merging sequential pagination runs into a single consolidated log.
+
+### 6. Database Integration Scripts
 To maintain security and ensure all data mutations pass through the authorized GraphQL layer, the subagents rely on local Python helper CLI scripts that connect to the core `fina` Firebase project:
 *   `scripts/agent_fetch_targets.py`: Fetches target source URLs, missing-social listings, business-socials, city-listings (for deduplication context), or social-post-trackers (for checking previous event scraper bookmarks) from the database.
 *   `scripts/agent_graphql_push.py`: Pushes verified JSON objects or updates to the backend using GraphQL operations (including `CreateListing`, `UpdateListingSocialUrls`, `CreateEvent`, and `UpsertSocialPostTracker`). Also normalizes platform names, and synchronously handles geocoding and deduplication before creating new listings.
 *   `scripts/agent_maps_fetch.py`: Searches Google Places (New) Text Search with caching and pagination.
+*   `scripts/agent_audit_listings.py`: Evaluates, validates, and recategorizes business categories against canonical JSON specs.
 
-### 6. Synchronous Geocoding & Deduplication
+### 7. Synchronous Geocoding & Deduplication
 To simplify the architecture and reduce cloud function dependencies, heavy transactional logic is handled synchronously by `agent_graphql_push.py` before inserting data into the database:
 *   **Geocoding**: Uses the Google Maps Geocoding API to resolve coordinates if missing prior to insertion.
 *   **Deduplication**: Resolves matches using name normalization, `pgvector` semantic embedding similarity, and Jaccard word-overlap coefficient (>0.7). If a duplicate is found, it merges missing fields via `UpdateListingData` and `UpdateListingStatus` mutations instead of creating a new duplicate record.
@@ -195,4 +203,4 @@ To simplify the architecture and reduce cloud function dependencies, heavy trans
 
 ## 💻 Operational Runbook
 
-For instructions on how to trigger or schedule the `fina_refresh_listing_maps_finder`, `fina_enrich_listing_socials_finder`, `fina_events_finder`, and `fina_new_listing_web_finder` subagents, refer to the Operational Guide in the main repository `README.md`.
+For instructions on how to trigger or schedule the `fina_refresh_listing_maps_finder`, `fina_enrich_listing_socials_finder`, `fina_events_finder`, `fina_new_listing_web_finder`, and `fina_listing_auditor` subagents, refer to the Operational Guide in the main repository `README.md`.

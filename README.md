@@ -11,6 +11,7 @@ This project is decoupled from the main Fina application backend. It runs lightw
 * **Social Web Searcher**: Discovers missing social media handles for listings.
 * **Browser Event Crawler**: Crawls business pages to harvest upcoming temporal events.
 * **Community Discoverer**: Crawls Facebook and Instagram for online groups and communities.
+* **Category Auditor**: Audits and recategorizes listing categories using canonical definitions and LLM validation.
 
 ---
 
@@ -54,6 +55,7 @@ You can trigger these discovery scans manually through the Antigravity Chat UI o
 * **`fina_enrich_listing_socials_finder`**: Enriches existing listings with missing Facebook/Instagram URLs.
 * **`fina_events_finder`**: Crawls business social media pages to harvest upcoming events.
 * **`fina_new_listing_web_finder`**: Searches social platforms for Filipino community pages.
+* **`fina_listing_auditor`**: Audits and corrects category classifications using canonical definitions and LLM validation.
 
 For a detailed flow diagram of how these agents operate, see the [Native IDE Agent Architecture Guide](docs/guides/ide_agent_architecture.md).
 
@@ -98,10 +100,23 @@ By default, the `fina_refresh_listing_maps_finder` caches Google Places search r
     >
     > **To scan all categories and cities at once:**
     > "/goal Use the `fina_new_listing_web_finder` skill to search the web for all categories (`RESTAURANT`, `CAFE`, `SHOP`, `CHURCH`, `COMMUNITY`, `GOVERNMENT`, `SERVICES`) across all major Australian cities (`SYDNEY`, `MELBOURNE`, `BRISBANE`, `PERTH`, `ADELAIDE`, `DARWIN`, `HOBART`, `CANBERRA`, `GOLD COAST`)."
+*   *Category Auditor*:
+    > "Use the `fina_listing_auditor` skill to audit and correct categories in SYDNEY."
+    >
+    > **To run a dry-run audit without database writes:**
+    > "Use the `fina_listing_auditor` skill in dry-run mode to audit categories in SYDNEY."
 
 ### 3. Running Scripts via CLI
 You can execute the underlying discovery and database push scripts directly in your shell.
 
+*   **Listing Category Auditor (with `--dry-run` to audit without database updates)**:
+    ```bash
+    # Review changes and update DB
+    python3 scripts/agent_audit_listings.py --city SYDNEY --limit 10 --offset 0 --trace-id <CONVERSATION_ID>
+    
+    # Dry-run audit
+    python3 scripts/agent_audit_listings.py --city SYDNEY --limit 10 --offset 0 --dry-run --trace-id <CONVERSATION_ID>
+    ```
 *   **Google Places Fetch (with `--refresh` to bypass local cache and query live API)**:
     ```bash
     python3 scripts/agent_maps_fetch.py --city SYDNEY --category RESTAURANT --limit 10 --offset 0 --refresh --trace-id <CONVERSATION_ID>
@@ -129,6 +144,10 @@ You can schedule the agents to run periodic background scans using the `/schedul
 *   *Community Scan Schedule*:
     ```bash
     /schedule CronExpression="0 0 * * *" Prompt="Use the fina_new_listing_web_finder skill to scan for events and listings across all cities."
+    ```
+*   *Category Audit Schedule*:
+    ```bash
+    /schedule CronExpression="0 18 * * *" Prompt="Use the fina_listing_auditor skill to audit and correct categories in SYDNEY."
     ```
 *(Note: The Antigravity IDE window must remain active for scheduled subagents to execute).*
 
