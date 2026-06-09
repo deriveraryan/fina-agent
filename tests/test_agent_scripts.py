@@ -560,8 +560,9 @@ class TestAgentScripts(unittest.IsolatedAsyncioTestCase):
             },
         )
 
+    @patch("agent_graphql_push.execute_graphql_operation", new_callable=AsyncMock)
     @patch("sys.stderr")
-    async def test_graphql_push_category_validation_invalid(self, mock_stderr: MagicMock) -> None:
+    async def test_graphql_push_category_validation_invalid(self, mock_stderr: MagicMock, mock_execute: AsyncMock) -> None:
         """Tests that agent_graphql_push.py exits with code 1 if category is invalid."""
         import agent_graphql_push
 
@@ -577,7 +578,7 @@ class TestAgentScripts(unittest.IsolatedAsyncioTestCase):
             await agent_graphql_push.main()
         self.assertEqual(cm.exception.code, 1)
         stderr_calls = "".join(call.args[0] for call in mock_stderr.write.call_args_list)
-        self.assertIn("Validation Error: Category 'NOT_A_CATEGORY' is not a valid category in categories.json.", stderr_calls)
+        self.assertIn("Validation Error: Category 'NOT_A_CATEGORY' is not a valid category in the database.", stderr_calls)
 
 
     @patch("agent_graphql_push.execute_graphql_operation", new_callable=AsyncMock)

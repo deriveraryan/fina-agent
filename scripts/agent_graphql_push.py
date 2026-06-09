@@ -20,25 +20,24 @@ from features.shared.observability import BackendObservability
 
 _valid_categories_cache: set[str] | None = None
 
-def load_valid_categories(trace_id: str | None = None) -> set[str]:
-    """Loads valid categories from data/categories.json, defaulting to standard set if loading fails."""
+async def load_valid_categories(trace_id: str | None = None) -> set[str]:
+    """Loads valid categories from the database, defaulting to standard set if loading fails."""
     global _valid_categories_cache
     if _valid_categories_cache is not None:
         return _valid_categories_cache
 
-    path = os.path.abspath(os.path.join(os.path.dirname(__file__), "../data/categories.json"))
     default_categories = {"RESTAURANT", "CAFE", "SHOP", "CHURCH", "GOVERNMENT", "COMMUNITY", "SERVICES"}
-    if not os.path.exists(path):
-        BackendObservability.warning(f"categories.json not found at {path}. Using default categories.", conversation_id=trace_id)
-        _valid_categories_cache = default_categories
-        return _valid_categories_cache
     try:
-        with open(path, "r") as f:
-            data = json.load(f)
-            _valid_categories_cache = set(data.keys())
+        res = await execute_graphql_operation("ListCategories", {})
+        categories_data = res.get("data", {}).get("categories", [])
+        if categories_data:
+            _valid_categories_cache = {cat["id"].upper() for cat in categories_data if cat.get("isActive")}
+            return _valid_categories_cache
+        else:
+            _valid_categories_cache = default_categories
             return _valid_categories_cache
     except Exception as exc:
-        BackendObservability.warning(f"Failed to load categories.json: {exc}. Using default categories.", conversation_id=trace_id)
+        BackendObservability.warning(f"Failed to load categories from database: {exc}. Using default categories.", conversation_id=trace_id)
         _valid_categories_cache = default_categories
         return _valid_categories_cache
 
@@ -68,7 +67,7 @@ async def process_single_item(operation: str, item_dict: dict, trace_id: str) ->
             BackendObservability.error("Validation Error: 'categories' must be a list.", conversation_id=trace_id)
             return {"error": "Validation Error: 'categories' must be a list"}
         
-        valid_cats = load_valid_categories(trace_id)
+        valid_cats = await load_valid_categories(trace_id)
         normalized_cats = []
         for cat in categories:
             if not cat or not isinstance(cat, str):
@@ -77,7 +76,7 @@ async def process_single_item(operation: str, item_dict: dict, trace_id: str) ->
             
             normalized_cat = cat.strip().upper()
             if normalized_cat not in valid_cats:
-                BackendObservability.error(f"Validation Error: Category '{cat}' is not a valid category in categories.json.", conversation_id=trace_id)
+                BackendObservability.error(f"Validation Error: Category '{cat}' is not a valid category in the database.", conversation_id=trace_id)
                 return {"error": f"Validation Error: Category '{cat}' is not a valid category"}
             
             normalized_cats.append(normalized_cat)
