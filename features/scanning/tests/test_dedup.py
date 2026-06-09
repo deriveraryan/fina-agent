@@ -95,10 +95,8 @@ class TestDeduplication(unittest.IsolatedAsyncioTestCase):
         )
 
     @patch("features.shared.graphql_client.execute_graphql_operation")
-    @patch("features.shared.embeddings.get_embedding")
-    async def test_check_duplicate_semantic_match(self, mock_embedding: MagicMock, mock_execute: AsyncMock) -> None:
+    async def test_check_duplicate_semantic_match(self, mock_execute: AsyncMock) -> None:
         """Tests that check_duplicate falls back to semantic cosine similarity when exact match fails."""
-        mock_embedding.return_value = [0.0] * 768
         # Mock ListCityListings response
         mock_execute.side_effect = [
             {"data": {"listings": []}},  # ListCityListings
@@ -124,16 +122,13 @@ class TestDeduplication(unittest.IsolatedAsyncioTestCase):
             operation_name="SemanticSearchListings",
             variables={
                 "city": "SYDNEY",
-                "queryVector": [0.0] * 768
+                "queryText": "Manila Bistro is a Filipino RESTAURANT located in SYDNEY. A cozy Filipino diner serving adobo"
             }
         )
-        mock_embedding.assert_called_once_with("Manila Bistro is a Filipino RESTAURANT located in SYDNEY. A cozy Filipino diner serving adobo", conversation_id=None)
 
     @patch("features.shared.graphql_client.execute_graphql_operation")
-    @patch("features.shared.embeddings.get_embedding")
-    async def test_check_duplicate_semantic_null_response(self, mock_embedding: MagicMock, mock_execute: AsyncMock) -> None:
+    async def test_check_duplicate_semantic_null_response(self, mock_execute: AsyncMock) -> None:
         """Tests that check_duplicate handles None/null semantic search responses gracefully without crashing."""
-        mock_embedding.return_value = [0.0] * 768
         mock_execute.side_effect = [
             {"data": {"listings": []}},  # ListCityListings
             {"data": {"listings_descriptionEmbedding_similarity": None}},  # SemanticSearchListings returning null
@@ -143,7 +138,6 @@ class TestDeduplication(unittest.IsolatedAsyncioTestCase):
 
         self.assertIsNone(result)
         self.assertEqual(mock_execute.call_count, 2)
-        mock_embedding.assert_called_once_with("Manila Bistro is a Filipino RESTAURANT located in SYDNEY. A cozy Filipino diner serving adobo", conversation_id=None)
 
 
 if __name__ == "__main__":

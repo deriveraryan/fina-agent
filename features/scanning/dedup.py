@@ -130,30 +130,22 @@ async def check_duplicate(
             conversation_id=trace_id
         )
 
-    # 2. Semantic match check via pgvector
+    # 2. Semantic match check via pgvector (database-side embedding)
     try:
-        from features.shared.embeddings import get_embedding
         cats_str = ",".join(categories or [])
         base_desc = f"{name} is a Filipino {cats_str} located in {city}."
         desc_for_embedding = f"{base_desc} {description}" if description else base_desc
         
         BackendObservability.trace(
-            f"Generating description embedding for semantic check: '{desc_for_embedding}'",
+            f"Executing semantic search for duplicate check with text: '{desc_for_embedding}'",
             conversation_id=trace_id
         )
-        query_vector = get_embedding(desc_for_embedding, conversation_id=trace_id)
-        if query_vector is None:
-            BackendObservability.warning(
-                f"Skipping semantic check for '{name}' because embedding generation returned None.",
-                conversation_id=trace_id
-            )
-            return None
         
         response = await execute_graphql_operation(
             operation_name="SemanticSearchListings",
             variables={
                 "city": city,
-                "queryVector": query_vector
+                "queryText": desc_for_embedding
             },
         )
         # Semantic search returns listings_descriptionEmbedding_similarity list

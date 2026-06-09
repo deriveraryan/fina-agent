@@ -95,7 +95,20 @@ async def process_single_item(operation: str, item_dict: dict, trace_id: str) ->
     if operation == "CreateListing":
         from features.scanning.dedup import check_duplicate, merge_listing_data
         
-        reviews_to_push = item_dict.pop("reviews", [])
+        raw_reviews = item_dict.pop("reviews", [])
+        reviews_to_push = []
+        for r in raw_reviews:
+            if isinstance(r, dict):
+                reviews_to_push.append(r)
+            elif isinstance(r, str):
+                import hashlib
+                h = hashlib.md5(r.encode()).hexdigest()
+                reviews_to_push.append({
+                    "externalSourceId": f"hash_{h}",
+                    "authorName": "Google Reviewer",
+                    "rating": 5.0,
+                    "text": r
+                })
         
         city = item_dict.get("city")
         name = item_dict.get("name")
@@ -198,21 +211,26 @@ async def process_single_item(operation: str, item_dict: dict, trace_id: str) ->
             item_dict["longitude"] = lng
             BackendObservability.info(f"Geocoded address to coordinates: ({lat}, {lng})", conversation_id=trace_id)
             
-        if not item_dict.get("descriptionEmbedding"):
-            from features.shared.embeddings import get_embedding
+        # Generate composite embeddingText for database-side embedding if not already provided
+        if not item_dict.get("embeddingText"):
             cats_str = ",".join(item_dict.get("categories", []))
             base_desc = f"{name} is a Filipino {cats_str} located in {city}."
-            desc_for_embedding = f"{base_desc} {description}" if description else base_desc
-            BackendObservability.trace(f"Generating description embedding for: '{desc_for_embedding}'", conversation_id=trace_id)
-            emb = get_embedding(desc_for_embedding, conversation_id=trace_id)
-            if emb is not None:
-                item_dict["descriptionEmbedding"] = emb
-                BackendObservability.trace("Successfully generated description embedding.", conversation_id=trace_id)
-            else:
-                BackendObservability.warning("Could not generate description embedding. Proceeding without descriptionEmbedding.", conversation_id=trace_id)
+            item_dict["embeddingText"] = f"{base_desc} {description}" if description else base_desc
 
         if not item_dict.get("verificationStatus"):
             item_dict["verificationStatus"] = "UNVERIFIED"
+
+    if operation == "CreateEvent":
+        if not item_dict.get("embeddingText"):
+            name = item_dict.get("name")
+            city = item_dict.get("city")
+            description = item_dict.get("description")
+            if name and city:
+                base_desc = f"{name} is a Filipino community event in {city}."
+                item_dict["embeddingText"] = f"{base_desc} {description}" if description else base_desc
+
+    # Remove descriptionEmbedding since we use database-side embeddingText
+    item_dict.pop("descriptionEmbedding", None)
 
     BackendObservability.trace(f"Executing GraphQL operation: '{operation}' with variables: {item_dict}", conversation_id=trace_id)
     result = await execute_graphql_operation(operation_name=operation, variables=item_dict)
