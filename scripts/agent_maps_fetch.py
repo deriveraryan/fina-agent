@@ -439,17 +439,16 @@ def _get_mock_places(city: str, category: str) -> list[dict[str, Any]]:
 
 
 def load_valid_categories() -> list[str]:
-    """Loads valid categories from data/categories.json, defaulting to standard set if loading fails."""
+    """Loads valid categories from data/categories.json, failing fast if loading fails."""
     path = os.path.abspath(os.path.join(os.path.dirname(__file__), "../data/categories.json"))
-    default_categories = ["RESTAURANT", "CAFE", "SHOP", "CHURCH", "GOVERNMENT", "COMMUNITY", "SERVICES"]
     if not os.path.exists(path):
-        return default_categories
-    try:
-        with open(path, "r") as f:
-            data = json.load(f)
-            return list(data.keys())
-    except Exception:
-        return default_categories
+        raise FileNotFoundError(f"Canonical category file not found at: {path}")
+    with open(path, "r") as f:
+        data = json.load(f)
+    if not isinstance(data, dict):
+        raise ValueError(f"Category file at {path} must be a JSON object mapping category keys.")
+    return list(data.keys())
+
 
 
 async def main() -> None:

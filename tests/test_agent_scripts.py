@@ -156,9 +156,22 @@ class TestAgentScripts(unittest.IsolatedAsyncioTestCase):
         """Tests that agent_maps_fetch.py reads from cache on cache hit."""
         import agent_maps_fetch
 
-        mock_exists.return_value = True
+        def exists_side_effect(path):
+            if "categories.json" in str(path):
+                return True
+            if "maps_cache_" in str(path):
+                return True
+            return False
+        mock_exists.side_effect = exists_side_effect
         
         mock_file = MagicMock()
+        import io
+        def open_side_effect(path, *args, **kwargs):
+            if "categories.json" in str(path):
+                return io.open(path, *args, **kwargs)
+            return mock_file
+        mock_open.side_effect = open_side_effect
+
         mock_file.__enter__.return_value.read.return_value = json.dumps([
             {
                 "id": "place1",
@@ -219,7 +232,6 @@ class TestAgentScripts(unittest.IsolatedAsyncioTestCase):
                 "sourceUrl": "https://www.google.com/maps/place/?q=place_id:place2"
             }
         ])
-        mock_open.return_value = mock_file
 
         sys.argv = ["agent_maps_fetch.py", "--city", "SYDNEY", "--category", "RESTAURANT", "--limit", "1", "--offset", "0"]
         
@@ -243,7 +255,19 @@ class TestAgentScripts(unittest.IsolatedAsyncioTestCase):
         """Tests that agent_maps_fetch.py fetches live on cache miss and writes cache."""
         import agent_maps_fetch
 
-        mock_exists.return_value = False
+        def exists_side_effect(path):
+            if "categories.json" in str(path):
+                return True
+            return False
+        mock_exists.side_effect = exists_side_effect
+        
+        mock_file = MagicMock()
+        import io
+        def open_side_effect(path, *args, **kwargs):
+            if "categories.json" in str(path):
+                return io.open(path, *args, **kwargs)
+            return mock_file
+        mock_open.side_effect = open_side_effect
         
         mock_response = MagicMock()
         mock_response.status_code = 200
@@ -273,9 +297,6 @@ class TestAgentScripts(unittest.IsolatedAsyncioTestCase):
             ]
         }
         mock_post.return_value = mock_response
-
-        mock_file = MagicMock()
-        mock_open.return_value = mock_file
 
         sys.argv = ["agent_maps_fetch.py", "--city", "SYDNEY", "--category", "RESTAURANT", "--limit", "10", "--offset", "0"]
         
@@ -923,7 +944,11 @@ class TestAgentScripts(unittest.IsolatedAsyncioTestCase):
         """Tests that agent_maps_fetch.py supports SERVICES category and returns mock data offline."""
         import agent_maps_fetch
 
-        mock_exists.return_value = False
+        def exists_side_effect(path):
+            if "categories.json" in str(path):
+                return True
+            return False
+        mock_exists.side_effect = exists_side_effect
         sys.argv = ["agent_maps_fetch.py", "--city", "SYDNEY", "--category", "SERVICES", "--limit", "10", "--offset", "0"]
         
         await agent_maps_fetch.main()
@@ -1080,5 +1105,93 @@ class TestAgentScripts(unittest.IsolatedAsyncioTestCase):
                 "listingId": "new-999"
             }
         )
+
+    @patch("os.path.exists")
+    def test_maps_fetch_categories_file_missing(self, mock_exists: MagicMock) -> None:
+        """Tests that agent_maps_fetch.load_valid_categories raises FileNotFoundError when category file is missing."""
+        import agent_maps_fetch
+        mock_exists.return_value = False
+        with self.assertRaises(FileNotFoundError):
+            agent_maps_fetch.load_valid_categories()
+
+    @patch("os.path.exists")
+    async def test_graphql_push_categories_file_missing(self, mock_exists: MagicMock) -> None:
+        """Tests that agent_graphql_push.load_valid_categories raises FileNotFoundError when category file is missing."""
+        import agent_graphql_push
+        mock_exists.return_value = False
+        agent_graphql_push._valid_categories_cache = None
+        with self.assertRaises(FileNotFoundError):
+            await agent_graphql_push.load_valid_categories()
+
+    @patch("os.path.exists")
+    @patch("builtins.open")
+    def test_maps_fetch_categories_file_corrupted(self, mock_open: MagicMock, mock_exists: MagicMock) -> None:
+        """Tests that agent_maps_fetch.load_valid_categories raises exception when category file has corrupted JSON."""
+        import agent_maps_fetch
+        mock_exists.return_value = True
+        mock_file = MagicMock()
+        mock_file.read.return_value = "invalid json{"
+        mock_open.return_value.__enter__.return_value = mock_file
+        with self.assertRaises(json.JSONDecodeError):
+            agent_maps_fetch.load_valid_categories()
+
+    @patch("os.path.exists")
+    @patch("builtins.open")
+    async def test_graphql_push_categories_file_corrupted(self, mock_open: MagicMock, mock_exists: MagicMock) -> None:
+        """Tests that agent_graphql_push.load_valid_categories raises exception when category file has corrupted JSON."""
+        import agent_graphql_push
+        mock_exists.return_value = True
+        mock_file = MagicMock()
+        mock_file.read.return_value = "invalid json{"
+        mock_open.return_value.__enter__.return_value = mock_file
+        agent_graphql_push._valid_categories_cache = None
+        with self.assertRaises(json.JSONDecodeError):
+            await agent_graphql_push.load_valid_categories()
+
+    @patch("os.path.exists")
+    @patch("sys.stderr")
+    async def test_graphql_push_main_exits_when_categories_file_missing(self, mock_stderr: MagicMock, mock_exists: MagicMock) -> None:
+        """Tests that agent_graphql_push.py main() exits with code 1 when categories file is missing."""
+        import agent_graphql_push
+        mock_exists.return_value = False
+        agent_graphql_push._valid_categories_cache = None
+        
+        sys.argv = [
+            "agent_graphql_push.py",
+            "--operation",
+            "CreateListing",
+            "--variables",
+            '{"name": "Some Resto", "city": "SYDNEY"}'
+        ]
+        
+        with self.assertRaises(SystemExit) as cm:
+            await agent_graphql_push.main()
+        self.assertEqual(cm.exception.code, 1)
+
+    @patch("os.path.exists")
+    @patch("builtins.open")
+    @patch("sys.stderr")
+    async def test_graphql_push_main_exits_when_categories_file_corrupted(self, mock_stderr: MagicMock, mock_open: MagicMock, mock_exists: MagicMock) -> None:
+        """Tests that agent_graphql_push.py main() exits with code 1 when categories file is corrupted."""
+        import agent_graphql_push
+        mock_exists.return_value = True
+        mock_file = MagicMock()
+        mock_file.read.return_value = "invalid json{"
+        mock_open.return_value.__enter__.return_value = mock_file
+        agent_graphql_push._valid_categories_cache = None
+        
+        sys.argv = [
+            "agent_graphql_push.py",
+            "--operation",
+            "CreateListing",
+            "--variables",
+            '{"name": "Some Resto", "city": "SYDNEY"}'
+        ]
+        
+        with self.assertRaises(SystemExit) as cm:
+            await agent_graphql_push.main()
+        self.assertEqual(cm.exception.code, 1)
+
+
 
 

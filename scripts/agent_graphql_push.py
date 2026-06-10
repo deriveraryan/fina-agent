@@ -21,25 +21,21 @@ from features.shared.observability import BackendObservability
 _valid_categories_cache: set[str] | None = None
 
 async def load_valid_categories(trace_id: str | None = None) -> set[str]:
-    """Loads valid categories from the database, defaulting to standard set if loading fails."""
+    """Loads valid categories from data/categories.json, failing fast if loading fails."""
     global _valid_categories_cache
     if _valid_categories_cache is not None:
         return _valid_categories_cache
 
-    default_categories = {"RESTAURANT", "CAFE", "SHOP", "CHURCH", "GOVERNMENT", "COMMUNITY", "SERVICES"}
-    try:
-        res = await execute_graphql_operation("ListCategories", {})
-        categories_data = res.get("data", {}).get("categories", [])
-        if categories_data:
-            _valid_categories_cache = {cat["id"].upper() for cat in categories_data if cat.get("isActive")}
-            return _valid_categories_cache
-        else:
-            _valid_categories_cache = default_categories
-            return _valid_categories_cache
-    except Exception as exc:
-        BackendObservability.warning(f"Failed to load categories from database: {exc}. Using default categories.", conversation_id=trace_id)
-        _valid_categories_cache = default_categories
-        return _valid_categories_cache
+    path = os.path.abspath(os.path.join(os.path.dirname(__file__), "../data/categories.json"))
+    if not os.path.exists(path):
+        raise FileNotFoundError(f"Canonical category file not found at: {path}")
+    with open(path, "r") as f:
+        data = json.load(f)
+    if not isinstance(data, dict):
+        raise ValueError(f"Category file at {path} must be a JSON object mapping category keys.")
+    _valid_categories_cache = {key.strip().upper() for key in data.keys() if key}
+    return _valid_categories_cache
+
 
 async def process_single_item(operation: str, item_dict: dict, trace_id: str, generate_embeddings: bool = False) -> dict:
     fb_followers = item_dict.get("facebookFollowers")
@@ -302,6 +298,13 @@ async def main() -> None:
         vars_parsed = json.loads(raw_variables)
     except Exception as e:
         BackendObservability.fatal(f"Error reading/parsing variables: {e}", exception=e, conversation_id=args.trace_id)
+        sys.exit(1)
+
+    # Pre-load/verify category file at startup to fail-fast on configuration/environment errors
+    try:
+        await load_valid_categories(args.trace_id)
+    except Exception as e:
+        BackendObservability.fatal(f"Failed to load canonical category definitions: {e}", exception=e, conversation_id=args.trace_id)
         sys.exit(1)
 
     is_bulk = isinstance(vars_parsed, list)
