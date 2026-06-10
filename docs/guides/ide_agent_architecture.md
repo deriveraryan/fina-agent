@@ -78,19 +78,20 @@ flowchart TD
     CheckHasMoreSocial -->|Yes| FinishSocial(["Web Discovery Completed"])
 
     %% ════════ 3. ENRICH LISTING SOCIALS FINDER FLOW (BACKFILL) ════════
-    InvokeEnrichListingSocialsFinder --> ExecGetMissingSocial["Execute: python3 scripts/agent_fetch_targets.py<br>--type missing-social"]
+    InvokeEnrichListingSocialsFinder --> ExecGetMissingSocial["Execute: python3 scripts/agent_fetch_targets.py --type missing-social<br>--city C > tmp/missing_socials_targets.json"]
     
     subgraph agent_fetch_missing_social["Inside scripts/agent_fetch_targets.py"]
         DBQueryMissingSocial[("PostgreSQL Database<br>(ListListingsMissingSocial)")]
-        ReturnMissingSocial["Returns JSON list of Listings missing URLs"]
+        ReturnMissingSocial["Writes JSON list of Listings missing URLs<br>to tmp/missing_socials_targets.json"]
     end
     
     ExecGetMissingSocial --> DBQueryMissingSocial
     DBQueryMissingSocial -.-> ReturnMissingSocial
     
-    ReturnMissingSocial --> EnrichLoop{"For each Listing"}
+    ReturnMissingSocial --> ReadTargets["Read target list from tmp/missing_socials_targets.json"]
+    ReadTargets --> EnrichLoop{"For each Listing"}
     EnrichLoop --> SearchWeb["Subagent uses web search<br>Finds official Facebook/Instagram"]
-    SearchWeb --> VerifySocial["Verifies pages match business"]
+    SearchWeb --> VerifySocial["Verifies pages match business<br>(inspects visible text/selectors only)"]
     
     VerifySocial --> ExecUpdateSocial["Execute: python3 scripts/agent_graphql_push.py<br>--operation UpdateListingSocialUrls"]
     subgraph agent_graphql_push_update["Inside scripts/agent_graphql_push.py"]
@@ -201,8 +202,10 @@ This subagent actively searches Facebook and Instagram for Filipino community or
 
 ### 3. The `fina_enrich_listing_socials_finder` Subagent (Missing Socials Finder)
 This subagent focuses purely on completing existing directory entries:
-*   **Targeting**: Uses `agent_fetch_targets.py --type missing-social` to query the database for existing listings that lack Facebook or Instagram URLs.
-*   **Web Search**: Uses LLM-driven web search tools (with site-specific filtering) to find the business's official social media pages, verifies the match, and pushes updates via the `UpdateListingSocialUrls` mutation.
+*   **Single City Target Restriction**: Mandates the `--city <CITY>` parameter during target collection to enforce a single-city focus and prevent context bloat.
+*   **Targeting (No-Bloat)**: Executes `agent_fetch_targets.py --type missing-social --city C > tmp/missing_socials_targets.json` to write targets to disk. The agent reads and inspects the JSON file on disk, avoiding terminal stdout dumps.
+*   **Web Search**: Uses LLM-driven web search tools (with site-specific filtering) to find the business's official social media pages.
+*   **Browser Verification (No-Bloat)**: Uses Chrome DevTools to verify pages, extracting only visible text or target selectors (follower count containers or bio description), rather than loading full raw page HTML into context. Updates are pushed via the `UpdateListingSocialUrls` mutation.
 
 ### 4. The `fina_listing_auditor` Subagent (Category Auditor)
 This subagent audits listing category assignments to ensure they conform to canonical definition specs:

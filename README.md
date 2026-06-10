@@ -78,9 +78,6 @@ By default, the `fina_refresh_listing_maps_finder` caches Google Places search r
     > "Use the `fina_new_listing_web_finder` skill to search the web for RESTAURANT in SYDNEY."
 *   *Missing Socials Finder*:
     > "Use the `fina_enrich_listing_socials_finder` skill to back-fill missing social URLs in SYDNEY."
-    >
-    > **To scan all cities at once:**
-    > "/goal Use the `fina_enrich_listing_socials_finder` skill to back-fill missing social URLs across all major Australian cities (`SYDNEY`, `MELBOURNE`, `BRISBANE`, `PERTH`, `ADELAIDE`, `DARWIN`, `HOBART`, `CANBERRA`, `GOLD COAST`)."
 *   *Category Auditor*:
     > "Use the `fina_listing_auditor` skill to audit and correct categories in SYDNEY."
     >
