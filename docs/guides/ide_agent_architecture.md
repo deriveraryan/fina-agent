@@ -21,26 +21,25 @@ flowchart TD
     SelectSubagent -->|Docs Reviewer| InvokeDocsReviewer["IDE Invokes fina_docs_reviewer Subagent"]
 
     %% ════════ 1. PLACES FINDER FLOW (PLACES) ════════
-    InvokeRefreshListingMapsFinder --> ExecMapsFetch["Execute: python3 scripts/agent_maps_fetch.py<br>--city C --category CAT --limit 10 --offset O"]
+    InvokeRefreshListingMapsFinder --> ExecMapsFetch["Execute: python3 scripts/agent_maps_fetch.py<br>--city C --category CAT --limit 1 --offset 0"]
     
     subgraph agent_maps_fetch["Inside scripts/agent_maps_fetch.py"]
         CheckCache{"Cache File Exists?"}
-        ReadCache["Read results from local cache:<br>.antigravity_saves/maps_cache_*.json"]
-        QueryPlaces["Query Google Places API (New) Text Search<br>Deduplicate & Write Cache"]
-        SliceResults["Slice results by limit & offset"]
-        ReturnPage["Return JSON Page (places, total, has_more)"]
+        ReadCache["Load cache file:<br>.antigravity_saves/maps_cache_*.json"]
+        QueryPlaces["Query Google Places API (New) Text Search<br>Deduplicate & Cache All Results"]
+        ReturnDone["Cache populated successfully"]
     end
     
     ExecMapsFetch --> CheckCache
     CheckCache -->|Yes| ReadCache
     CheckCache -->|No / --refresh| QueryPlaces
-    ReadCache --> SliceResults
-    QueryPlaces --> SliceResults
-    SliceResults --> ReturnPage
+    ReadCache --> ReturnDone
+    QueryPlaces --> ReturnDone
     
-    ReturnPage --> VerifyHeuristic["Subagent uses IDE LLM Context & Reviews<br>to verify authentic Filipino affiliation"]
+    ReturnDone --> ReadSlices["Read cache file in line chunks via view_file"]
+    ReadSlices --> VerifyHeuristic["Subagent evaluates candidate internally<br>(using reviews & text details)"]
     
-    VerifyHeuristic -->|Filipino Affiliated| ExecPushDataMaps["Execute: python3 scripts/agent_graphql_push.py<br>--operation CreateListing"]
+    VerifyHeuristic -->|Filipino Affiliated| ExecPushDataMaps["Execute: python3 scripts/agent_graphql_push.py<br>--operation CreateListing --generate-embeddings"]
     subgraph agent_graphql_push_maps["Inside scripts/agent_graphql_push.py"]
         SyncGeocodeDedupMaps["Sync Geocode & Deduplicate"]
         GQLMutationMaps["GraphQL Mutation<br>(CreateListing or UpdateListing)"]
@@ -50,20 +49,18 @@ flowchart TD
     GQLMutationMaps --> DBTransactionMaps[("PostgreSQL Database")]
     
     DBTransactionMaps --> CheckHasMore
-    
     VerifyHeuristic -->|Not Affiliated| CheckHasMore
     
-    CheckHasMore{"Has More Pages?"}
-    CheckHasMore -->|Yes| NextPage["Increment offset by 10 and query again"]
-    NextPage --> ExecMapsFetch
+    CheckHasMore{"More Candidates in Cache File?"}
+    CheckHasMore -->|Yes| ReadSlices
     CheckHasMore -->|No| FinishMaps(["Maps Refresh/Discovery Completed"])
 
     %% ════════ 2. NEW LISTING WEB FINDER FLOW (SOCIAL) ════════
-    InvokeNewListingWebFinder --> FetchCityListings["Execute: python3 scripts/agent_fetch_targets.py<br>--type city-listings --city C"]
+    InvokeNewListingWebFinder --> FetchCityListings["Execute: python3 scripts/agent_fetch_targets.py --type city-listings<br>--city C > tmp/existing_city_listings.json"]
     FetchCityListings --> NativeWebSearch["Subagent uses Native Web Search<br>(e.g., Google site:facebook.com)"]
-    NativeWebSearch --> FilterKnown["Filters out existing URLs/Names<br>from city-listings context"]
+    NativeWebSearch --> FilterKnown["Filters out existing URLs/Names by<br>inspecting tmp/existing_city_listings.json on disk"]
     
-    FilterKnown --> BrowserVerify["For each NEW candidate URL:<br>Subagent uses chrome-devtools to verify affiliation"]
+    FilterKnown --> BrowserVerify["For each NEW candidate URL:<br>Subagent uses chrome-devtools to inspect page<br>(visible text/selectors only)"]
     BrowserVerify -->|Verified Filipino| ExecPushListing["Execute: python3 scripts/agent_graphql_push.py<br>--operation CreateListing"]
     subgraph agent_graphql_push_listing["Inside scripts/agent_graphql_push.py"]
         SyncGeocodeDedupListing["Sync Geocode & Deduplicate"]
@@ -186,18 +183,20 @@ flowchart TD
 
 ### 1. The `fina_refresh_listing_maps_finder` Subagent (Places Discovery)
 This subagent automates business research on Google Maps:
+*   **Single Target Tuple Restriction**: Strictly targets a single `<CITY>` and `<CATEGORY>` per execution run to prevent context bloat and ensure high reliability.
 *   **Discovery from Google Maps**: Specifically tuned to locate new candidate places using Google Places Text Search.
-*   **Category Validation**: To ensure alignment with [categories.json](file:///Users/ryan/.gemini/antigravity/scratch/fina-agent/data/categories.json), the subagent is instructed to read the canonical category rules at startup. Furthermore, the `--category` argument choices in `scripts/agent_maps_fetch.py` are dynamically loaded from the keys defined in the category specification file.
-*   **Pagination & Context Preservation**: Places API can return dozens of candidates. To prevent bloating the subagent's prompt context, `scripts/agent_maps_fetch.py` chunks findings into pages of 10 (`--limit 10`). The subagent processes 10 items at a time and loops until `has_more` is false.
-*   **Cost Optimization (Local Caching)**: To prevent redundant Places API costs during pagination loops, the fetch script stores all deduplicated candidates in a local cache file: `.antigravity_saves/maps_cache_{city}_{category}.json`. Pagination offsets are served instantly from the local cache. If fresh data is needed, passing `--refresh` forces a live Places API Text Search query.
+*   **Category Validation**: To ensure alignment with [categories.json](file:///Users/ryan/.gemini/antigravity/scratch/fina-agent/data/categories.json), the subagent reads the canonical category rules at startup.
+*   **Context Optimization (Local Cache Reading)**: To prevent bloating the prompt context, the agent runs `scripts/agent_maps_fetch.py` once with `--limit 1` to query and cache all candidates locally to `.antigravity_saves/maps_cache_{city}_{category}.json`. The agent then reads candidates in small line slices (e.g., 200 lines at a time) using the `view_file` tool on disk directly, bypassing repeated CLI runs and terminal-based JSON outputs.
+*   **Cost Optimization (Local Caching)**: To prevent redundant Places API costs, candidates are loaded instantly from the local cache file. If fresh data is needed, passing `--refresh` forces a live Google Places API Text Search query.
 *   **Offline/Mock Testing**: Bypasses the Places API if `GOOGLE_MAPS_API_KEY` is not set or is `"mock-key"`, returning realistic offline listing stubs for local testing.
 
 ### 2. The `fina_new_listing_web_finder` Subagent (Community Scanner)
 This subagent actively searches Facebook and Instagram for Filipino community organisations:
-*   **Context Setup**: Executes `scripts/agent_fetch_targets.py --type city-listings --city C` to load existing listings for deduplication.
-*   **Web Discovery**: Uses the native web search tool (e.g., Google Search with `site:facebook.com` filters) to discover new candidates directly, skipping any already known in the database context.
-*   **Browser Verification**: The subagent uses the `chrome-devtools` skill to inspect candidate pages one-by-one, verifying authentic Filipino affiliation.
-*   **Category Standardization**: The subagent is instructed to view [categories.json](file:///Users/ryan/.gemini/antigravity/scratch/fina-agent/data/categories.json) at the beginning of its run to ensure extracted categories map precisely to canonical definitions before pushing.
+*   **Single Target Tuple Restriction**: Strictly targets a single `<CITY>` and `<CATEGORY>` per execution run to prevent context bloat.
+*   **Context Setup (No-Bloat)**: Executes `scripts/agent_fetch_targets.py --type city-listings --city C > tmp/existing_city_listings.json` to write the deduplication context directly to disk. The agent checks if a candidate exists by searching the file directly on disk, avoiding terminal stdout dumps.
+*   **Web Discovery**: Uses the native web search tool (e.g., Google Search with `site:facebook.com` filters) to discover new candidates for the target `<CATEGORY>` in `<CITY>`, skipping any already known in the database context.
+*   **Browser Verification (No-Bloat)**: The subagent uses the `chrome-devtools` skill to inspect candidate pages, extracting only visible text or target DOM selectors (such as the follower count element or the bio description), rather than loading full raw page HTML into prompt history.
+*   **Category Standardization**: The subagent is instructed to view [categories.json](file:///Users/ryan/.gemini/antigravity/scratch/fina-agent/data/categories.json) to ensure extracted categories map precisely to canonical definitions before pushing.
 *   **Listing Persistence**: Verified organizations are pushed directly to the `Listing` table using `CreateListing`. For online-only communities (no physical street address), the address is set to the city name with city center coordinates and tagged with `online-community`.
 
 ### 3. The `fina_enrich_listing_socials_finder` Subagent (Missing Socials Finder)

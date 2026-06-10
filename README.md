@@ -67,30 +67,15 @@ You can trigger a manual scan by asking the Antigravity agent directly in the ch
 By default, the `fina_refresh_listing_maps_finder` caches Google Places search results under `.antigravity_saves/` to minimize API costs and prevent prompt bloat. To force a live scan that bypasses the local cache, include terms like **"refresh"**, **"bypassing cache"**, or **"live scan"** in your prompt (which instructs the agent to run the underlying fetch script with the `--refresh` flag).
 
 *   *Places Discovery*:
-    > "Use the `fina_refresh_listing_maps_finder` skill to scan Google Places in <CITY> for <CATEGORY>." (e.g., replacement: `DARWIN`, `RESTAURANT`).
+> [!IMPORTANT]
+    > **Single Category & City Target Restriction**: To prevent prompt context window bloat and ensure high reliability, both the `fina_refresh_listing_maps_finder` and `fina_new_listing_web_finder` skills strictly target a **single category** and a **single city** per execution run. Multi-category or multi-city sweeps must be run in separate, independent agent sessions.
     >
-    > **To scan a single city for all categories (using cache):**
-    > "/goal Use the `fina_refresh_listing_maps_finder` skill to scan Google Places for all categories (`RESTAURANT`, `CAFE`, `SHOP`, `CHURCH`, `COMMUNITY`, `GOVERNMENT`, `SERVICES`) in SYDNEY."
+    > "Use the `fina_refresh_listing_maps_finder` skill to scan Google Places in SYDNEY for RESTAURANT."
     >
     > **To force a fresh live scan bypassing the local cache:**
-    > "/goal Use the `fina_refresh_listing_maps_finder` skill to scan Google Places with **refresh** for RESTAURANT in SYDNEY."
-    >
-    > **To scan a single category across all cities:**
-    > "/goal Use the `fina_refresh_listing_maps_finder` skill to scan Google Places for RESTAURANT across all major Australian cities (`SYDNEY`, `MELBOURNE`, `BRISBANE`, `PERTH`, `ADELAIDE`, `DARWIN`, `HOBART`, `CANBERRA`, `GOLD COAST`)."
-    >
-    > **To scan all categories and cities at once:**
-    > "/goal Use the `fina_refresh_listing_maps_finder` skill to scan Google Places for all categories (`RESTAURANT`, `CAFE`, `SHOP`, `CHURCH`, `COMMUNITY`, `GOVERNMENT`, `SERVICES`) across all major Australian cities (`SYDNEY`, `MELBOURNE`, `BRISBANE`, `PERTH`, `ADELAIDE`, `DARWIN`, `HOBART`, `CANBERRA`, `GOLD COAST`)."
+    > "Use the `fina_refresh_listing_maps_finder` skill to scan Google Places with **refresh** for RESTAURANT in SYDNEY."
 *   *Community Scanning*:
-    > "Use the `fina_new_listing_web_finder` skill to search the web for community listings in SYDNEY."
-    >
-    > **To scan a single city for all categories:**
-    > "/goal Use the `fina_new_listing_web_finder` skill to search the web for all categories (`RESTAURANT`, `CAFE`, `SHOP`, `CHURCH`, `COMMUNITY`, `GOVERNMENT`, `SERVICES`) in SYDNEY."
-    >
-    > **To scan a single category across all cities:**
-    > "/goal Use the `fina_new_listing_web_finder` skill to search the web for RESTAURANT across all major Australian cities (`SYDNEY`, `MELBOURNE`, `BRISBANE`, `PERTH`, `ADELAIDE`, `DARWIN`, `HOBART`, `CANBERRA`, `GOLD COAST`)."
-    >
-    > **To scan all categories and cities at once:**
-    > "/goal Use the `fina_new_listing_web_finder` skill to search the web for all categories (`RESTAURANT`, `CAFE`, `SHOP`, `CHURCH`, `COMMUNITY`, `GOVERNMENT`, `SERVICES`) across all major Australian cities (`SYDNEY`, `MELBOURNE`, `BRISBANE`, `PERTH`, `ADELAIDE`, `DARWIN`, `HOBART`, `CANBERRA`, `GOLD COAST`)."
+    > "Use the `fina_new_listing_web_finder` skill to search the web for RESTAURANT in SYDNEY."
 *   *Missing Socials Finder*:
     > "Use the `fina_enrich_listing_socials_finder` skill to back-fill missing social URLs in SYDNEY."
     >
