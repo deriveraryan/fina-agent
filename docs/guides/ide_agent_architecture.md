@@ -1,6 +1,6 @@
 # Fina Native IDE Agent Architecture & Runbook
 
-This reference document provides a comprehensive overview of the design, logic, and operational execution flow of the Fina Native IDE Agent pipeline. It details how the `fina_refresh_listing_maps_finder`, `fina_new_listing_web_finder`, `fina_enrich_listing_socials_finder`, `fina_listing_auditor`, `fina_events_finder`, and `fina_docs_reviewer` subagents interact with the Google Places API and the Firebase SQL Connect database (hosted in the core `fina` repository) to automate discovery tasks without paid Gemini API keys.
+This reference document provides a comprehensive overview of the design, logic, and operational execution flow of the Fina Native IDE Agent pipeline. It details how the `fina_refresh_listing_maps_finder`, `fina_new_listing_web_finder`, `fina_enrich_listing_socials_finder`, `fina_listing_embedder`, `fina_events_finder`, and `fina_docs_reviewer` subagents interact with the Google Places API and the Firebase SQL Connect database (hosted in the core `fina` repository) to automate discovery tasks without paid Gemini API keys.
 
 ---
 
@@ -16,7 +16,7 @@ flowchart TD
     SelectSubagent -->|Refresh Listing Maps Finder| InvokeRefreshListingMapsFinder["IDE Invokes fina_refresh_listing_maps_finder Subagent"]
     SelectSubagent -->|New Listing Web Finder| InvokeNewListingWebFinder["IDE Invokes fina_new_listing_web_finder Subagent"]
     SelectSubagent -->|Enrich Listing Socials Finder| InvokeEnrichListingSocialsFinder["IDE Invokes fina_enrich_listing_socials_finder Subagent"]
-    SelectSubagent -->|Listing Auditor| InvokeListingAuditor["IDE Invokes fina_listing_auditor Subagent"]
+    SelectSubagent -->|Listing Embedder| InvokeListingEmbedder["IDE Invokes fina_listing_embedder Subagent"]
     SelectSubagent -->|Events Finder| InvokeEventsFinder["IDE Invokes fina_events_finder Subagent"]
     SelectSubagent -->|Docs Reviewer| InvokeDocsReviewer["IDE Invokes fina_docs_reviewer Subagent"]
 
@@ -207,12 +207,13 @@ This subagent focuses purely on completing existing directory entries:
 *   **Web Search**: Uses LLM-driven web search tools (with site-specific filtering) to find the business's official social media pages.
 *   **Browser Verification (No-Bloat)**: Uses Chrome DevTools to verify pages, extracting only visible text or target selectors (follower count containers or bio description), rather than loading full raw page HTML into context. Updates are pushed via the `UpdateListingSocialUrls` mutation.
 
-### 4. The `fina_listing_auditor` Subagent (Category Auditor)
-This subagent audits listing category assignments to ensure they conform to canonical definition specs:
-*   **Evaluation against definitions**: Compares existing listing data (name, description, tags, current categories) against rules in `data/categories.json`.
-*   **LLM Validation**: Uses Gemini LLM structured JSON output schema validation to determine if category corrections are needed.
-*   **Recategorization**: Performs recategorizations using the `UpdateListingData` mutation.
-*   **Run Report Consolidation**: Formats and writes run reports under `logs/` directory, merging sequential pagination runs into a single consolidated log.
+### 4. The `fina_listing_embedder` Subagent (Listing Vector Embedder)
+This subagent audits listing records and fills in missing vector embeddings to support semantic search functionality:
+*   **Targeting (No-Bloat)**: Executes `python3 scripts/agent_generate_embeddings.py --city C --trace-id <CONVERSATION_ID> > tmp/fina_listing_embedder_run.json` to process listings missing description embeddings.
+*   **Vector Generation**: Constructs a composite text string from listing fields and generates a 768-dimension vector using the local Google GenAI client.
+*   **Rate-Limit Controls**: Sleeps for 0.2s between updates to stay within API thresholds.
+*   **Persistence**: Overwrites/saves vectors in the database using the `UpdateListingData` mutation.
+*   **Run Report Consolidation**: Formats and writes run reports under `logs/` directory.
 
 ### 5. The `fina_events_finder` Subagent (Listing's Events Discoverer)
 This subagent directly crawls the social pages of verified businesses to discover upcoming temporal events, checking for new posts since the last scan date.
@@ -238,7 +239,7 @@ To maintain security and ensure all data mutations pass through the authorized G
 *   `scripts/agent_fetch_targets.py`: Fetches target source URLs, missing-social listings, business-socials, city-listings (for deduplication context), or social-post-trackers (for checking previous event scraper bookmarks) from the database.
 *   `scripts/agent_graphql_push.py`: Pushes verified JSON objects or updates to the backend using GraphQL operations (including `CreateListing`, `UpdateListingSocialUrls`, `CreateEvent`, and `UpsertSocialPostTracker`). It normalizes platform names, dynamically validates and normalizes categories against [categories.json](file:///Users/ryan/.gemini/antigravity/scratch/fina-agent/data/categories.json) (enforcing case-insensitive uppercase normalization and throwing a fatal exit code 1 if invalid), caches loaded categories in module scope to prevent redundant disk reads, and synchronously handles geocoding and deduplication before creating new listings.
 *   `scripts/agent_maps_fetch.py`: Searches Google Places (New) Text Search with caching and pagination.
-*   `scripts/agent_audit_listings.py`: Evaluates, validates, and recategorizes business categories against canonical JSON specs.
+*   `scripts/agent_generate_embeddings.py`: Queries listings missing vector embeddings, generates 768-dimension vectors, and updates them via the GraphQL push client.
 
 ### 8. Synchronous Geocoding & Deduplication
 To simplify the architecture and reduce cloud function dependencies, heavy transactional logic is handled synchronously by `agent_graphql_push.py` before inserting data into the database:
@@ -249,4 +250,4 @@ To simplify the architecture and reduce cloud function dependencies, heavy trans
 
 ## 💻 Operational Runbook
 
-For instructions on how to trigger or schedule the `fina_refresh_listing_maps_finder`, `fina_new_listing_web_finder`, `fina_enrich_listing_socials_finder`, `fina_listing_auditor`, `fina_events_finder`, and `fina_docs_reviewer` subagents, refer to the Operational Guide in the main repository `README.md`.
+For instructions on how to trigger or schedule the `fina_refresh_listing_maps_finder`, `fina_new_listing_web_finder`, `fina_enrich_listing_socials_finder`, `fina_listing_embedder`, `fina_events_finder`, and `fina_docs_reviewer` subagents, refer to the Operational Guide in the main repository `README.md`.

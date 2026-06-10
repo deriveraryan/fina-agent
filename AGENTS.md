@@ -16,11 +16,12 @@ flowchart TD
     AgentSelect -->|fina_enrich_listing_socials_finder| SocialsFlow["Missing Socials Enrichment"]
     AgentSelect -->|fina_events_finder| EventsFlow["Upcoming Events Scraper"]
     AgentSelect -->|fina_new_listing_web_finder| CommFlow["Social Community Discovery"]
+    AgentSelect -->|fina_listing_embedder| EmbedFlow["Vector Embedding Backfill"]
 
     %% Shared logic
-    PlacesFlow & SocialsFlow & EventsFlow & CommFlow --> PythonCLI["Execute Python CLI Scripts"]
+    PlacesFlow & SocialsFlow & EventsFlow & CommFlow & EmbedFlow --> PythonCLI["Execute Python CLI Scripts"]
     PythonCLI --> Verification{"Authenticity Heuristic / Web Verification"}
-    Verification -->|Verified| GQLPush["Execute agent_graphql_push.py"]
+    Verification -->|Verified| GQLPush["Execute agent_graphql_push.py / agent_generate_embeddings.py"]
     GQLPush --> PostgreSQL[(PostgreSQL Database)]
 ```
 
@@ -59,14 +60,15 @@ Here is the registry of the 6 specialized Antigravity subagents:
     3. Verifies that matches correspond to the business details using Chrome DevTools (selectors/visible text only).
     4. Enriches listings using the `UpdateListingSocialUrls` mutation with validation self-correction on failure.
 
-### 4. `fina_listing_auditor`
-*   **Role**: Audits listing category assignments against definitions in `data/categories.json`.
-*   **CLI Trigger**: `python3 scripts/agent_audit_listings.py --city <CITY> --limit 10 --offset <OFFSET>`
+### 4. `fina_listing_embedder`
+*   **Role**: Generates and updates description vector embeddings for listings missing them. Strictly targets a single city per run.
+*   **CLI Trigger**: `python3 scripts/agent_generate_embeddings.py --city <CITY> --trace-id <CONVERSATION_ID> --limit <LIMIT> > tmp/fina_listing_embedder_run.json`
 *   **Logic**:
-    1. Fetches listings slice for a city using the fetch script.
-    2. Compares name, description, tags, and categories against rules in `data/categories.json`.
-    3. Proposes corrections and updates listings using the `UpdateListingData` mutation.
-    4. Generates audit run reports under `logs/`.
+    1. Fetches listings lacking embeddings for a city using `ListListingsMissingEmbedding`.
+    2. Constructs a composite description string for each listing.
+    3. Calls the local GenAI embedding function to generate a 768-dimension vector.
+    4. Pushes the updated vector to the database via the `UpdateListingData` mutation (sleeping 0.2s between calls to prevent rate limits).
+    5. Outputs a summary report under `logs/`.
 
 ### 5. `fina_events_finder`
 *   **Role**: Crawls social media pages of verified businesses to discover upcoming temporal events. Strictly targets a single city per run.
@@ -116,9 +118,9 @@ pip install -r requirements.txt
   # Run once to populate cache under .antigravity_saves/maps_cache_{city}_{category}.json
   python3 scripts/agent_maps_fetch.py --city <CITY> --category <CATEGORY> --limit 1 --offset 0 --trace-id <CONVERSATION_ID>
   ```
-- **Listing Audit Fetch**:
+- **Listing Embeddings Generation**:
   ```bash
-  python3 scripts/agent_audit_listings.py --city <CITY> --limit 10 --offset <OFFSET> --trace-id <CONVERSATION_ID>
+  python3 scripts/agent_generate_embeddings.py --city <CITY> --trace-id <CONVERSATION_ID> --limit <LIMIT> > tmp/fina_listing_embedder_run.json
   ```
 - **GraphQL Push**:
   ```bash

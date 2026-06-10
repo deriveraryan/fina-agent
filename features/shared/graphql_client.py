@@ -44,6 +44,7 @@ async def execute_graphql_operation(
     queries = {
         "ListListings",
         "ListCityListings",
+        "ListListingsMissingEmbedding",
         "GetListing",
         "ListUpcomingEvents",
         "GetEvent",

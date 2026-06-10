@@ -54,7 +54,7 @@ You can trigger these discovery scans manually through the Antigravity Chat UI o
 * **`fina_refresh_listing_maps_finder`**: Queries Google Places Text Search.
 * **`fina_new_listing_web_finder`**: Searches social platforms for Filipino community pages.
 * **`fina_enrich_listing_socials_finder`**: Enriches existing listings with missing Facebook/Instagram URLs.
-* **`fina_listing_auditor`**: Audits and corrects category classifications using canonical definitions and LLM validation.
+* **`fina_listing_embedder`**: Audits and generates vector description embeddings for listings missing them.
 * **`fina_events_finder`**: Crawls business social media pages to harvest upcoming events.
 * **`fina_docs_reviewer`**: Audits repository documentation files for any gaps or discrepancies against the current codebase.
 
@@ -78,11 +78,11 @@ By default, the `fina_refresh_listing_maps_finder` caches Google Places search r
     > "Use the `fina_new_listing_web_finder` skill to search the web for RESTAURANT in SYDNEY."
 *   *Missing Socials Finder*:
     > "Use the `fina_enrich_listing_socials_finder` skill to back-fill missing social URLs in SYDNEY."
-*   *Category Auditor*:
-    > "Use the `fina_listing_auditor` skill to audit and correct categories in SYDNEY."
+*   *Listing Embedder*:
+    > "Use the `fina_listing_embedder` skill to generate missing description vector embeddings in SYDNEY."
     >
-    > **To run a dry-run audit without database writes:**
-    > "Use the `fina_listing_auditor` skill in dry-run mode to audit categories in SYDNEY."
+    > **To process only a limited number of listings:**
+    > "Use the `fina_listing_embedder` skill to generate vector embeddings in SYDNEY with a limit of 10."
 *   *Events Finder*:
     > **Single City Target Restriction**: To prevent prompt context window bloat and ensure high reliability, the `fina_events_finder` skill strictly targets a **single city** per execution run. Multi-city sweeps must be run in separate, independent agent sessions.
     >
@@ -93,11 +93,10 @@ By default, the `fina_refresh_listing_maps_finder` caches Google Places search r
 ### 3. Running Scripts via CLI
 You can execute the underlying discovery and database push scripts directly in your shell.
 
-*   **Listing Category Auditor**:
-    Note: The underlying Python CLI script only retrieves listing data. Category validation and dry-run/push choices are made at the agent workflow level.
+*   **Listing Vector Embedding Generator**:
     ```bash
-    # Fetch listings for audit review
-    python3 scripts/agent_audit_listings.py --city SYDNEY --limit 10 --offset 0 --trace-id <CONVERSATION_ID>
+    # Generate and back-fill description embeddings for listings missing them
+    python3 scripts/agent_generate_embeddings.py --city SYDNEY --limit 10 --trace-id <CONVERSATION_ID>
     ```
 *   **Google Places Fetch (with `--refresh` to bypass local cache and query live API)**:
     ```bash
@@ -130,9 +129,9 @@ You can schedule the agents to run periodic background scans using the `/schedul
     ```bash
     /schedule CronExpression="0 0 * * *" Prompt="Use the fina_new_listing_web_finder skill to scan for events and listings across all cities."
     ```
-*   *Category Audit Schedule*:
+*   *Listing Embedding Generator Schedule*:
     ```bash
-    /schedule CronExpression="0 18 * * *" Prompt="Use the fina_listing_auditor skill to audit and correct categories in SYDNEY."
+    /schedule CronExpression="0 18 * * *" Prompt="Use the fina_listing_embedder skill to generate missing description vector embeddings in SYDNEY."
     ```
 *   *Documentation Review Schedule*:
     ```bash

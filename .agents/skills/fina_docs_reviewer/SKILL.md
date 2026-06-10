@@ -19,6 +19,6 @@ Follow these steps exactly:
    - Verify that the CLI usage examples in `README.md` and `docs/` exactly match these arguments (specifically checking for options like `--dry-run`, `--refresh`, `--trace-id`, etc.).
 2. Verify that the agent roles and workflows described in `AGENTS.md` and `docs/guides/ide_agent_architecture.md` are aligned:
    - Check if any documented CLI triggers refer to scripts that do not exist (e.g. `agent_social_search.py`).
-   - Check if any newly registered agents or skills (like `fina_listing_auditor` or `fina_docs_reviewer` itself) are missing from the registries or the architecture diagram.
+   - Check if any newly registered agents or skills (like `fina_listing_embedder` or `fina_docs_reviewer` itself) are missing from the registries or the architecture diagram.
 3. Review the list of categories in `data/categories.json` and ensure that all documentation referring to category choices matches this list.
 4. If any gaps are found, perform the necessary documentation updates.

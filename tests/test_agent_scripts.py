@@ -1192,6 +1192,103 @@ class TestAgentScripts(unittest.IsolatedAsyncioTestCase):
             await agent_graphql_push.main()
         self.assertEqual(cm.exception.code, 1)
 
+    @patch("agent_generate_embeddings.execute_graphql_operation", new_callable=AsyncMock)
+    @patch("sys.stdout")
+    async def test_agent_generate_embeddings_success(self, mock_stdout: MagicMock, mock_execute: AsyncMock) -> None:
+        """Tests that agent_generate_embeddings.py generates embeddings and updates listings."""
+        import agent_generate_embeddings
+
+        sys.argv = ["agent_generate_embeddings.py", "--city", "SYDNEY", "--trace-id", "trace-999"]
+        
+        mock_execute.side_effect = [
+            # First call: Query ListListingsMissingEmbedding
+            {
+                "data": {
+                    "listings": [
+                        {"id": "listing-1", "name": "Manila Eats", "categories": ["RESTAURANT"], "description": "Pinoy diner"},
+                        {"id": "listing-2", "name": "Filipino Services", "categories": ["SERVICES"], "description": ""}
+                    ]
+                }
+            },
+            # Second call: UpdateListingData for listing-1
+            {"data": {"updateListing": {"id": "listing-1"}}},
+            # Third call: UpdateListingData for listing-2
+            {"data": {"updateListing": {"id": "listing-2"}}}
+        ]
+
+        await agent_generate_embeddings.main()
+
+        # Check that ListListingsMissingEmbedding was called with correct variables
+        mock_execute.assert_any_call("ListListingsMissingEmbedding", {"city": "SYDNEY"})
+        
+        # Check UpdateListingData calls
+        mock_execute.assert_any_call("UpdateListingData", {
+            "id": "listing-1",
+            "descriptionEmbedding": [0.1] * 768
+        })
+        mock_execute.assert_any_call("UpdateListingData", {
+            "id": "listing-2",
+            "descriptionEmbedding": [0.1] * 768
+        })
+
+        # Check stdout summary
+        written_calls = [call.args[0] for call in mock_stdout.write.call_args_list]
+        combined_output = "".join(written_calls)
+        parsed = json.loads(combined_output)
+        self.assertEqual(parsed["listings_missing"], 2)
+        self.assertEqual(parsed["listings_processed"], 2)
+        self.assertEqual(parsed["embeddings_generated"], 2)
+
+    @patch("agent_generate_embeddings.execute_graphql_operation", new_callable=AsyncMock)
+    @patch("sys.stdout")
+    async def test_agent_generate_embeddings_limit(self, mock_stdout: MagicMock, mock_execute: AsyncMock) -> None:
+        """Tests that agent_generate_embeddings.py respects --limit flag."""
+        import agent_generate_embeddings
+
+        sys.argv = ["agent_generate_embeddings.py", "--city", "SYDNEY", "--limit", "1", "--trace-id", "trace-999"]
+        
+        mock_execute.side_effect = [
+            # First call: Query ListListingsMissingEmbedding
+            {
+                "data": {
+                    "listings": [
+                        {"id": "listing-1", "name": "Manila Eats", "categories": ["RESTAURANT"], "description": "Pinoy diner"},
+                        {"id": "listing-2", "name": "Filipino Services", "categories": ["SERVICES"], "description": ""}
+                    ]
+                }
+            },
+            # Second call: UpdateListingData for listing-1
+            {"data": {"updateListing": {"id": "listing-1"}}}
+        ]
+
+        await agent_generate_embeddings.main()
+
+        # Check that ListListingsMissingEmbedding was called
+        mock_execute.assert_any_call("ListListingsMissingEmbedding", {"city": "SYDNEY"})
+        
+        # Check UpdateListingData only called for listing-1
+        mock_execute.assert_any_call("UpdateListingData", {
+            "id": "listing-1",
+            "descriptionEmbedding": [0.1] * 768
+        })
+        # listing-2 should NOT be updated
+        for call_args in mock_execute.call_args_list:
+            args = call_args.args
+            kwargs = call_args.kwargs
+            op = kwargs.get("operation_name") or (args[0] if len(args) > 0 else None)
+            vars_ = kwargs.get("variables") or (args[1] if len(args) > 1 else None)
+            if op == "UpdateListingData" and vars_ and vars_.get("id") == "listing-2":
+                self.fail("UpdateListingData called for listing-2 despite limit=1")
+
+        # Check stdout summary
+        written_calls = [call.args[0] for call in mock_stdout.write.call_args_list]
+        combined_output = "".join(written_calls)
+        parsed = json.loads(combined_output)
+        self.assertEqual(parsed["listings_missing"], 2)
+        self.assertEqual(parsed["listings_processed"], 1)
+        self.assertEqual(parsed["embeddings_generated"], 1)
+
+
 
 
 
