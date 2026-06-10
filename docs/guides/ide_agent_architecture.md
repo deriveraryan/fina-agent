@@ -184,7 +184,7 @@ flowchart TD
 ### 1. The `fina_refresh_listing_maps_finder` Subagent (Places Discovery)
 This subagent automates business research on Google Maps:
 *   **Single Target Tuple Restriction**: Strictly targets a single `<CITY>` and `<CATEGORY>` per execution run to prevent context bloat and ensure high reliability.
-*   **Discovery from Google Maps**: Specifically tuned to locate new candidate places using Google Places Text Search.
+*   **Discovery from Google Maps**: Specifically tuned to locate new candidate places using Google Places Text Search. It begins with a city-wide search and then automatically iterates through the top suburbs specified for that city in `data/top_suburbs_per_city.json` to build a thorough local cache.
 *   **Category Validation**: To ensure alignment with [categories.json](file:///Users/ryan/.gemini/antigravity/scratch/fina-agent/data/categories.json), the subagent reads the canonical category rules at startup.
 *   **Context Optimization (Local Cache Reading)**: To prevent bloating the prompt context, the agent runs `scripts/agent_maps_fetch.py` once with `--limit 1` to query and cache all candidates locally to `.antigravity_saves/maps_cache_{city}_{category}.json`. The agent then reads candidates in small line slices (e.g., 200 lines at a time) using the `view_file` tool on disk directly, bypassing repeated CLI runs and terminal-based JSON outputs.
 *   **Cost Optimization (Local Caching)**: To prevent redundant Places API costs, candidates are loaded instantly from the local cache file. If fresh data is needed, passing `--refresh` forces a live Google Places API Text Search query.
