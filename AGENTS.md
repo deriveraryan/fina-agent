@@ -40,25 +40,7 @@ Here is the registry of the 6 specialized Antigravity subagents:
     4. Evaluates place reviews internally to verify authentic Filipino affiliation.
     5. Pushes verified listings using the `CreateListing` mutation.
 
-### 2. `fina_enrich_listing_socials_finder`
-*   **Role**: Enriches existing database listings with missing Facebook and Instagram URLs.
-*   **CLI Trigger**: `python3 scripts/agent_fetch_targets.py --type missing-social --city <CITY>`
-*   **Logic**:
-    1. Fetches seed listings missing social links.
-    2. Searches the web using LLM-driven site filters.
-    3. Verifies that matches correspond to the business details (location, name).
-    4. Enriches listings using the `UpdateListingSocialUrls` mutation.
-
-### 3. `fina_events_finder`
-*   **Role**: Crawls social media pages of verified businesses to discover upcoming temporal events.
-*   **CLI Trigger**: `python3 scripts/agent_fetch_targets.py --type business-socials --city <CITY>`
-*   **Logic**:
-    1. Retrieves verified social media URLs for a city.
-    2. Uses native browser tools to scan the pages for upcoming events.
-    3. Standardizes dates and structures payloads.
-    4. Pushes discovered events using the `CreateEvent` mutation.
-
-### 4. `fina_new_listing_web_finder`
+### 2. `fina_new_listing_web_finder`
 *   **Role**: Discovers new listing candidates on Facebook, Instagram, and web platforms.
 *   **Trigger**: No single CLI script is used. Uses native web search and Chrome DevTools browser verification step-by-step.
 *   **Logic**:
@@ -67,7 +49,16 @@ Here is the registry of the 6 specialized Antigravity subagents:
     3. Controls Chrome DevTools to navigate to candidate pages and inspect details/followers.
     4. Automatically filters duplicates and creates verified listings via `agent_graphql_push.py --operation CreateListing`.
 
-### 5. `fina_listing_auditor`
+### 3. `fina_enrich_listing_socials_finder`
+*   **Role**: Enriches existing database listings with missing Facebook and Instagram URLs.
+*   **CLI Trigger**: `python3 scripts/agent_fetch_targets.py --type missing-social --city <CITY>`
+*   **Logic**:
+    1. Fetches seed listings missing social links.
+    2. Searches the web using LLM-driven site filters.
+    3. Verifies that matches correspond to the business details (location, name).
+    4. Enriches listings using the `UpdateListingSocialUrls` mutation.
+
+### 4. `fina_listing_auditor`
 *   **Role**: Audits listing category assignments against definitions in `data/categories.json`.
 *   **CLI Trigger**: `python3 scripts/agent_audit_listings.py --city <CITY> --limit 10 --offset <OFFSET>`
 *   **Logic**:
@@ -75,6 +66,15 @@ Here is the registry of the 6 specialized Antigravity subagents:
     2. Compares name, description, tags, and categories against rules in `data/categories.json`.
     3. Proposes corrections and updates listings using the `UpdateListingData` mutation.
     4. Generates audit run reports under `logs/`.
+
+### 5. `fina_events_finder`
+*   **Role**: Crawls social media pages of verified businesses to discover upcoming temporal events.
+*   **CLI Trigger**: `python3 scripts/agent_fetch_targets.py --type business-socials --city <CITY>`
+*   **Logic**:
+    1. Retrieves verified social media URLs for a city.
+    2. Uses native browser tools to scan the pages for upcoming events.
+    3. Standardizes dates and structures payloads.
+    4. Pushes discovered events using the `CreateEvent` mutation.
 
 ### 6. `fina_docs_reviewer`
 *   **Role**: Reviews architecture guides, READMEs, and configurations for gaps and alignment.

@@ -52,10 +52,10 @@ You can trigger these discovery scans manually through the Antigravity Chat UI o
 ### 1. The Scraper Agents
 
 * **`fina_refresh_listing_maps_finder`**: Queries Google Places Text Search.
-* **`fina_enrich_listing_socials_finder`**: Enriches existing listings with missing Facebook/Instagram URLs.
-* **`fina_events_finder`**: Crawls business social media pages to harvest upcoming events.
 * **`fina_new_listing_web_finder`**: Searches social platforms for Filipino community pages.
+* **`fina_enrich_listing_socials_finder`**: Enriches existing listings with missing Facebook/Instagram URLs.
 * **`fina_listing_auditor`**: Audits and corrects category classifications using canonical definitions and LLM validation.
+* **`fina_events_finder`**: Crawls business social media pages to harvest upcoming events.
 * **`fina_docs_reviewer`**: Audits repository documentation files for any gaps or discrepancies against the current codebase.
 
 For a detailed flow diagram of how these agents operate, see the [Native IDE Agent Architecture Guide](docs/guides/ide_agent_architecture.md).
@@ -80,16 +80,6 @@ By default, the `fina_refresh_listing_maps_finder` caches Google Places search r
     >
     > **To scan all categories and cities at once:**
     > "/goal Use the `fina_refresh_listing_maps_finder` skill to scan Google Places for all categories (`RESTAURANT`, `CAFE`, `SHOP`, `CHURCH`, `COMMUNITY`, `GOVERNMENT`, `SERVICES`) across all major Australian cities (`SYDNEY`, `MELBOURNE`, `BRISBANE`, `PERTH`, `ADELAIDE`, `DARWIN`, `HOBART`, `CANBERRA`, `GOLD COAST`)."
-*   *Missing Socials Finder*:
-    > "Use the `fina_enrich_listing_socials_finder` skill to back-fill missing social URLs in SYDNEY."
-    >
-    > **To scan all cities at once:**
-    > "/goal Use the `fina_enrich_listing_socials_finder` skill to back-fill missing social URLs across all major Australian cities (`SYDNEY`, `MELBOURNE`, `BRISBANE`, `PERTH`, `ADELAIDE`, `DARWIN`, `HOBART`, `CANBERRA`, `GOLD COAST`)."
-*   *Events Finder*:
-    > "Use the `fina_events_finder` skill to discover events in MELBOURNE."
-    >
-    > **To scan all cities at once:**
-    > "/goal Use the `fina_events_finder` skill to discover events across all major Australian cities (`SYDNEY`, `MELBOURNE`, `BRISBANE`, `PERTH`, `ADELAIDE`, `DARWIN`, `HOBART`, `CANBERRA`, `GOLD COAST`)."
 *   *Community Scanning*:
     > "Use the `fina_new_listing_web_finder` skill to search the web for community listings in SYDNEY."
     >
@@ -101,11 +91,21 @@ By default, the `fina_refresh_listing_maps_finder` caches Google Places search r
     >
     > **To scan all categories and cities at once:**
     > "/goal Use the `fina_new_listing_web_finder` skill to search the web for all categories (`RESTAURANT`, `CAFE`, `SHOP`, `CHURCH`, `COMMUNITY`, `GOVERNMENT`, `SERVICES`) across all major Australian cities (`SYDNEY`, `MELBOURNE`, `BRISBANE`, `PERTH`, `ADELAIDE`, `DARWIN`, `HOBART`, `CANBERRA`, `GOLD COAST`)."
+*   *Missing Socials Finder*:
+    > "Use the `fina_enrich_listing_socials_finder` skill to back-fill missing social URLs in SYDNEY."
+    >
+    > **To scan all cities at once:**
+    > "/goal Use the `fina_enrich_listing_socials_finder` skill to back-fill missing social URLs across all major Australian cities (`SYDNEY`, `MELBOURNE`, `BRISBANE`, `PERTH`, `ADELAIDE`, `DARWIN`, `HOBART`, `CANBERRA`, `GOLD COAST`)."
 *   *Category Auditor*:
     > "Use the `fina_listing_auditor` skill to audit and correct categories in SYDNEY."
     >
     > **To run a dry-run audit without database writes:**
     > "Use the `fina_listing_auditor` skill in dry-run mode to audit categories in SYDNEY."
+*   *Events Finder*:
+    > "Use the `fina_events_finder` skill to discover events in MELBOURNE."
+    >
+    > **To scan all cities at once:**
+    > "/goal Use the `fina_events_finder` skill to discover events across all major Australian cities (`SYDNEY`, `MELBOURNE`, `BRISBANE`, `PERTH`, `ADELAIDE`, `DARWIN`, `HOBART`, `CANBERRA`, `GOLD COAST`)."
 *   *Documentation Reviewer*:
     > "Use the `fina_docs_reviewer` skill to review the repository documentation for any gaps."
 

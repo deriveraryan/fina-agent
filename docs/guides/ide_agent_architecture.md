@@ -1,6 +1,6 @@
 # Fina Native IDE Agent Architecture & Runbook
 
-This reference document provides a comprehensive overview of the design, logic, and operational execution flow of the Fina Native IDE Agent pipeline. It details how the `fina_refresh_listing_maps_finder`, `fina_enrich_listing_socials_finder`, `fina_events_finder`, `fina_new_listing_web_finder`, `fina_listing_auditor`, and `fina_docs_reviewer` subagents interact with the Google Places API and the Firebase SQL Connect database (hosted in the core `fina` repository) to automate discovery tasks without paid Gemini API keys.
+This reference document provides a comprehensive overview of the design, logic, and operational execution flow of the Fina Native IDE Agent pipeline. It details how the `fina_refresh_listing_maps_finder`, `fina_new_listing_web_finder`, `fina_enrich_listing_socials_finder`, `fina_listing_auditor`, `fina_events_finder`, and `fina_docs_reviewer` subagents interact with the Google Places API and the Firebase SQL Connect database (hosted in the core `fina` repository) to automate discovery tasks without paid Gemini API keys.
 
 ---
 
@@ -13,10 +13,14 @@ flowchart TD
     %% ─── SCHEDULE OR MANUAL INVOCATION ───
     Start(["Trigger: Manual /schedule or Direct Prompt"]) --> SelectSubagent{"Which Agent Flow?"}
     
-    %% ════════ 1. PLACES FINDER FLOW (PLACES) ════════
     SelectSubagent -->|Refresh Listing Maps Finder| InvokeRefreshListingMapsFinder["IDE Invokes fina_refresh_listing_maps_finder Subagent"]
+    SelectSubagent -->|New Listing Web Finder| InvokeNewListingWebFinder["IDE Invokes fina_new_listing_web_finder Subagent"]
+    SelectSubagent -->|Enrich Listing Socials Finder| InvokeEnrichListingSocialsFinder["IDE Invokes fina_enrich_listing_socials_finder Subagent"]
     SelectSubagent -->|Listing Auditor| InvokeListingAuditor["IDE Invokes fina_listing_auditor Subagent"]
+    SelectSubagent -->|Events Finder| InvokeEventsFinder["IDE Invokes fina_events_finder Subagent"]
     SelectSubagent -->|Docs Reviewer| InvokeDocsReviewer["IDE Invokes fina_docs_reviewer Subagent"]
+
+    %% ════════ 1. PLACES FINDER FLOW (PLACES) ════════
     InvokeRefreshListingMapsFinder --> ExecMapsFetch["Execute: python3 scripts/agent_maps_fetch.py<br>--city C --category CAT --limit 10 --offset O"]
     
     subgraph agent_maps_fetch["Inside scripts/agent_maps_fetch.py"]
@@ -53,9 +57,30 @@ flowchart TD
     CheckHasMore -->|Yes| NextPage["Increment offset by 10 and query again"]
     NextPage --> ExecMapsFetch
     CheckHasMore -->|No| FinishMaps(["Maps Refresh/Discovery Completed"])
-Base
-    %% ════════ 2. MISSING SOCIALS FINDER FLOW (BACKFILL) ════════
-    SelectSubagent -->|Enrich Listing Socials Finder| InvokeEnrichListingSocialsFinder["IDE Invokes fina_enrich_listing_socials_finder Subagent"]
+
+    %% ════════ 2. NEW LISTING WEB FINDER FLOW (SOCIAL) ════════
+    InvokeNewListingWebFinder --> FetchCityListings["Execute: python3 scripts/agent_fetch_targets.py<br>--type city-listings --city C"]
+    FetchCityListings --> NativeWebSearch["Subagent uses Native Web Search<br>(e.g., Google site:facebook.com)"]
+    NativeWebSearch --> FilterKnown["Filters out existing URLs/Names<br>from city-listings context"]
+    
+    FilterKnown --> BrowserVerify["For each NEW candidate URL:<br>Subagent uses chrome-devtools to verify affiliation"]
+    BrowserVerify -->|Verified Filipino| ExecPushListing["Execute: python3 scripts/agent_graphql_push.py<br>--operation CreateListing"]
+    subgraph agent_graphql_push_listing["Inside scripts/agent_graphql_push.py"]
+        SyncGeocodeDedupListing["Sync Geocode & Deduplicate"]
+        GQLMutationListing["GraphQL Mutation<br>(CreateListing or UpdateListing)"]
+    end
+    ExecPushListing --> SyncGeocodeDedupListing
+    SyncGeocodeDedupListing --> GQLMutationListing
+    GQLMutationListing --> DBTransactionListing[("PostgreSQL Database")]
+    
+    DBTransactionListing --> CheckHasMoreSocial
+    BrowserVerify -->|Not Affiliated| CheckHasMoreSocial
+    
+    CheckHasMoreSocial{"Found 10 new listings<br>OR checked 10 pages?"}
+    CheckHasMoreSocial -->|No| NativeWebSearch
+    CheckHasMoreSocial -->|Yes| FinishSocial(["Web Discovery Completed"])
+
+    %% ════════ 3. ENRICH LISTING SOCIALS FINDER FLOW (BACKFILL) ════════
     InvokeEnrichListingSocialsFinder --> ExecGetMissingSocial["Execute: python3 scripts/agent_fetch_targets.py<br>--type missing-social"]
     
     subgraph agent_fetch_missing_social["Inside scripts/agent_fetch_targets.py"]
@@ -80,9 +105,35 @@ Base
     DBTransactionUpdate --> EnrichLoop
     
     EnrichLoop -.->|No more listings| FinishEnrich(["Socials Enrichment Completed"])
+
+    %% ════════ 4. LISTING AUDITOR FLOW (CATEGORY AUDIT) ════════
+    InvokeListingAuditor --> ExecAudit["Execute: python3 scripts/agent_audit_listings.py<br>--city C --limit 10 --offset O"]
     
-    %% ════════ 3. EVENTS FINDER FLOW (BUSINESS PAGES) ════════
-    SelectSubagent -->|Events Finder| InvokeEventsFinder["IDE Invokes fina_events_finder Subagent"]
+    subgraph agent_audit_listings["Inside scripts/agent_audit_listings.py"]
+        QueryCityListings["GraphQL Query: ListCityListings"]
+        QueryCityListings --> DBCityListings[("PostgreSQL Database")]
+        DBCityListings -.-> ReturnAuditPage["Return JSON Page (listings, total, has_more)"]
+    end
+    
+    ExecAudit --> QueryCityListings
+    ReturnAuditPage --> VerifyAuditHeuristic["Subagent checks listing categories<br>against data/categories.json"]
+    
+    VerifyAuditHeuristic -->|Needs Corrections & Not Dry-Run| ExecPushAudit["Execute: python3 scripts/agent_graphql_push.py<br>--operation UpdateListingData"]
+    subgraph agent_graphql_push_audit["Inside scripts/agent_graphql_push.py"]
+        GQLMutationAudit["GraphQL Mutation<br>(UpdateListingData)"]
+    end
+    ExecPushAudit --> GQLMutationAudit
+    GQLMutationAudit --> DBTransactionAudit[("PostgreSQL Database")]
+    
+    DBTransactionAudit --> CheckHasMoreAudit
+    VerifyAuditHeuristic -->|No corrections OR Dry-Run| CheckHasMoreAudit
+    
+    CheckHasMoreAudit{"Has More Listings?"}
+    CheckHasMoreAudit -->|Yes| NextPageAudit["Increment offset by 10 and query again"]
+    NextPageAudit --> ExecAudit
+    CheckHasMoreAudit -->|No| FinishAudit(["Audit Completed"])
+
+    %% ════════ 5. EVENTS FINDER FLOW (BUSINESS PAGES) ════════
     InvokeEventsFinder --> ExecGetBusinessSocial["Execute: python3 scripts/agent_fetch_targets.py<br>--type business-socials --city C"]
     
     subgraph agent_fetch_business_social["Inside scripts/agent_fetch_targets.py"]
@@ -121,56 +172,6 @@ Base
     DBTransactionEvent --> HarvestLoop
     
     HarvestLoop -.->|No more URLs| FinishHarvest(["Events Discovery Completed"])
-    
-    %% ════════ 4. COMMUNITY FINDER FLOW (SOCIAL) ════════
-    SelectSubagent -->|New Listing Web Finder| InvokeNewListingWebFinder["IDE Invokes fina_new_listing_web_finder Subagent"]
-    InvokeNewListingWebFinder --> FetchCityListings["Execute: python3 scripts/agent_fetch_targets.py<br>--type city-listings --city C"]
-    FetchCityListings --> NativeWebSearch["Subagent uses Native Web Search<br>(e.g., Google site:facebook.com)"]
-    NativeWebSearch --> FilterKnown["Filters out existing URLs/Names<br>from city-listings context"]
-    
-    FilterKnown --> BrowserVerify["For each NEW candidate URL:<br>Subagent uses chrome-devtools to verify affiliation"]
-    BrowserVerify -->|Verified Filipino| ExecPushListing["Execute: python3 scripts/agent_graphql_push.py<br>--operation CreateListing"]
-    subgraph agent_graphql_push_listing["Inside scripts/agent_graphql_push.py"]
-        SyncGeocodeDedupListing["Sync Geocode & Deduplicate"]
-        GQLMutationListing["GraphQL Mutation<br>(CreateListing or UpdateListing)"]
-    end
-    ExecPushListing --> SyncGeocodeDedupListing
-    SyncGeocodeDedupListing --> GQLMutationListing
-    GQLMutationListing --> DBTransactionListing[("PostgreSQL Database")]
-    
-    DBTransactionListing --> CheckHasMoreSocial
-    BrowserVerify -->|Not Affiliated| CheckHasMoreSocial
-    
-    CheckHasMoreSocial{"Found 10 new listings<br>OR checked 10 pages?"}
-    CheckHasMoreSocial -->|No| NativeWebSearch
-    CheckHasMoreSocial -->|Yes| FinishSocial(["Web Discovery Completed"])
-
-    %% ════════ 5. LISTING AUDITOR FLOW (CATEGORY AUDIT) ════════
-    InvokeListingAuditor --> ExecAudit["Execute: python3 scripts/agent_audit_listings.py<br>--city C --limit 10 --offset O"]
-    
-    subgraph agent_audit_listings["Inside scripts/agent_audit_listings.py"]
-        QueryCityListings["GraphQL Query: ListCityListings"]
-        QueryCityListings --> DBCityListings[("PostgreSQL Database")]
-        DBCityListings -.-> ReturnAuditPage["Return JSON Page (listings, total, has_more)"]
-    end
-    
-    ExecAudit --> QueryCityListings
-    ReturnAuditPage --> VerifyAuditHeuristic["Subagent checks listing categories<br>against data/categories.json"]
-    
-    VerifyAuditHeuristic -->|Needs Corrections & Not Dry-Run| ExecPushAudit["Execute: python3 scripts/agent_graphql_push.py<br>--operation UpdateListingData"]
-    subgraph agent_graphql_push_audit["Inside scripts/agent_graphql_push.py"]
-        GQLMutationAudit["GraphQL Mutation<br>(UpdateListingData)"]
-    end
-    ExecPushAudit --> GQLMutationAudit
-    GQLMutationAudit --> DBTransactionAudit[("PostgreSQL Database")]
-    
-    DBTransactionAudit --> CheckHasMoreAudit
-    VerifyAuditHeuristic -->|No corrections OR Dry-Run| CheckHasMoreAudit
-    
-    CheckHasMoreAudit{"Has More Listings?"}
-    CheckHasMoreAudit -->|Yes| NextPageAudit["Increment offset by 10 and query again"]
-    NextPageAudit --> ExecAudit
-    CheckHasMoreAudit -->|No| FinishAudit(["Audit Completed"])
 
     %% ════════ 6. DOCUMENTATION REVIEWER FLOW (DOCS AUDIT) ════════
     InvokeDocsReviewer --> VerifyDocs["Subagent audits documentation against codebase"]
@@ -191,12 +192,27 @@ This subagent automates business research on Google Maps:
 *   **Cost Optimization (Local Caching)**: To prevent redundant Places API costs during pagination loops, the fetch script stores all deduplicated candidates in a local cache file: `.antigravity_saves/maps_cache_{city}_{category}.json`. Pagination offsets are served instantly from the local cache. If fresh data is needed, passing `--refresh` forces a live Places API Text Search query.
 *   **Offline/Mock Testing**: Bypasses the Places API if `GOOGLE_MAPS_API_KEY` is not set or is `"mock-key"`, returning realistic offline listing stubs for local testing.
 
-### 2. The `fina_enrich_listing_socials_finder` Subagent (Missing Socials Finder)
+### 2. The `fina_new_listing_web_finder` Subagent (Community Scanner)
+This subagent actively searches Facebook and Instagram for Filipino community organisations:
+*   **Context Setup**: Executes `scripts/agent_fetch_targets.py --type city-listings --city C` to load existing listings for deduplication.
+*   **Web Discovery**: Uses the native web search tool (e.g., Google Search with `site:facebook.com` filters) to discover new candidates directly, skipping any already known in the database context.
+*   **Browser Verification**: The subagent uses the `chrome-devtools` skill to inspect candidate pages one-by-one, verifying authentic Filipino affiliation.
+*   **Category Standardization**: The subagent is instructed to view [categories.json](file:///Users/ryan/.gemini/antigravity/scratch/fina-agent/data/categories.json) at the beginning of its run to ensure extracted categories map precisely to canonical definitions before pushing.
+*   **Listing Persistence**: Verified organizations are pushed directly to the `Listing` table using `CreateListing`. For online-only communities (no physical street address), the address is set to the city name with city center coordinates and tagged with `online-community`.
+
+### 3. The `fina_enrich_listing_socials_finder` Subagent (Missing Socials Finder)
 This subagent focuses purely on completing existing directory entries:
 *   **Targeting**: Uses `agent_fetch_targets.py --type missing-social` to query the database for existing listings that lack Facebook or Instagram URLs.
 *   **Web Search**: Uses LLM-driven web search tools (with site-specific filtering) to find the business's official social media pages, verifies the match, and pushes updates via the `UpdateListingSocialUrls` mutation.
 
-### 3. The `fina_events_finder` Subagent (Listing's Events Discoverer)
+### 4. The `fina_listing_auditor` Subagent (Category Auditor)
+This subagent audits listing category assignments to ensure they conform to canonical definition specs:
+*   **Evaluation against definitions**: Compares existing listing data (name, description, tags, current categories) against rules in `data/categories.json`.
+*   **LLM Validation**: Uses Gemini LLM structured JSON output schema validation to determine if category corrections are needed.
+*   **Recategorization**: Performs recategorizations using the `UpdateListingData` mutation.
+*   **Run Report Consolidation**: Formats and writes run reports under `logs/` directory, merging sequential pagination runs into a single consolidated log.
+
+### 5. The `fina_events_finder` Subagent (Listing's Events Discoverer)
 This subagent directly crawls the social pages of verified businesses to discover upcoming temporal events, checking for new posts since the last scan date.
 *   **Targeting**: Uses `agent_fetch_targets.py --type business-socials --city C` to pull the social URLs of all verified listings in the specified city.
 *   **Bookmark Tracking**: Before scanning, it queries the database via `agent_fetch_targets.py --type social-post-tracker --listing-id L --platform P` to retrieve the `lastPostDate` (bookmark of the most recent post scanned in the previous run).
@@ -208,21 +224,6 @@ This subagent directly crawls the social pages of verified businesses to discove
     1. Upcoming events are pushed via the `CreateEvent` GraphQL mutation.
     2. Follower counts are pushed via the `UpdateListingSocialUrls` GraphQL mutation.
     3. The newest scanned post timestamp is saved as the new bookmark by calling `agent_graphql_push.py --operation UpsertSocialPostTracker --variables '<variables>'` (which upserts the tracking entry in the `SocialPostTracker` table).
-
-### 4. The `fina_new_listing_web_finder` Subagent (Community Scanner)
-This subagent actively searches Facebook and Instagram for Filipino community organisations:
-*   **Context Setup**: Executes `scripts/agent_fetch_targets.py --type city-listings --city C` to load existing listings for deduplication.
-*   **Web Discovery**: Uses the native web search tool (e.g., Google Search with `site:facebook.com` filters) to discover new candidates directly, skipping any already known in the database context.
-*   **Browser Verification**: The subagent uses the `chrome-devtools` skill to inspect candidate pages one-by-one, verifying authentic Filipino affiliation.
-*   **Category Standardization**: The subagent is instructed to view [categories.json](file:///Users/ryan/.gemini/antigravity/scratch/fina-agent/data/categories.json) at the beginning of its run to ensure extracted categories map precisely to canonical definitions before pushing.
-*   **Listing Persistence**: Verified organizations are pushed directly to the `Listing` table using `CreateListing`. For online-only communities (no physical street address), the address is set to the city name with city center coordinates and tagged with `online-community`.
-
-### 5. The `fina_listing_auditor` Subagent (Category Auditor)
-This subagent audits listing category assignments to ensure they conform to canonical definition specs:
-*   **Evaluation against definitions**: Compares existing listing data (name, description, tags, current categories) against rules in `data/categories.json`.
-*   **LLM Validation**: Uses Gemini LLM structured JSON output schema validation to determine if category corrections are needed.
-*   **Recategorization**: Performs recategorizations using the `UpdateListingData` mutation.
-*   **Run Report Consolidation**: Formats and writes run reports under `logs/` directory, merging sequential pagination runs into a single consolidated log.
 
 ### 6. The `fina_docs_reviewer` Subagent (Documentation Reviewer)
 This subagent audits repository documentation against actual Python script definitions:
@@ -246,4 +247,4 @@ To simplify the architecture and reduce cloud function dependencies, heavy trans
 
 ## 💻 Operational Runbook
 
-For instructions on how to trigger or schedule the `fina_refresh_listing_maps_finder`, `fina_enrich_listing_socials_finder`, `fina_events_finder`, `fina_new_listing_web_finder`, and `fina_listing_auditor` subagents, refer to the Operational Guide in the main repository `README.md`.
+For instructions on how to trigger or schedule the `fina_refresh_listing_maps_finder`, `fina_new_listing_web_finder`, `fina_enrich_listing_socials_finder`, `fina_listing_auditor`, `fina_events_finder`, and `fina_docs_reviewer` subagents, refer to the Operational Guide in the main repository `README.md`.
