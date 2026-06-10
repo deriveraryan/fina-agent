@@ -56,6 +56,7 @@ You can trigger these discovery scans manually through the Antigravity Chat UI o
 * **`fina_events_finder`**: Crawls business social media pages to harvest upcoming events.
 * **`fina_new_listing_web_finder`**: Searches social platforms for Filipino community pages.
 * **`fina_listing_auditor`**: Audits and corrects category classifications using canonical definitions and LLM validation.
+* **`fina_docs_reviewer`**: Audits repository documentation files for any gaps or discrepancies against the current codebase.
 
 For a detailed flow diagram of how these agents operate, see the [Native IDE Agent Architecture Guide](docs/guides/ide_agent_architecture.md).
 
@@ -105,17 +106,17 @@ By default, the `fina_refresh_listing_maps_finder` caches Google Places search r
     >
     > **To run a dry-run audit without database writes:**
     > "Use the `fina_listing_auditor` skill in dry-run mode to audit categories in SYDNEY."
+*   *Documentation Reviewer*:
+    > "Use the `fina_docs_reviewer` skill to review the repository documentation for any gaps."
 
 ### 3. Running Scripts via CLI
 You can execute the underlying discovery and database push scripts directly in your shell.
 
-*   **Listing Category Auditor (with `--dry-run` to audit without database updates)**:
+*   **Listing Category Auditor**:
+    Note: The underlying Python CLI script only retrieves listing data. Category validation and dry-run/push choices are made at the agent workflow level.
     ```bash
-    # Review changes and update DB
+    # Fetch listings for audit review
     python3 scripts/agent_audit_listings.py --city SYDNEY --limit 10 --offset 0 --trace-id <CONVERSATION_ID>
-    
-    # Dry-run audit
-    python3 scripts/agent_audit_listings.py --city SYDNEY --limit 10 --offset 0 --dry-run --trace-id <CONVERSATION_ID>
     ```
 *   **Google Places Fetch (with `--refresh` to bypass local cache and query live API)**:
     ```bash
@@ -151,6 +152,10 @@ You can schedule the agents to run periodic background scans using the `/schedul
 *   *Category Audit Schedule*:
     ```bash
     /schedule CronExpression="0 18 * * *" Prompt="Use the fina_listing_auditor skill to audit and correct categories in SYDNEY."
+    ```
+*   *Documentation Review Schedule*:
+    ```bash
+    /schedule CronExpression="0 0 * * 0" Prompt="Use the fina_docs_reviewer skill to audit documentation for gaps."
     ```
 *(Note: The Antigravity IDE window must remain active for scheduled subagents to execute).*
 

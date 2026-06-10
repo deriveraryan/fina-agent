@@ -15,6 +15,8 @@ flowchart TD
     
     %% ════════ 1. PLACES FINDER FLOW (PLACES) ════════
     SelectSubagent -->|Refresh Listing Maps Finder| InvokeRefreshListingMapsFinder["IDE Invokes fina_refresh_listing_maps_finder Subagent"]
+    SelectSubagent -->|Listing Auditor| InvokeListingAuditor["IDE Invokes fina_listing_auditor Subagent"]
+    SelectSubagent -->|Docs Reviewer| InvokeDocsReviewer["IDE Invokes fina_docs_reviewer Subagent"]
     InvokeRefreshListingMapsFinder --> ExecMapsFetch["Execute: python3 scripts/agent_maps_fetch.py<br>--city C --category CAT --limit 10 --offset O"]
     
     subgraph agent_maps_fetch["Inside scripts/agent_maps_fetch.py"]
@@ -142,6 +144,39 @@ Base
     CheckHasMoreSocial{"Found 10 new listings<br>OR checked 10 pages?"}
     CheckHasMoreSocial -->|No| NativeWebSearch
     CheckHasMoreSocial -->|Yes| FinishSocial(["Web Discovery Completed"])
+
+    %% ════════ 5. LISTING AUDITOR FLOW (CATEGORY AUDIT) ════════
+    InvokeListingAuditor --> ExecAudit["Execute: python3 scripts/agent_audit_listings.py<br>--city C --limit 10 --offset O"]
+    
+    subgraph agent_audit_listings["Inside scripts/agent_audit_listings.py"]
+        QueryCityListings["GraphQL Query: ListCityListings"]
+        QueryCityListings --> DBCityListings[("PostgreSQL Database")]
+        DBCityListings -.-> ReturnAuditPage["Return JSON Page (listings, total, has_more)"]
+    end
+    
+    ExecAudit --> QueryCityListings
+    ReturnAuditPage --> VerifyAuditHeuristic["Subagent checks listing categories<br>against data/categories.json"]
+    
+    VerifyAuditHeuristic -->|Needs Corrections & Not Dry-Run| ExecPushAudit["Execute: python3 scripts/agent_graphql_push.py<br>--operation UpdateListingData"]
+    subgraph agent_graphql_push_audit["Inside scripts/agent_graphql_push.py"]
+        GQLMutationAudit["GraphQL Mutation<br>(UpdateListingData)"]
+    end
+    ExecPushAudit --> GQLMutationAudit
+    GQLMutationAudit --> DBTransactionAudit[("PostgreSQL Database")]
+    
+    DBTransactionAudit --> CheckHasMoreAudit
+    VerifyAuditHeuristic -->|No corrections OR Dry-Run| CheckHasMoreAudit
+    
+    CheckHasMoreAudit{"Has More Listings?"}
+    CheckHasMoreAudit -->|Yes| NextPageAudit["Increment offset by 10 and query again"]
+    NextPageAudit --> ExecAudit
+    CheckHasMoreAudit -->|No| FinishAudit(["Audit Completed"])
+
+    %% ════════ 6. DOCUMENTATION REVIEWER FLOW (DOCS AUDIT) ════════
+    InvokeDocsReviewer --> VerifyDocs["Subagent audits documentation against codebase"]
+    VerifyDocs -->|Discrepancies Found| UpdateDocs["Update Markdown Files"]
+    VerifyDocs -->|Report Generation| WriteDocReport["Write report to logs/"]
+    UpdateDocs & WriteDocReport --> FinishDocs(["Docs Audit Completed"])
 ```
 
 ---
@@ -189,14 +224,20 @@ This subagent audits listing category assignments to ensure they conform to cano
 *   **Recategorization**: Performs recategorizations using the `UpdateListingData` mutation.
 *   **Run Report Consolidation**: Formats and writes run reports under `logs/` directory, merging sequential pagination runs into a single consolidated log.
 
-### 6. Database Integration Scripts
+### 6. The `fina_docs_reviewer` Subagent (Documentation Reviewer)
+This subagent audits repository documentation against actual Python script definitions:
+*   **CLI Verification**: Reviews CLI usages, options, and parameters in documentation against source arguments (e.g. confirming no outdated parameters like `--dry-run` are passed directly to script commands).
+*   **Agent Flow Auditing**: Verifies that new agent skills, registries, and architecture diagrams match active implementations.
+*   **Audit Report Generation**: Saves documentation reviews and gap logs in markdown report files under the `logs/` directory.
+
+### 7. Database Integration Scripts
 To maintain security and ensure all data mutations pass through the authorized GraphQL layer, the subagents rely on local Python helper CLI scripts that connect to the core `fina` Firebase project:
 *   `scripts/agent_fetch_targets.py`: Fetches target source URLs, missing-social listings, business-socials, city-listings (for deduplication context), or social-post-trackers (for checking previous event scraper bookmarks) from the database.
 *   `scripts/agent_graphql_push.py`: Pushes verified JSON objects or updates to the backend using GraphQL operations (including `CreateListing`, `UpdateListingSocialUrls`, `CreateEvent`, and `UpsertSocialPostTracker`). It normalizes platform names, dynamically validates and normalizes categories against [categories.json](file:///Users/ryan/.gemini/antigravity/scratch/fina-agent/data/categories.json) (enforcing case-insensitive uppercase normalization and throwing a fatal exit code 1 if invalid), caches loaded categories in module scope to prevent redundant disk reads, and synchronously handles geocoding and deduplication before creating new listings.
 *   `scripts/agent_maps_fetch.py`: Searches Google Places (New) Text Search with caching and pagination.
 *   `scripts/agent_audit_listings.py`: Evaluates, validates, and recategorizes business categories against canonical JSON specs.
 
-### 7. Synchronous Geocoding & Deduplication
+### 8. Synchronous Geocoding & Deduplication
 To simplify the architecture and reduce cloud function dependencies, heavy transactional logic is handled synchronously by `agent_graphql_push.py` before inserting data into the database:
 *   **Geocoding**: Uses the Google Maps Geocoding API to resolve coordinates if missing prior to insertion.
 *   **Deduplication**: Resolves matches using name normalization, `pgvector` semantic embedding similarity, and Jaccard word-overlap coefficient (>0.7). If a duplicate is found, it merges missing fields via `UpdateListingData` and `UpdateListingStatus` mutations instead of creating a new duplicate record.

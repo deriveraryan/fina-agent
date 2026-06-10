@@ -28,7 +28,7 @@ flowchart TD
 
 ## 🤖 Agent Registry
 
-Here is the registry of the 4 specialized Antigravity subagents:
+Here is the registry of the 6 specialized Antigravity subagents:
 
 ### 1. `fina_refresh_listing_maps_finder`
 *   **Role**: Locates and verifies/refreshes physical businesses (restaurants, cafes, shops, etc.) on Google Maps.
@@ -60,12 +60,29 @@ Here is the registry of the 4 specialized Antigravity subagents:
 
 ### 4. `fina_new_listing_web_finder`
 *   **Role**: Discovers new listing candidates on Facebook, Instagram, and web platforms.
-*   **CLI Trigger**: `python3 scripts/agent_social_search.py --city <CITY> --category COMMUNITY --platform <facebook|instagram> --limit 10 --offset <OFFSET>`
+*   **Trigger**: No single CLI script is used. Uses native web search and Chrome DevTools browser verification step-by-step.
 *   **Logic**:
-    1. Searches platforms for candidate group pages, paginated via limit and offset.
-    2. Caches search results locally in `.antigravity_saves/social_cache_{platform}_{city}_{category}.json`.
-    3. Uses the `/browser` tool to verify authentic Filipino affiliation.
-    4. Creates a new database listing; online-only groups default to the city center and are tagged as `online-community`.
+    1. Runs `scripts/agent_fetch_targets.py --type city-listings` to load existing city context for deduplication.
+    2. Uses native web search with site-specific queries to find candidate community pages.
+    3. Controls Chrome DevTools to navigate to candidate pages and inspect details/followers.
+    4. Automatically filters duplicates and creates verified listings via `agent_graphql_push.py --operation CreateListing`.
+
+### 5. `fina_listing_auditor`
+*   **Role**: Audits listing category assignments against definitions in `data/categories.json`.
+*   **CLI Trigger**: `python3 scripts/agent_audit_listings.py --city <CITY> --limit 10 --offset <OFFSET>`
+*   **Logic**:
+    1. Fetches listings slice for a city using the fetch script.
+    2. Compares name, description, tags, and categories against rules in `data/categories.json`.
+    3. Proposes corrections and updates listings using the `UpdateListingData` mutation.
+    4. Generates audit run reports under `logs/`.
+
+### 6. `fina_docs_reviewer`
+*   **Role**: Reviews architecture guides, READMEs, and configurations for gaps and alignment.
+*   **Trigger**: Controlled entirely at the agent level.
+*   **Logic**:
+    1. Audits documentation files against active python script arguments and configurations.
+    2. Reports discrepancies and updates document details to keep them up to date.
+    3. Files markdown run reports under `logs/`.
 
 ---
 
@@ -94,9 +111,9 @@ pip install -r requirements.txt
   ```bash
   python3 scripts/agent_maps_fetch.py --city <CITY> --category <CATEGORY> --limit 10 --offset <OFFSET> --trace-id <CONVERSATION_ID>
   ```
-- **Social Search**:
+- **Listing Audit Fetch**:
   ```bash
-  python3 scripts/agent_social_search.py --city <CITY> --category <CATEGORY> --platform <facebook|instagram> --limit 10 --offset <OFFSET> --trace-id <CONVERSATION_ID>
+  python3 scripts/agent_audit_listings.py --city <CITY> --limit 10 --offset <OFFSET> --trace-id <CONVERSATION_ID>
   ```
 - **GraphQL Push**:
   ```bash
