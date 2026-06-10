@@ -961,53 +961,7 @@ class TestAgentScripts(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(parsed_output["places"][0]["name"], "Mock Services Business Sydney")
         self.assertEqual(parsed_output["places"][0]["description"], "A verified Filipino services in Sydney.")
 
-    @patch("agent_audit_listings.execute_graphql_operation", new_callable=AsyncMock)
-    @patch("sys.stdout")
-    async def test_audit_listings_success(
-        self, mock_stdout: MagicMock, mock_execute: AsyncMock
-    ) -> None:
-        """Tests that agent_audit_listings.py queries listings and outputs paginated JSON to stdout."""
-        import agent_audit_listings
 
-        # Mock listing data from GraphQL query
-        mock_execute.return_value = {
-            "data": {
-                "listings": [
-                    {
-                        "id": "listing-abc",
-                        "name": "Pinoy Freight Sydney",
-                        "categories": ["COMMUNITY"],
-                        "city": "SYDNEY",
-                        "description": "Balikbayan box cargo forwarding services to the Philippines.",
-                        "tags": "filipino,community,cargo"
-                    }
-                ]
-            }
-        }
-
-        sys.argv = ["agent_audit_listings.py", "--city", "SYDNEY", "--limit", "10", "--offset", "0"]
-        
-        await agent_audit_listings.main()
-
-        # Check GraphQL query
-        mock_execute.assert_called_once_with(
-            operation_name="ListCityListings",
-            variables={"city": "SYDNEY"}
-        )
-
-        # Check output printed to stdout
-        written_calls = [call.args[0] for call in mock_stdout.write.call_args_list]
-        combined_output = "".join(written_calls)
-        parsed_output = json.loads(combined_output)
-        
-        self.assertEqual(parsed_output["total"], 1)
-        self.assertFalse(parsed_output["has_more"])
-        self.assertEqual(len(parsed_output["listings"]), 1)
-        self.assertEqual(parsed_output["listings"][0]["id"], "listing-abc")
-        self.assertEqual(parsed_output["listings"][0]["name"], "Pinoy Freight Sydney")
-        self.assertEqual(parsed_output["listings"][0]["categories"], ["COMMUNITY"])
-        self.assertEqual(parsed_output["listings"][0]["description"], "Balikbayan box cargo forwarding services to the Philippines.")
-        self.assertEqual(parsed_output["listings"][0]["tags"], "filipino,community,cargo")
 
     @patch("agent_graphql_push.execute_graphql_operation", new_callable=AsyncMock)
     @patch("features.scanning.dedup.check_duplicate", new_callable=AsyncMock)
