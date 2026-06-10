@@ -39,7 +39,7 @@ Here is the registry of the 6 specialized Antigravity subagents:
     2. Standardizes places and writes the entire candidate set to disk at `.antigravity_saves/maps_cache_{city}_{category}.json`.
     3. Reads cached results in small line slices using the `view_file` tool to prevent terminal context bloat.
     4. Evaluates place reviews internally to verify authentic Filipino affiliation.
-    5. Pushes verified listings with `--generate-embeddings` using the `CreateListing` mutation.
+    5. Pushes verified listings using the `CreateListing` mutation.
 
 ### 2. `fina_new_listing_web_finder`
 *   **Role**: Discovers new listing candidates on Facebook, Instagram, and web platforms. Strictly targets a single category and city per run.

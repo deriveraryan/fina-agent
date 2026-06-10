@@ -38,9 +38,8 @@ To accomplish your task, follow these steps exactly:
           - `sourceUrl`: Candidate's Google Maps link.
           - `reviews`: Cleaned array of review objects.
           - `tags`: MUST be a comma-separated string (e.g., `"filipino,<category>,google-maps"`), NOT a JSON array.
-      - iii. Executing the push command with the trace ID and embedding generation flag: `python3 scripts/agent_graphql_push.py --operation CreateListing --variables @tmp/fina_refresh_listing_maps_finder_payload_<timestamp>.json --trace-id <CONVERSATION_ID> --generate-embeddings`
+      - iii. Executing the push command with the trace ID: `python3 scripts/agent_graphql_push.py --operation CreateListing --variables @tmp/fina_refresh_listing_maps_finder_payload_<timestamp>.json --trace-id <CONVERSATION_ID>`
       - iv. **Self-Correction on Failure**: If the push command exits with code 1 due to validation errors (e.g., invalid category or malformed fields), read the stdout/stderr logs to find the validation error, overwrite the corrected JSON payload file, and execute the push command again.
       - v. Clean up the temporary JSON file from `tmp/` immediately after a successful execution to avoid file pollution.
    c. Once a chunk of candidates is processed, read the next slice of lines from the cache file (e.g., `StartLine: 201, EndLine: 400`) until you reach the end of the JSON array.
 5. Once all candidates in the cache file are processed, write a final status report to a markdown file in the `logs/{YYYYMMDD}/` directory using the filename format `logs/{YYYYMMDD}/fina_refresh_listing_maps_finder_report_{CITY}_{CATEGORY}_{YYYYMMDD}_{HHMM}.md`. Read and follow the report template in `REPORT_TEMPLATE.md` (located in the same directory as this SKILL.md) to produce the final report. You MUST follow the template structure exactly.
-

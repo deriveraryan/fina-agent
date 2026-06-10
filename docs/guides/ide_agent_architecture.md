@@ -39,7 +39,7 @@ flowchart TD
     ReturnDone --> ReadSlices["Read cache file in line chunks via view_file"]
     ReadSlices --> VerifyHeuristic["Subagent evaluates candidate internally<br>(using reviews & text details)"]
     
-    VerifyHeuristic -->|Filipino Affiliated| ExecPushDataMaps["Execute: python3 scripts/agent_graphql_push.py<br>--operation CreateListing --generate-embeddings"]
+    VerifyHeuristic -->|Filipino Affiliated| ExecPushDataMaps["Execute: python3 scripts/agent_graphql_push.py<br>--operation CreateListing"]
     subgraph agent_graphql_push_maps["Inside scripts/agent_graphql_push.py"]
         SyncGeocodeDedupMaps["Sync Geocode & Deduplicate"]
         GQLMutationMaps["GraphQL Mutation<br>(CreateListing or UpdateListing)"]
