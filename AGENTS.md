@@ -31,32 +31,33 @@ flowchart TD
 Here is the registry of the 6 specialized Antigravity subagents:
 
 ### 1. `fina_refresh_listing_maps_finder`
-*   **Role**: Locates and verifies/refreshes physical businesses (restaurants, cafes, shops, etc.) on Google Maps.
-*   **CLI Trigger**: `python3 scripts/agent_maps_fetch.py --city <CITY> --category <CATEGORY> --limit 10 --offset <OFFSET>`
+*   **Role**: Locates and verifies/refreshes physical businesses (restaurants, cafes, shops, etc.) on Google Maps. Strictly targets a single category and city per run.
+*   **CLI Trigger**: `python3 scripts/agent_maps_fetch.py --city <CITY> --category <CATEGORY> --limit 1 --offset 0 --trace-id <CONVERSATION_ID>`
 *   **Logic**:
-    1. Queries Google Places (New) Text Search with category templates.
-    2. Standardizes places to schema, paginating via `--limit 10` and `--offset` to prevent prompt bloat.
-    3. Caches raw responses locally in `.antigravity_saves/maps_cache_{city}_{category}.json` to minimize API costs.
+    1. Queries Google Places (New) Text Search once with category templates to populate the cache.
+    2. Standardizes places and writes the entire candidate set to disk at `.antigravity_saves/maps_cache_{city}_{category}.json`.
+    3. Reads cached results in small line slices using the `view_file` tool to prevent terminal context bloat.
     4. Evaluates place reviews internally to verify authentic Filipino affiliation.
-    5. Pushes verified listings using the `CreateListing` mutation.
+    5. Pushes verified listings with `--generate-embeddings` using the `CreateListing` mutation.
 
 ### 2. `fina_new_listing_web_finder`
-*   **Role**: Discovers new listing candidates on Facebook, Instagram, and web platforms.
-*   **Trigger**: No single CLI script is used. Uses native web search and Chrome DevTools browser verification step-by-step.
+*   **Role**: Discovers new listing candidates on Facebook, Instagram, and web platforms. Strictly targets a single category and city per run.
+*   **Trigger**: No single CLI script is used. Uses native web search, file-based deduplication lookups, and Chrome DevTools browser verification.
 *   **Logic**:
-    1. Runs `scripts/agent_fetch_targets.py --type city-listings` to load existing city context for deduplication.
+    1. Runs `scripts/agent_fetch_targets.py --type city-listings --city <CITY> --trace-id <CONVERSATION_ID> > tmp/existing_city_listings.json` to write existing city context to a file.
     2. Uses native web search with site-specific queries to find candidate community pages.
-    3. Controls Chrome DevTools to navigate to candidate pages and inspect details/followers.
-    4. Automatically filters duplicates and creates verified listings via `agent_graphql_push.py --operation CreateListing`.
+    3. Checks for duplicates by looking up names/URLs directly in `tmp/existing_city_listings.json` on disk to avoid context bloat.
+    4. Navigates to candidate pages via Chrome DevTools, extracting only visible text/selectors to prevent raw HTML bloat.
+    5. Creates verified listings via `agent_graphql_push.py --operation CreateListing` with self-correction on validation failure.
 
 ### 3. `fina_enrich_listing_socials_finder`
-*   **Role**: Enriches existing database listings with missing Facebook and Instagram URLs.
-*   **CLI Trigger**: `python3 scripts/agent_fetch_targets.py --type missing-social --city <CITY>`
+*   **Role**: Enriches existing database listings with missing Facebook and Instagram URLs. Strictly targets a single city per run.
+*   **CLI Trigger**: `python3 scripts/agent_fetch_targets.py --type missing-social --city <CITY> --trace-id <CONVERSATION_ID> > tmp/missing_socials_targets.json`
 *   **Logic**:
-    1. Fetches seed listings missing social links.
+    1. Fetches seed listings missing social links for the specified city and writes them directly to a file to prevent context bloat.
     2. Searches the web using LLM-driven site filters.
-    3. Verifies that matches correspond to the business details (location, name).
-    4. Enriches listings using the `UpdateListingSocialUrls` mutation.
+    3. Verifies that matches correspond to the business details using Chrome DevTools (selectors/visible text only).
+    4. Enriches listings using the `UpdateListingSocialUrls` mutation with validation self-correction on failure.
 
 ### 4. `fina_listing_auditor`
 *   **Role**: Audits listing category assignments against definitions in `data/categories.json`.
@@ -68,13 +69,15 @@ Here is the registry of the 6 specialized Antigravity subagents:
     4. Generates audit run reports under `logs/`.
 
 ### 5. `fina_events_finder`
-*   **Role**: Crawls social media pages of verified businesses to discover upcoming temporal events.
-*   **CLI Trigger**: `python3 scripts/agent_fetch_targets.py --type business-socials --city <CITY>`
+*   **Role**: Crawls social media pages of verified businesses to discover upcoming temporal events. Strictly targets a single city per run.
+*   **CLI Trigger**: `python3 scripts/agent_fetch_targets.py --type business-socials --city <CITY> --trace-id <CONVERSATION_ID> > tmp/business_socials_targets.json`
 *   **Logic**:
-    1. Retrieves verified social media URLs for a city.
-    2. Uses native browser tools to scan the pages for upcoming events.
-    3. Standardizes dates and structures payloads.
-    4. Pushes discovered events using the `CreateEvent` mutation.
+    1. Retrieves verified social media URLs for a city and redirects them to a file to prevent context bloat.
+    2. Retrieves the last scanned post timestamp bookmark from the database via the social-post-tracker endpoint.
+    3. Uses Chrome DevTools to navigate to candidate pages, extracting only visible text/selectors (follower count and post content) to avoid outerHTML bloat.
+    4. Evaluates posts chronologically, using current local time to resolve relative dates into UTC ISO 8601 strings and parsing follower counts to integers.
+    5. Filters events against strict heuristics (future-bound, non-promotional) and pushes events, bookmarks, and follower counts using mutations with validation self-correction on failure.
+
 
 ### 6. `fina_docs_reviewer`
 *   **Role**: Reviews architecture guides, READMEs, and configurations for gaps and alignment.
@@ -105,11 +108,13 @@ pip install -r requirements.txt
 ### CLI Script Reference
 - **Fetch Targets**:
   ```bash
-  python3 scripts/agent_fetch_targets.py --type <missing-social|business-socials> --city <CITY> --trace-id <CONVERSATION_ID>
+  # Fetch targets and redirect output to a file to prevent context bloat
+  python3 scripts/agent_fetch_targets.py --type <missing-social|business-socials|city-listings> --city <CITY> --trace-id <CONVERSATION_ID> > tmp/targets_output.json
   ```
 - **Maps Fetch**:
   ```bash
-  python3 scripts/agent_maps_fetch.py --city <CITY> --category <CATEGORY> --limit 10 --offset <OFFSET> --trace-id <CONVERSATION_ID>
+  # Run once to populate cache under .antigravity_saves/maps_cache_{city}_{category}.json
+  python3 scripts/agent_maps_fetch.py --city <CITY> --category <CATEGORY> --limit 1 --offset 0 --trace-id <CONVERSATION_ID>
   ```
 - **Listing Audit Fetch**:
   ```bash
@@ -117,11 +122,11 @@ pip install -r requirements.txt
   ```
 - **GraphQL Push**:
   ```bash
-  # Single Payload
-  python3 scripts/agent_graphql_push.py --operation <CreateListing|UpdateListingSocialUrls|CreateEvent> --variables '<JSON_STRING>' --trace-id <CONVERSATION_ID>
+  # Single Payload (generate embeddings automatically for CreateListing/CreateEvent)
+  python3 scripts/agent_graphql_push.py --operation <CreateListing|UpdateListingSocialUrls|CreateEvent> --variables @tmp/payload.json --trace-id <CONVERSATION_ID> --generate-embeddings
   
   # Bulk Payload (Array of JSON Objects)
-  python3 scripts/agent_graphql_push.py --operation BulkCreateListing --variables @tmp/bulk_payload.json --trace-id <CONVERSATION_ID>
+  python3 scripts/agent_graphql_push.py --operation BulkCreateListing --variables @tmp/bulk_payload.json --trace-id <CONVERSATION_ID> --generate-embeddings
   ```
 
 ---

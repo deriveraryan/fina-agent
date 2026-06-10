@@ -84,10 +84,9 @@ By default, the `fina_refresh_listing_maps_finder` caches Google Places search r
     > **To run a dry-run audit without database writes:**
     > "Use the `fina_listing_auditor` skill in dry-run mode to audit categories in SYDNEY."
 *   *Events Finder*:
-    > "Use the `fina_events_finder` skill to discover events in MELBOURNE."
+    > **Single City Target Restriction**: To prevent prompt context window bloat and ensure high reliability, the `fina_events_finder` skill strictly targets a **single city** per execution run. Multi-city sweeps must be run in separate, independent agent sessions.
     >
-    > **To scan all cities at once:**
-    > "/goal Use the `fina_events_finder` skill to discover events across all major Australian cities (`SYDNEY`, `MELBOURNE`, `BRISBANE`, `PERTH`, `ADELAIDE`, `DARWIN`, `HOBART`, `CANBERRA`, `GOLD COAST`)."
+    > "Use the `fina_events_finder` skill to discover events in MELBOURNE."
 *   *Documentation Reviewer*:
     > "Use the `fina_docs_reviewer` skill to review the repository documentation for any gaps."
 

@@ -216,16 +216,16 @@ This subagent audits listing category assignments to ensure they conform to cano
 
 ### 5. The `fina_events_finder` Subagent (Listing's Events Discoverer)
 This subagent directly crawls the social pages of verified businesses to discover upcoming temporal events, checking for new posts since the last scan date.
-*   **Targeting**: Uses `agent_fetch_targets.py --type business-socials --city C` to pull the social URLs of all verified listings in the specified city.
-*   **Bookmark Tracking**: Before scanning, it queries the database via `agent_fetch_targets.py --type social-post-tracker --listing-id L --platform P` to retrieve the `lastPostDate` (bookmark of the most recent post scanned in the previous run).
-*   **Web Browsing & Scanning Limit**: Uses IDE native browser tools (e.g. Chrome DevTools) to visit the social account page. It scans posts starting from the most recent, moving backward. It stops scanning as soon as:
-    1. A post's publish date is older than or equal to the retrieved `lastPostDate` (if any).
+*   **Targeting (No-Bloat)**: Executes `agent_fetch_targets.py --type business-socials --city C --trace-id <CONVERSATION_ID> > tmp/business_socials_targets.json` to write target listing social URLs to disk, avoiding stdout dumps.
+*   **Bookmark Tracking**: Queries the database via `agent_fetch_targets.py --type social-post-tracker --listing-id L --platform P --trace-id <CONVERSATION_ID>` to retrieve the `lastPostDate` bookmark.
+*   **Web Browsing & Scanning Limit (No-Bloat)**: Uses Chrome DevTools to visit the social account page, extracting only visible text or selectors rather than outerHTML. It scans posts starting from the most recent, stopping when:
+    1. A post's publish date is older than or equal to the retrieved `lastPostDate` bookmark.
     2. OR it has evaluated exactly 10 posts on the page.
-*   **Follower Extraction**: In addition to events, it extracts the current follower counts from the page.
-*   **GraphQL Updates & Bookmark Upserting**: For each listing processed:
-    1. Upcoming events are pushed via the `CreateEvent` GraphQL mutation.
-    2. Follower counts are pushed via the `UpdateListingSocialUrls` GraphQL mutation.
-    3. The newest scanned post timestamp is saved as the new bookmark by calling `agent_graphql_push.py --operation UpsertSocialPostTracker --variables '<variables>'` (which upserts the tracking entry in the `SocialPostTracker` table).
+*   **Relative Date Parsing**: Resolves relative post timestamps (e.g. "3 hours ago", "Yesterday at 4 PM", "2 days ago") into absolute UTC ISO 8601 strings based on current local system metadata, and resolves event dates relative to the post publication date.
+*   **Follower count parsing**: Capture page follower counts and parse them strictly to integers, resolving suffix modifiers like "K" (thousands) and "M" (millions) and mapping missing values to `null`.
+*   **Heuristic Event Classification**: Filters out daily menu items, past events, product ads, and generic promotions, extracting only distinct future community happenings.
+*   **GraphQL Updates & Self-Correction**: Pushes discovered events (`CreateEvent`), follower counts (`UpdateListingSocialUrls`), and updated bookmarks (`UpsertSocialPostTracker`) using mutations with validation self-correction on exit code 1.
+
 
 ### 6. The `fina_docs_reviewer` Subagent (Documentation Reviewer)
 This subagent audits repository documentation against actual Python script definitions:
