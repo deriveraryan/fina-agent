@@ -104,7 +104,7 @@ source .venv/bin/activate
 pip install -r requirements.txt
 
 # 3. Verify .env file is present at root containing:
-# GEMINI_API_KEY, GOOGLE_MAPS_API_KEY, GCP_PROJECT, ANTIGRAVITY_AGENT_ID, ANTIGRAVITY_ENVIRONMENT
+# GEMINI_API_KEY, GOOGLE_MAPS_API_KEY, GCP_PROJECT
 ```
 
 ### CLI Script Reference

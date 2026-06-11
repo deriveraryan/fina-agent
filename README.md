@@ -39,8 +39,6 @@ GOOGLE_MAPS_API_KEY="YOUR_GOOGLE_MAPS_API_KEY"
 
 # Firebase Cloud Configs (points to your Fina Backend instance)
 GCP_PROJECT="fina-au"
-ANTIGRAVITY_AGENT_ID="antigravity-preview-05-2026"
-ANTIGRAVITY_ENVIRONMENT="remote"
 ```
 
 ---
