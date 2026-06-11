@@ -1,30 +1,32 @@
 {
   "RESTAURANT": {
     "displayName": "Restaurants",
-    "description": "Dine-in restaurants, food trucks, caterers, food stalls, or eateries serving main meals.",
+    "description": "Dine-in restaurants, food trucks, food stalls, or eateries serving main meals at a physical location.",
     "rules": [
-      "Must offer prepared meals or dining experiences.",
-      "Includes traditional Filipino restaurants, diners, buffet spaces, and specialized food trucks."
+      "Must offer prepared meals or dining experiences at a physical location (dine-in, food truck, or food market stall).",
+      "Includes traditional Filipino restaurants, diners, buffet spaces, specialized food trucks, and food market stalls.",
+      "DOES NOT include catering businesses with no physical dining premises."
     ],
     "examples": ["Manila Sunset Diner", "Filipino BBQ Grill", "Adobo Food Truck"],
     "searchTemplates": [
       "Filipino restaurant in {city}",
       "Pinoy food in {city}",
-      "Filipino food truck in {city}",
-      "Filipino catering in {city}"
+      "Filipino food truck in {city}"
     ]
   },
   "CAFE": {
     "displayName": "Cafés",
-    "description": "Coffee shops, bakeries (panaderya), bubble tea shops, dessert parlors, cake shops.",
+    "description": "Coffee shops, bakeries (panaderya), bubble tea shops, dessert parlors, cake shops with a physical storefront.",
     "rules": [
-      "Primarily serves coffee, tea, pastries, bakery goods, or light desserts.",
-      "Includes panaderias baking fresh pandesal, ube cake makers, and halo-halo dessert stalls."
+      "Primarily serves coffee, tea, pastries, bakery goods, or light desserts at a physical customer venue.",
+      "Includes panaderias and cake shops with physical storefronts.",
+      "DOES NOT include home bakers or online-only cake makers with no physical retail space."
     ],
     "examples": ["Pandesal & Co.", "Pinoy Brew Cafe", "Ube Desserts Parlor"],
     "searchTemplates": [
       "Filipino cafe in {city}",
-      "Filipino coffee in {city}"
+      "Filipino coffee in {city}",
+      "Filipino bakery in {city}"
     ]
   },
   "SHOP": {
@@ -87,13 +89,13 @@
   },
   "SERVICES": {
     "displayName": "Services",
-    "description": "Professional and local business services that are not shops, food venues, government offices, or churches.",
+    "description": "Professional and local business services (including home baking, catering, and event planning) that are not retail shops, dine-in food venues, government offices, or churches.",
     "rules": [
-      "A commercial entity offering professional, trade, or personal services to the community.",
-      "Includes tax accountants, migration agents, mechanics, logistics/freight providers (balikbayan boxes), hair salons, and travel agencies.",
-      "DOES NOT include grocery shops or restaurants."
+      "A commercial entity offering professional, trade, personal, or event services to the community.",
+      "Includes tax accountants, migration agents, mechanics, logistics/freight providers (balikbayan boxes), hair salons, travel agencies, event planners, caterers, and home bakers.",
+      "DOES NOT include physical dine-in restaurants, cafes, or retail grocery stores."
     ],
-    "examples": ["Pinoy Tax & Accounting", "Balikbayan Cargo Express", "Filo Migration Services"],
+    "examples": ["Pinoy Tax & Accounting", "Balikbayan Cargo Express", "Filo Migration Services", "Manila Event Planners", "Kusina Catering"],
     "searchTemplates": [
       "Filipino services in {city}",
       "Filipino business in {city}",
@@ -102,7 +104,10 @@
       "Filipino freight in {city}",
       "Filipino cleaning service in {city}",
       "Filipino migration agent in {city}",
-      "Filipino recruitment in {city}"
+      "Filipino recruitment in {city}",
+      "Filipino catering in {city}",
+      "Filipino baker in {city}",
+      "Filipino event planner in {city}"
     ]
   }
 }
