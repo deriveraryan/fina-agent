@@ -31,16 +31,17 @@
   },
   "SHOP": {
     "displayName": "Shops",
-    "description": "Retail stores, grocery shops, Asian/Filipino supermarkets, convenience stores, sari-sari shops selling imported ingredients or goods.",
+    "description": "Retail stores, grocery shops, Asian/Filipino supermarkets, convenience stores, online shops, or sari-sari stores selling imported ingredients or merchandise.",
     "rules": [
       "Sells physical packaged ingredients, imported groceries, clothing, or merchandise directly to consumers.",
-      "Must be a retail store or supermarket space."
+      "Can operate as a physical retail space, an online-only (virtual) storefront, or both."
     ],
     "examples": ["Luzon Sari-Sari Store", "Manila Asian Groceries", "Pinoy Supermarket"],
     "searchTemplates": [
       "Filipino grocery in {city}",
       "Filipino shop in {city}",
-      "Filipino supermarket in {city}"
+      "Filipino supermarket in {city}",
+      "Filipino online shop in {city}"
     ]
   },
   "CHURCH": {
