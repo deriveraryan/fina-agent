@@ -35,46 +35,7 @@ def _get_client() -> httpx.AsyncClient:
     return _client
 
 
-# Search keyword templates per category
-SEARCH_TEMPLATES: dict[str, list[str]] = {
-    "RESTAURANT": [
-        "Filipino restaurant in {city}",
-        "Pinoy food in {city}"
-    ],
-    "CAFE": [
-        "Filipino cafe in {city}",
-        "Filipino coffee in {city}"
-    ],
-    "SHOP": [
-        "Filipino grocery in {city}",
-        "Filipino shop in {city}",
-        "Filipino supermarket in {city}"
-    ],
-    "CHURCH": [
-        "Filipino Christian church in {city}",
-        "Tagalog mass in {city}",
-        "Filipino Catholic in {city}"
-    ],
-    "COMMUNITY": [
-        "Filipino community association in {city}",
-        "Filipino community group in {city}",
-        "Filipino association in {city}",
-        "Filipino club in {city}"
-    ],
-    "GOVERNMENT": [
-        "Philippine consulate in {city}",
-        "Philippine embassy in {city}",
-        "Philippine honorary consulate in {city}"
-    ],
-    "SERVICES": [
-        "Filipino services in {city}",
-        "Filipino business in {city}",
-        "Filipino accountant in {city}",
-        "Filipino logistics in {city}",
-        "Filipino freight in {city}",
-        "Filipino cleaning service in {city}"
-    ]
-}
+# Search templates are loaded dynamically from data/categories.json in main()
 
 
 def _parse_opening_hours(weekday_descriptions: list[str]) -> str | None:
@@ -414,7 +375,26 @@ async def main() -> None:
             raw_places = _get_mock_places(args.city, args.category)
             BackendObservability.trace(f"Loaded {len(raw_places)} mock places.", conversation_id=args.trace_id)
         else:
-            templates = SEARCH_TEMPLATES.get(args.category, [])
+            # Load templates from categories.json
+            categories_path = os.path.abspath(os.path.join(os.path.dirname(__file__), "../data/categories.json"))
+            templates = []
+            if os.path.exists(categories_path):
+                try:
+                    with open(categories_path, "r") as f:
+                        cat_data = json.load(f)
+                        category_info = cat_data.get(args.category, {})
+                        templates = category_info.get("searchTemplates", [])
+                except Exception as exc:
+                    BackendObservability.warning(
+                        f"Failed to load searchTemplates from categories.json: {exc}",
+                        conversation_id=args.trace_id
+                    )
+            
+            if not templates:
+                BackendObservability.warning(
+                    f"No searchTemplates found for category {args.category} in categories.json",
+                    conversation_id=args.trace_id
+                )
             seen_ids = set()
             
             # Load suburbs for the target city

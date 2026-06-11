@@ -6,7 +6,12 @@
       "Must offer prepared meals or dining experiences.",
       "Includes traditional Filipino restaurants, diners, buffet spaces, and specialized food trucks."
     ],
-    "examples": ["Manila Sunset Diner", "Filipino BBQ Grill", "Adobo Food Truck"]
+    "examples": ["Manila Sunset Diner", "Filipino BBQ Grill", "Adobo Food Truck"],
+    "searchTemplates": [
+      "Filipino restaurant in {city}",
+      "Pinoy food in {city}",
+      "Filipino food truck in {city}"
+    ]
   },
   "CAFE": {
     "displayName": "Cafés",
@@ -15,7 +20,11 @@
       "Primarily serves coffee, tea, pastries, bakery goods, or light desserts.",
       "Includes panaderias baking fresh pandesal, ube cake makers, and halo-halo dessert stalls."
     ],
-    "examples": ["Pandesal & Co.", "Pinoy Brew Cafe", "Ube Desserts Parlor"]
+    "examples": ["Pandesal & Co.", "Pinoy Brew Cafe", "Ube Desserts Parlor"],
+    "searchTemplates": [
+      "Filipino cafe in {city}",
+      "Filipino coffee in {city}"
+    ]
   },
   "SHOP": {
     "displayName": "Shops",
@@ -24,7 +33,12 @@
       "Sells physical packaged ingredients, imported groceries, clothing, or merchandise directly to consumers.",
       "Must be a retail store or supermarket space."
     ],
-    "examples": ["Luzon Sari-Sari Store", "Manila Asian Groceries", "Pinoy Supermarket"]
+    "examples": ["Luzon Sari-Sari Store", "Manila Asian Groceries", "Pinoy Supermarket"],
+    "searchTemplates": [
+      "Filipino grocery in {city}",
+      "Filipino shop in {city}",
+      "Filipino supermarket in {city}"
+    ]
   },
   "CHURCH": {
     "displayName": "Churches",
@@ -33,7 +47,12 @@
       "A house of worship or organized religious community group holding regular services.",
       "Provides chaplaincy or mass services tailored to the Filipino community."
     ],
-    "examples": ["St. Mary Filipino Fellowship", "Tagalog mass community", "Filipino Christian Church"]
+    "examples": ["St. Mary Filipino Fellowship", "Tagalog mass community", "Filipino Christian Church"],
+    "searchTemplates": [
+      "Filipino Christian church in {city}",
+      "Tagalog mass in {city}",
+      "Filipino Catholic in {city}"
+    ]
   },
   "GOVERNMENT": {
     "displayName": "Government",
@@ -41,7 +60,13 @@
     "rules": [
       "Must be an official department, embassy, consulate, or designated consular service of the Republic of the Philippines."
     ],
-    "examples": ["Philippine Consulate General Sydney", "Philippine Embassy Canberra"]
+    "examples": ["Philippine Consulate General Sydney", "Philippine Embassy Canberra"],
+    "searchTemplates": [
+      "Philippine consulate in {city}",
+      "Philippine embassy in {city}",
+      "Philippine Tourism Office in {city}",
+      "Philippine Migrant Workers Office in {city}"
+    ]
   },
   "COMMUNITY": {
     "displayName": "Community",
@@ -51,7 +76,13 @@
       "Must be a non-profit association, club, or community organization.",
       "DOES NOT include local commercial business services (like tax services, travel agencies, cargo forwarders, etc.)."
     ],
-    "examples": ["Filipino Student Association", "Filipino-Australian Community Club", "Bayanihan Cultural Group"]
+    "examples": ["Filipino Student Association", "Filipino-Australian Community Club", "Bayanihan Cultural Group"],
+    "searchTemplates": [
+      "Filipino community association in {city}",
+      "Filipino cultural group in {city}",
+      "Filipino student association in {city}",
+      "Filipino sports association in {city}"
+    ]
   },
   "SERVICES": {
     "displayName": "Services",
@@ -61,6 +92,14 @@
       "Includes tax accountants, migration agents, mechanics, logistics/freight providers (balikbayan boxes), hair salons, and travel agencies.",
       "DOES NOT include grocery shops or restaurants."
     ],
-    "examples": ["Pinoy Tax & Accounting", "Balikbayan Cargo Express", "Filo Migration Services"]
+    "examples": ["Pinoy Tax & Accounting", "Balikbayan Cargo Express", "Filo Migration Services"],
+    "searchTemplates": [
+      "Filipino services in {city}",
+      "Filipino business in {city}",
+      "Filipino accountant in {city}",
+      "Filipino logistics in {city}",
+      "Filipino freight in {city}",
+      "Filipino cleaning service in {city}"
+    ]
   }
 }
