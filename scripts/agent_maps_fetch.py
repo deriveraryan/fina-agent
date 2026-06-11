@@ -72,7 +72,7 @@ SEARCH_TEMPLATES: dict[str, list[str]] = {
         "Filipino accountant in {city}",
         "Filipino logistics in {city}",
         "Filipino freight in {city}",
-        "Filipino travel agency in {city}"
+        "Filipino cleaning service in {city}"
     ]
 }
 
