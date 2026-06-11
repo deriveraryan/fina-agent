@@ -75,10 +75,11 @@
   },
   "COMMUNITY": {
     "displayName": "Community",
-    "description": "Organized clubs, community associations, non-profits, student clubs, and structured support groups.",
+    "description": "Organized clubs, community associations, non-profits, student clubs, online groups, and structured support groups.",
     "rules": [
       "An organized group of individuals collaborating for community welfare, cultural preservation, support, or advocacy.",
       "Must be a non-profit association, club, or community organization.",
+      "Can operate either through a physical location for gatherings, as an online-only (virtual) community group, or both.",
       "DOES NOT include local commercial business services (like tax services, travel agencies, cargo forwarders, etc.)."
     ],
     "examples": ["Filipino Student Association", "Filipino-Australian Community Club", "Bayanihan Cultural Group"],
