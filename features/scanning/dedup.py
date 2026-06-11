@@ -32,22 +32,22 @@ def merge_listing_data(
 ) -> dict[str, Any]:
     """Merges new listing fields into an existing listing dict.
 
-    Fills null or empty values without overwriting existing non-empty values.
+    Overwrites existing values if the incoming new value is not null and not empty.
     Returns a new merged dict.
     """
     merged = dict(existing)
     for key, value in new_data.items():
+        if key in ("id", "createdAt", "updatedAt", "descriptionEmbedding"):
+            continue
+
         if key == "categories":
-            existing_cats = merged.get("categories") or []
-            new_cats = value or []
-            # Unique union preserving order
-            merged[key] = list(dict.fromkeys(existing_cats + new_cats))
+            if value:  # Overwrite if new list is non-empty
+                merged[key] = value
         elif key in ("facebookFollowers", "instagramFollowers"):
             if value is not None:
                 merged[key] = value
-        elif value is not None and value != "":
-            existing_value = merged.get(key)
-            if existing_value is None or existing_value == "":
+        else:
+            if value is not None and value != "":
                 merged[key] = value
     return merged
 

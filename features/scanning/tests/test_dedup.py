@@ -21,7 +21,7 @@ class TestDeduplication(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(normalize_name(""), "")
 
     def test_merge_listing_data(self) -> None:
-        """Tests that new non-empty listing fields are merged without overwriting existing non-empty values."""
+        """Tests that new non-empty listing fields overwrite existing database fields, while empty/null fields preserve them."""
         existing = {
             "name": "Manila Bistro",
             "categories": ["RESTAURANT"],
@@ -41,14 +41,34 @@ class TestDeduplication(unittest.IsolatedAsyncioTestCase):
 
         merged = merge_listing_data(existing, new_data)
 
-        self.assertEqual(merged["name"], "Manila Bistro")  # Kept existing non-null
+        self.assertEqual(merged["name"], "Manila Bistro Pty Ltd")  # Overwritten by non-empty new name
         self.assertEqual(merged["phone"], "0400111222")  # Filled null
         self.assertEqual(merged["website"], "https://manilabistro.com.au")  # Filled empty string
-        self.assertEqual(merged["imageUrl"], "http://existing.img")  # Kept existing
-        self.assertEqual(set(merged["categories"]), {"RESTAURANT", "CAFE"})  # Categories set union
+        self.assertEqual(merged["imageUrl"], "http://new.img")  # Overwritten by non-empty new imageUrl
+        self.assertEqual(merged["categories"], ["RESTAURANT", "CAFE"])  # Overwritten by non-empty categories
+
+        # Test that empty or null incoming fields do NOT overwrite existing non-empty fields
+        existing2 = {
+            "name": "Manila Bistro",
+            "categories": ["RESTAURANT"],
+            "city": "SYDNEY",
+            "phone": "0299999999",
+            "facebookFollowers": 1500,
+        }
+        new_data2 = {
+            "name": "",
+            "categories": [],
+            "phone": None,
+            "facebookFollowers": None,
+        }
+        merged2 = merge_listing_data(existing2, new_data2)
+        self.assertEqual(merged2["name"], "Manila Bistro")
+        self.assertEqual(merged2["categories"], ["RESTAURANT"])
+        self.assertEqual(merged2["phone"], "0299999999")
+        self.assertEqual(merged2["facebookFollowers"], 1500)
 
     def test_deduplicate_batch(self) -> None:
-        """Tests that deduplicate_batch merges listings with same sourceUrl or name."""
+        """Tests that deduplicate_batch merges listings by overwriting sequentially."""
         from features.scanning.dedup import deduplicate_batch
         
         batch = [
@@ -61,9 +81,9 @@ class TestDeduplication(unittest.IsolatedAsyncioTestCase):
         deduped = deduplicate_batch(batch)
         self.assertEqual(len(deduped), 2)
         
-        # Check Lola's Kitchen merged correctly
+        # Check Lola's Kitchen merged correctly by overwriting sequentially (last non-empty categories is SHOP)
         lola = next(item for item in deduped if item["name"] == "Lola's Kitchen")
-        self.assertEqual(set(lola["categories"]), {"RESTAURANT", "CAFE", "SHOP"})
+        self.assertEqual(lola["categories"], ["SHOP"])
         
         # Check Unique Place exists
         unique = next(item for item in deduped if item["name"] == "Unique Place")
