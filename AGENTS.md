@@ -49,7 +49,7 @@ Here is the registry of the 6 specialized Antigravity subagents:
     2. Uses native web search with site-specific queries to find candidate community pages.
     3. Checks for duplicates by looking up names/URLs directly in `tmp/existing_city_listings.json` on disk to avoid context bloat.
     4. Navigates to candidate pages via Chrome DevTools, extracting only visible text/selectors to prevent raw HTML bloat.
-    5. Creates verified listings via `agent_graphql_push.py --operation CreateListing` with self-correction on validation failure.
+    5. Creates verified listings via `agent_graphql_push.py --operation CreateListing` (without `--generate-embeddings`) with self-correction on validation failure.
 
 ### 3. `fina_enrich_listing_socials_finder`
 *   **Role**: Enriches existing database listings with missing Facebook and Instagram URLs. Strictly targets a single city per run.
@@ -124,11 +124,11 @@ pip install -r requirements.txt
   ```
 - **GraphQL Push**:
   ```bash
-  # Single Payload (generate embeddings automatically for CreateListing/CreateEvent)
-  python3 scripts/agent_graphql_push.py --operation <CreateListing|UpdateListingSocialUrls|CreateEvent> --variables @tmp/payload.json --trace-id <CONVERSATION_ID> --generate-embeddings
+  # Single Payload (Note: Omit --generate-embeddings for maps and web finder discovery agents)
+  python3 scripts/agent_graphql_push.py --operation <CreateListing|UpdateListingSocialUrls|CreateEvent> --variables @tmp/payload.json --trace-id <CONVERSATION_ID>
   
   # Bulk Payload (Array of JSON Objects)
-  python3 scripts/agent_graphql_push.py --operation BulkCreateListing --variables @tmp/bulk_payload.json --trace-id <CONVERSATION_ID> --generate-embeddings
+  python3 scripts/agent_graphql_push.py --operation BulkCreateListing --variables @tmp/bulk_payload.json --trace-id <CONVERSATION_ID>
   ```
 
 ---
