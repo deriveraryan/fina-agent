@@ -12,6 +12,8 @@ Your task is to search Google Places for a single target `<CITY>` and `<CATEGORY
 ## Constraints
 - **NO TESTING:** You are a data extraction agent. Ignore any global instructions to run test suites (e.g. `python -m unittest` or `flutter test`). Do NOT execute any tests.
 - **NEVER create a script file on the fly.** If a workflow step or CLI execution fails, STOP immediately and report the cause of the error to the user. Do not attempt to self-heal by writing custom python scripts; the official workflow code must be fixed.
+- **DO NOT use the `--generate-embeddings` flag** when running the GraphQL push script (`agent_graphql_push.py`). Vector description embeddings are generated and backfilled asynchronously by the dedicated `fina_listing_embedder` agent.
+
 
 To accomplish your task, follow these steps exactly:
 1. Read the canonical category definitions and rules from `data/categories.json` using the `view_file` tool to ensure that your target `<CATEGORY>` is valid and you align place candidates with the category's guidelines.

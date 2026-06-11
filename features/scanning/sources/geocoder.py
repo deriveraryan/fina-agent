@@ -25,7 +25,7 @@ AUSTRALIA_DEFAULT_CENTER: tuple[float, float] = (-35.2809, 149.1300)  # Canberra
 
 def get_city_fallback_coordinates(city_context: str) -> tuple[float, float]:
     """Retrieves central coordinates for a city, falling back to Canberra if unknown."""
-    coords = CITY_CENTRAL_COORDINATES.get(city_context)
+    coords = CITY_CENTRAL_COORDINATES.get(city_context.upper())
     if coords:
         return coords
     BackendObservability.warning(
