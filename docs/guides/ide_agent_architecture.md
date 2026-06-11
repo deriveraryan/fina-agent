@@ -190,6 +190,7 @@ This subagent automates business research on Google Maps:
 *   **Context Optimization (Local Cache Reading)**: To prevent bloating the prompt context, the agent runs `scripts/agent_maps_fetch.py` once with `--limit 1` to query and cache all candidates locally to `.antigravity_saves/maps_cache_{city}_{category}.json`. The agent then reads candidates in small line slices (e.g., 200 lines at a time) using the `view_file` tool on disk directly, bypassing repeated CLI runs and terminal-based JSON outputs.
 *   **Cost Optimization (Local Caching)**: To prevent redundant Places API costs, candidates are loaded instantly from the local cache file. If fresh data is needed, passing `--refresh` forces a live Google Places API Text Search query.
 *   **Offline/Mock Testing**: Bypasses the Places API if `GOOGLE_MAPS_API_KEY` is not set or is `"mock-key"`, returning realistic offline listing stubs for local testing.
+*   **Omission of Embeddings Flag**: Does NOT use the `--generate-embeddings` flag when pushing listings via the GraphQL client. Listing description vector embeddings are backfilled asynchronously by the dedicated `fina_listing_embedder` agent.
 
 ### 2. The `fina_new_listing_web_finder` Subagent (Community Scanner)
 This subagent actively searches Facebook and Instagram for Filipino community organisations:
@@ -199,6 +200,7 @@ This subagent actively searches Facebook and Instagram for Filipino community or
 *   **Browser Verification (No-Bloat)**: The subagent uses the `chrome-devtools` skill to inspect candidate pages, extracting only visible text or target DOM selectors (such as the follower count element or the bio description), rather than loading full raw page HTML into prompt history.
 *   **Category Standardization**: The subagent is instructed to view [categories.json](file:///Users/ryan/.gemini/antigravity/scratch/fina-agent/data/categories.json) to ensure extracted categories map precisely to canonical definitions before pushing.
 *   **Listing Persistence**: Verified organizations are pushed directly to the `Listing` table using `CreateListing`. For online-only communities (no physical street address), the address is set to the city name with city center coordinates and tagged with `online-community`.
+*   **Omission of Embeddings Flag**: Does NOT use the `--generate-embeddings` flag when pushing listings via the GraphQL client. Listing description vector embeddings are backfilled asynchronously by the dedicated `fina_listing_embedder` agent.
 
 ### 3. The `fina_enrich_listing_socials_finder` Subagent (Missing Socials Finder)
 This subagent focuses purely on completing existing directory entries:
