@@ -10,7 +10,7 @@
     "examples": ["Manila Sunset Diner", "Filipino BBQ Grill", "Adobo Food Truck"],
     "searchTemplates": [
       "Filipino restaurant in {city}",
-      "Pinoy food in {city}",
+      "Filipino food market in {city}",
       "Filipino food truck in {city}"
     ]
   },
