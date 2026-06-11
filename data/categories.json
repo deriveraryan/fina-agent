@@ -46,10 +46,11 @@
   },
   "CHURCH": {
     "displayName": "Churches",
-    "description": "Christian and Catholic churches, Tagalog mass fellowships, religious groups.",
+    "description": "Christian and Catholic churches, Tagalog mass fellowships, or religious groups meeting at a physical place of gathering.",
     "rules": [
-      "A house of worship or organized religious community group holding regular services.",
-      "Provides chaplaincy or mass services tailored to the Filipino community."
+      "Must have a physical place of gathering (e.g. church building, community hall, rented chapel) where members assemble physically.",
+      "Provides chaplaincy or mass services tailored to the Filipino community.",
+      "DOES NOT include purely online/virtual ministries with no physical assembly presence."
     ],
     "examples": ["St. Mary Filipino Fellowship", "Tagalog mass community", "Filipino Christian Church"],
     "searchTemplates": [
