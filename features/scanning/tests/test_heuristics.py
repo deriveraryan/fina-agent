@@ -1,5 +1,5 @@
 import unittest
-from features.scanning.heuristics import should_exclude_listing
+from features.scanning.heuristics import should_exclude_listing, verify_filipino_affiliation
 
 class TestHeuristics(unittest.TestCase):
     def test_should_exclude_major_chains(self):
@@ -43,3 +43,34 @@ class TestHeuristics(unittest.TestCase):
         self.assertFalse(should_exclude_listing({}))
         self.assertFalse(should_exclude_listing({"name": ""}))
         self.assertFalse(should_exclude_listing({"name": None}))
+
+
+class TestFilipinoAffiliation(unittest.TestCase):
+    def test_authentic_filipino_keywords(self):
+        # Name-based checks
+        self.assertTrue(verify_filipino_affiliation("Manila Sunset Diner"))
+        self.assertTrue(verify_filipino_affiliation("Lolas Island Shop"))
+        self.assertTrue(verify_filipino_affiliation("Pinoy Grill N Chill"))
+        self.assertTrue(verify_filipino_affiliation("My Lola's Table"))
+        
+        # Culinary signals
+        self.assertTrue(verify_filipino_affiliation("Kanto Bagnet"))
+        self.assertTrue(verify_filipino_affiliation("Cucina de Manila", reviews=[{"text": "amazing tapsilog!"}]))
+        self.assertTrue(verify_filipino_affiliation("Test Place", reviews=[{"text": "The longsilog was delicious"}]))
+        self.assertTrue(verify_filipino_affiliation("Burger Point", reviews=[{"text": "Get their ube shake and pancit #BidaAngSarap!"}]))
+        
+        # Linguistic signals
+        self.assertTrue(verify_filipino_affiliation("Filo Place", reviews=[{"text": "masarap and authentic"}]))
+        self.assertTrue(verify_filipino_affiliation("Cafe", reviews=[{"text": "salamat po, will come again"}]))
+
+    def test_false_positives_rejection(self):
+        # Tapas/salami substring collision
+        self.assertFalse(verify_filipino_affiliation("Bar Una Más", description="Spanish tapas beach bar", reviews=[{"text": "Great Spanish tapas and sangria."}]))
+        self.assertFalse(verify_filipino_affiliation("La Disfida Haberfield", reviews=[{"text": "Great pizza, got the mushroom and salami."}]))
+        self.assertFalse(verify_filipino_affiliation("Cove Bar Grill", reviews=[{"text": "The chicken was a bit dry."}]))
+        self.assertFalse(verify_filipino_affiliation("Kipling's Garage Bar", description="Inventive tapas plates and craft beer."))
+        
+        # General non-Filipino terms
+        self.assertFalse(verify_filipino_affiliation("Lululemon Athletica"))
+        self.assertFalse(verify_filipino_affiliation("Laminate Flooring Co"))
+

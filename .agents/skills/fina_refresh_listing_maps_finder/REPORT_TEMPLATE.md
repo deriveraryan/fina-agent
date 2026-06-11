@@ -13,8 +13,10 @@
 | **Agent** | fina_refresh_listing_maps_finder |
 | **Target City** | {CITY} |
 | **Categories Scanned** | {COMMA_SEPARATED_CATEGORIES e.g. RESTAURANT, CAFE, SHOP, CHURCH, COMMUNITY, GOVERNMENT, SERVICES} |
+| **Google Places API Calls** | {NUMBER_OF_API_CALLS e.g. 0 (Cache Hit) or 15} |
 | **Execution Date** | {YYYY-MM-DD HH:MM AEST} |
 | **Trace ID** | `{TRACE_ID}` |
+
 
 ## Summary
 

@@ -91,3 +91,59 @@ def should_exclude_listing(listing_data: dict[str, Any]) -> bool:
         return True
         
     return False
+
+
+def verify_filipino_affiliation(name: str, description: str = "", reviews: list = None) -> bool:
+    """Verifies authentic Filipino affiliation by checking text context for linguistic and culinary signals.
+    
+    Uses robust tokenization, trailing plural/possessive suffix stripping, and categorized
+    keyword matches to prevent substring collision errors (e.g. matching 'lami' in 'salami' or
+    'tapa' in 'tapas').
+    """
+    if not name:
+        return False
+        
+    # Standardize and combine all text fields to search
+    text_parts = [name, description or ""]
+    if reviews:
+        for r in reviews:
+            if isinstance(r, dict):
+                text_parts.append(r.get("text", ""))
+            elif isinstance(r, str):
+                text_parts.append(r)
+                
+    full_text = " ".join(text_parts).lower()
+    
+    # Split text into word tokens (alphabetic only to handle hashtags, punctuation, etc.)
+    words = re.findall(r'[a-z]+', full_text)
+    
+    # Keyword sets
+    high_collision = {"lami", "tapa"}
+    low_collision = {
+        "masarap", "sarap", "salamat", "kabayan", "mabuhay", 
+        "adobo", "sinigang", "lechon", "sisig", "pancit", "lumpia", 
+        "halohalo", "caldereta", "bagnet", "tocino", "pandesal",
+        "filipino", "pinoy", "manila", "lola", "bahay"
+    }
+    
+    for word in words:
+        # Check low-collision compound/suffix matches first (e.g. #BidaAngSarap or tapsilog)
+        if "sarap" in word or "silog" in word or "halohalo" in word or "halo-halo" in word:
+            return True
+            
+        # Clean possessives and plurals for standard words
+        clean_word = word
+        if clean_word.endswith("s"):
+            if clean_word != "tapas":
+                clean_word = clean_word[:-1]
+                
+        # Match against low-collision keywords
+        if clean_word in low_collision:
+            return True
+            
+        # Match against high-collision keywords (strict exact match only)
+        if word in high_collision:
+            return True
+            
+    return False
+
