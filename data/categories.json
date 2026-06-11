@@ -10,7 +10,8 @@
     "searchTemplates": [
       "Filipino restaurant in {city}",
       "Pinoy food in {city}",
-      "Filipino food truck in {city}"
+      "Filipino food truck in {city}",
+      "Filipino catering in {city}"
     ]
   },
   "CAFE": {
@@ -99,7 +100,9 @@
       "Filipino accountant in {city}",
       "Filipino logistics in {city}",
       "Filipino freight in {city}",
-      "Filipino cleaning service in {city}"
+      "Filipino cleaning service in {city}",
+      "Filipino migration agent in {city}",
+      "Filipino recruitment in {city}"
     ]
   }
 }
