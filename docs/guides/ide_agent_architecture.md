@@ -37,7 +37,7 @@ flowchart TD
     QueryPlaces --> ReturnDone
     
     ReturnDone --> ReadSlices["Read cache file in line chunks via view_file"]
-    ReadSlices --> VerifyHeuristic["Subagent evaluates candidate internally<br>(using reviews & text details)"]
+    ReadSlices --> VerifyHeuristic["Subagent evaluates candidate internally<br>(using name & description details)"]
     
     VerifyHeuristic -->|Filipino Affiliated| ExecPushDataMaps["Execute: python3 scripts/agent_graphql_push.py<br>--operation CreateListing"]
     subgraph agent_graphql_push_maps["Inside scripts/agent_graphql_push.py"]

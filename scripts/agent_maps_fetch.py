@@ -116,22 +116,6 @@ def format_place(place: dict, city: str, category: str) -> dict:
     
     types = place.get("types", [])
     
-    reviews_list = place.get("reviews") or []
-    structured_reviews = []
-    for r in reviews_list:
-        if not isinstance(r, dict):
-            continue
-        text = r.get("text", {}).get("text")
-        if not text:
-            continue
-        structured_reviews.append({
-            "externalSourceId": r.get("name"),
-            "authorName": r.get("authorAttribution", {}).get("displayName"),
-            "rating": r.get("rating"),
-            "text": text,
-            "publishedDate": r.get("publishTime")
-        })
-    
     operating_hours_json = None
     hours_obj = place.get("regularOpeningHours") or {}
     weekday_descriptions = hours_obj.get("weekdayDescriptions")
@@ -156,7 +140,6 @@ def format_place(place: dict, city: str, category: str) -> dict:
         "website": place.get("websiteUri"),
         "hours": operating_hours_json,
         "description": editorial or f"A verified Filipino {category.lower()} in {city.title()}.",
-        "reviews": structured_reviews,
         "sourceUrl": f"https://www.google.com/maps/place/?q=place_id:{place_id}",
         "status": status
     }
@@ -171,7 +154,7 @@ async def _execute_places_text_search(query: str, api_key: str) -> list[dict[str
         "X-Goog-FieldMask": (
             "places.id,places.displayName,places.formattedAddress,places.location,"
             "places.websiteUri,places.internationalPhoneNumber,places.regularOpeningHours,"
-            "places.editorialSummary,places.types,places.reviews,places.businessStatus"
+            "places.editorialSummary,places.types,places.businessStatus"
         )
     }
     body = {
@@ -216,23 +199,7 @@ def _get_mock_places(city: str, category: str) -> list[dict[str, Any]]:
                         "Sunday: 11:00 AM – 9:00 PM"
                     ]
                 },
-                "editorialSummary": {"text": "Authentic Manila style diners serving signature lechon and adobo."},
-                "reviews": [
-                    {
-                        "name": "places/mock_restaurant_1/reviews/0",
-                        "authorAttribution": {"displayName": "Juan Dela Cruz"},
-                        "rating": 5.0,
-                        "text": {"text": "Great chicken inasal and helpful staff."},
-                        "publishTime": "2026-06-06T00:00:00Z"
-                    },
-                    {
-                        "name": "places/mock_restaurant_1/reviews/1",
-                        "authorAttribution": {"displayName": "Maria Clara"},
-                        "rating": 4.0,
-                        "text": {"text": "Very clean place with amazing pork sisig!"},
-                        "publishTime": "2026-06-06T00:00:00Z"
-                    }
-                ]
+                "editorialSummary": {"text": "Authentic Manila style diners serving signature lechon and adobo."}
             }
         ]
     elif category == "CAFE":
@@ -259,16 +226,7 @@ def _get_mock_places(city: str, category: str) -> list[dict[str, Any]]:
                         "Sunday: Closed"
                     ]
                 },
-                "editorialSummary": {"text": "Cozy café featuring specialty ube lattes and pandesal toast."},
-                "reviews": [
-                    {
-                        "name": "places/mock_cafe_1/reviews/0",
-                        "authorAttribution": {"displayName": "Jose Rizal"},
-                        "rating": 5.0,
-                        "text": {"text": "Fabulous ube cake and friendly barista."},
-                        "publishTime": "2026-06-06T00:00:00Z"
-                    }
-                ]
+                "editorialSummary": {"text": "Cozy café featuring specialty ube lattes and pandesal toast."}
             }
         ]
     elif category == "SHOP":
@@ -295,16 +253,7 @@ def _get_mock_places(city: str, category: str) -> list[dict[str, Any]]:
                         "Sunday: 10:00 AM – 5:00 PM"
                     ]
                 },
-                "editorialSummary": {"text": "Well stocked grocery store with Filipino brand goods and imported ingredients."},
-                "reviews": [
-                    {
-                        "name": "places/mock_shop_1/reviews/0",
-                        "authorAttribution": {"displayName": "Andres Bonifacio"},
-                        "rating": 4.5,
-                        "text": {"text": "Has all the Filipino snacks and sauces I miss!"},
-                        "publishTime": "2026-06-06T00:00:00Z"
-                    }
-                ]
+                "editorialSummary": {"text": "Well stocked grocery store with Filipino brand goods and imported ingredients."}
             }
         ]
     elif category == "CHURCH":
@@ -325,16 +274,7 @@ def _get_mock_places(city: str, category: str) -> list[dict[str, Any]]:
                         "Sunday: 9:00 AM – 1:00 PM"
                     ]
                 },
-                "editorialSummary": {"text": "Filipino Christian worship service and community fellowship."},
-                "reviews": [
-                    {
-                        "name": "places/mock_church_1/reviews/0",
-                        "authorAttribution": {"displayName": "Gabriela Silang"},
-                        "rating": 5.0,
-                        "text": {"text": "Very warm and welcoming community."},
-                        "publishTime": "2026-06-06T00:00:00Z"
-                    }
-                ]
+                "editorialSummary": {"text": "Filipino Christian worship service and community fellowship."}
             }
         ]
     elif category == "COMMUNITY":
@@ -355,16 +295,7 @@ def _get_mock_places(city: str, category: str) -> list[dict[str, Any]]:
                         "Sunday: 9:00 AM – 5:00 PM"
                     ]
                 },
-                "editorialSummary": {"text": f"Filipino community group in {city_title}."},
-                "reviews": [
-                    {
-                        "name": "places/mock_community_1/reviews/0",
-                        "authorAttribution": {"displayName": "Melchora Aquino"},
-                        "rating": 4.8,
-                        "text": {"text": "Very active and helpful community."},
-                        "publishTime": "2026-06-06T00:00:00Z"
-                    }
-                ]
+                "editorialSummary": {"text": f"Filipino community group in {city_title}."}
             }
         ]
     elif category == "GOVERNMENT":
@@ -389,16 +320,7 @@ def _get_mock_places(city: str, category: str) -> list[dict[str, Any]]:
                         "Friday: 9:00 AM – 5:00 PM"
                     ]
                 },
-                "editorialSummary": {"text": f"Philippine consular services office in {city_title}."},
-                "reviews": [
-                    {
-                        "name": "places/mock_gov_1/reviews/0",
-                        "authorAttribution": {"displayName": "Emilio Aguinaldo"},
-                        "rating": 4.2,
-                        "text": {"text": "Fast service and friendly staff."},
-                        "publishTime": "2026-06-06T00:00:00Z"
-                    }
-                ]
+                "editorialSummary": {"text": f"Philippine consular services office in {city_title}."}
             }
         ]
     elif category == "SERVICES":
@@ -423,16 +345,7 @@ def _get_mock_places(city: str, category: str) -> list[dict[str, Any]]:
                         "Friday: 9:00 AM – 5:00 PM"
                     ]
                 },
-                "editorialSummary": {"text": f"A verified Filipino services in {city_title}."},
-                "reviews": [
-                    {
-                        "name": "places/mock_services_1/reviews/0",
-                        "authorAttribution": {"displayName": "Ramon Magsaysay"},
-                        "rating": 4.9,
-                        "text": {"text": "Excellent tax and accounting consultation service."},
-                        "publishTime": "2026-06-06T00:00:00Z"
-                    }
-                ]
+                "editorialSummary": {"text": f"A verified Filipino services in {city_title}."}
             }
         ]
     return []
