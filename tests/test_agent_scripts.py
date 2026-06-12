@@ -103,7 +103,7 @@ class TestAgentScripts(unittest.IsolatedAsyncioTestCase):
 
     @patch("agent_graphql_push.execute_graphql_operation", new_callable=AsyncMock)
     async def test_graphql_push_executes_mutation(self, mock_execute: AsyncMock) -> None:
-        """Tests agent_graphql_push.py takes operation name and variables and executes them generically."""
+        """Tests agent_graphql_push.py executes the mutation with variables."""
         import agent_graphql_push
 
         sys.argv = [
@@ -114,13 +114,17 @@ class TestAgentScripts(unittest.IsolatedAsyncioTestCase):
             '{"id": "123", "facebookUrl": "https://facebook.com/resto"}'
         ]
 
-        mock_execute.return_value = {"data": {"updateListingSocialUrls": {"id": "123"}}}
+        def side_effect_fn(operation_name, variables):
+            if operation_name == "GetListing":
+                return {"data": {"listing": {"id": variables["id"], "facebookUrl": "https://facebook.com/resto"}}}
+            return {"data": {"updateListingSocialUrls": {"id": variables["id"]}}}
+        mock_execute.side_effect = side_effect_fn
 
         await agent_graphql_push.main()
 
-        mock_execute.assert_called_once_with(
+        mock_execute.assert_any_call(
             operation_name="UpdateListingSocialUrls",
-            variables={"id": "123", "facebookUrl": "https://www.facebook.com/resto"},
+            variables={"id": "123", "facebookUrl": "https://www.facebook.com/resto", "instagramUrl": None, "tiktokUrl": None, "facebookFollowers": None, "instagramFollowers": None, "tiktokFollowers": None},
         )
 
     @patch("agent_graphql_push.execute_graphql_operation", new_callable=AsyncMock)
@@ -141,14 +145,18 @@ class TestAgentScripts(unittest.IsolatedAsyncioTestCase):
         mock_file.__enter__.return_value.read.return_value = '{"id": "123", "facebookUrl": "https://facebook.com/resto"}'
         mock_open.return_value = mock_file
 
-        mock_execute.return_value = {"data": {"updateListingSocialUrls": {"id": "123"}}}
+        def side_effect_fn(operation_name, variables):
+            if operation_name == "GetListing":
+                return {"data": {"listing": {"id": variables["id"], "facebookUrl": "https://facebook.com/resto"}}}
+            return {"data": {"updateListingSocialUrls": {"id": variables["id"]}}}
+        mock_execute.side_effect = side_effect_fn
 
         await agent_graphql_push.main()
 
         mock_open.assert_called_once_with("tmp/my_variables.json", "r")
-        mock_execute.assert_called_once_with(
+        mock_execute.assert_any_call(
             operation_name="UpdateListingSocialUrls",
-            variables={"id": "123", "facebookUrl": "https://www.facebook.com/resto"},
+            variables={"id": "123", "facebookUrl": "https://www.facebook.com/resto", "instagramUrl": None, "tiktokUrl": None, "facebookFollowers": None, "instagramFollowers": None, "tiktokFollowers": None},
         )
 
     @patch("sys.stdout")
@@ -815,7 +823,11 @@ class TestAgentScripts(unittest.IsolatedAsyncioTestCase):
             "--trace-id",
             "trace-456"
         ]
-        mock_execute.return_value = {"data": {}}
+        def side_effect_fn(operation_name, variables):
+            if operation_name == "GetListing":
+                return {"data": {"listing": {"id": variables["id"]}}}
+            return {"data": {}}
+        mock_execute.side_effect = side_effect_fn
 
         await agent_graphql_push.main()
 
@@ -1302,6 +1314,137 @@ class TestAgentScripts(unittest.IsolatedAsyncioTestCase):
         self.assertIsNone(res_tt["facebookUrl"])
         self.assertIsNone(res_tt["instagramUrl"])
         self.assertEqual(res_tt["tiktokUrl"], "https://tiktok.com/@mytiktokbusiness")
+
+    @patch("agent_graphql_push.execute_graphql_operation", new_callable=AsyncMock)
+    async def test_graphql_push_update_social_urls_merging(self, mock_execute: AsyncMock) -> None:
+        """Tests that UpdateListingSocialUrls merges existing DB values to prevent data loss."""
+        import agent_graphql_push
+
+        sys.argv = [
+            "agent_graphql_push.py",
+            "--operation",
+            "UpdateListingSocialUrls",
+            "--variables",
+            '{"id": "123", "facebookFollowers": 500}'
+        ]
+
+        mock_execute.side_effect = [
+            {
+                "data": {
+                    "listing": {
+                        "id": "123",
+                        "facebookUrl": "https://www.facebook.com/old",
+                        "instagramUrl": "https://www.instagram.com/old",
+                        "tiktokUrl": None,
+                        "facebookFollowers": 100,
+                        "instagramFollowers": None,
+                        "tiktokFollowers": None
+                    }
+                }
+            },
+            {
+                "data": {
+                    "updateListingSocialUrls": {"id": "123"}
+                }
+            }
+        ]
+
+        await agent_graphql_push.main()
+
+        mock_execute.assert_any_call(
+            operation_name="GetListing",
+            variables={"id": "123"}
+        )
+        mock_execute.assert_any_call(
+            operation_name="UpdateListingSocialUrls",
+            variables={
+                "id": "123",
+                "facebookUrl": "https://www.facebook.com/old",
+                "instagramUrl": "https://www.instagram.com/old",
+                "tiktokUrl": None,
+                "facebookFollowers": 500,
+                "instagramFollowers": None,
+                "tiktokFollowers": None
+            }
+        )
+
+    @patch("agent_graphql_push.execute_graphql_operation", new_callable=AsyncMock)
+    @patch("features.scanning.sources.geocoder.geocode_address", new_callable=AsyncMock)
+    async def test_graphql_push_create_event_defaults_and_geocoding(self, mock_geocode: AsyncMock, mock_execute: AsyncMock) -> None:
+        """Tests that CreateEvent injects defaults and geocodes coordinates if missing."""
+        import agent_graphql_push
+
+        sys.argv = [
+            "agent_graphql_push.py",
+            "--operation",
+            "CreateEvent",
+            "--variables",
+            '{"listingId": "123", "name": "Fiesta", "city": "Sydney", "startDate": "2026-12-25T10:00:00Z", "description": "Fun"}'
+        ]
+
+        mock_execute.side_effect = [
+            {"data": {"events": []}},
+            {"data": {"createEvent": {"id": "new-evt-1"}}}
+        ]
+        mock_geocode.return_value = (-33.8, 151.2)
+
+        await agent_graphql_push.main()
+
+        mock_geocode.assert_called_once_with("Sydney", "Sydney")
+        mock_execute.assert_any_call(
+            operation_name="CreateEvent",
+            variables={
+                "listingId": "123",
+                "name": "Fiesta",
+                "city": "Sydney",
+                "description": "Fun",
+                "startDate": "2026-12-25T10:00:00Z",
+                "isRecurring": False,
+                "verificationStatus": "UNVERIFIED",
+                "latitude": -33.8,
+                "longitude": 151.2,
+                "descriptionEmbedding": None
+            }
+        )
+
+    @patch("agent_graphql_push.execute_graphql_operation", new_callable=AsyncMock)
+    async def test_graphql_push_create_event_deduplication(self, mock_execute: AsyncMock) -> None:
+        """Tests that CreateEvent skips insertion and returns duplicate status if same event/day exists."""
+        import agent_graphql_push
+
+        sys.argv = [
+            "agent_graphql_push.py",
+            "--operation",
+            "CreateEvent",
+            "--variables",
+            '{"listingId": "123", "name": "Fiesta", "city": "Sydney", "startDate": "2026-12-25T10:00:00Z"}'
+        ]
+
+        mock_execute.return_value = {
+            "data": {
+                "events": [
+                    {
+                        "id": "evt-existing",
+                        "name": "Fiesta",
+                        "startDate": "2026-12-25T12:00:00Z"
+                    }
+                ]
+            }
+        }
+
+        with patch("sys.stdout") as mock_stdout:
+            await agent_graphql_push.main()
+
+            mock_execute.assert_called_once()
+            call_ops = [c.kwargs.get("operation_name") or c.args[0] for c in mock_execute.call_args_list]
+            self.assertIn("ListUpcomingEvents", call_ops)
+            self.assertNotIn("CreateEvent", call_ops)
+
+            written = "".join([call.args[0] for call in mock_stdout.write.call_args_list])
+            parsed = json.loads(written)
+            self.assertEqual(parsed["status"], "DUPLICATE")
+            self.assertEqual(parsed["existingId"], "evt-existing")
+
 
 
 

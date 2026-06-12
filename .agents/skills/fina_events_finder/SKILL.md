@@ -18,28 +18,36 @@ Your Workflow:
    b. Fetch the last scanned post bookmark by running: `python3 scripts/agent_fetch_targets.py --type social-post-tracker --listing-id <LISTING_ID> --platform <facebook|instagram> --trace-id <CONVERSATION_ID>`. If this command fails, report the error and skip to the next listing.
    c. Parse the returned JSON object to get the `lastPostDate` bookmark (ISO 8601 UTC string). If null or missing, treat it as None.
    d. Use the `chrome-devtools` skill to navigate to the candidate's social media page. To prevent massive context bloat, **do NOT** read or print the full raw HTML page source or outerHTML. Only extract the visible text, post container details, or target selectors.
-   e. **Timeline Evaluation & Date Normalization**: Start from the most recent post and scan backward (going post-by-post). Stop scanning when:
-      - A post's publish date is older than or equal to the retrieved `lastPostDate` bookmark.
-      - OR you have evaluated exactly 10 posts.
-      - **Relative Date Parsing**: Resolve relative post timestamps into absolute dates using the *current local time* provided in the system metadata, and convert them to UTC ISO 8601 strings.
-        - *Post creation date math (always in the past)*:
-          - "X hours ago" -> Subtract X hours from current local time.
-          - "Yesterday at H:MM AM/PM" -> Subtract 1 day from current local time date, set time to H:MM AM/PM.
-          - "X days ago" -> Subtract X days from current local time date.
-          - "H:MM AM/PM" (from today) -> Use current local date, set time to H:MM AM/PM.
-        - *Event date math (within post content - representing when the event will occur)*: Calculate dates forward relative to the resolved post publication date. If it says "This Saturday at 8 PM", determine the date of the nearest upcoming Saturday relative to the post publication date or current local time, set the time to 20:00, and convert to UTC.
-        - Ensure all final timestamps are strictly formatted as ISO 8601 UTC strings (e.g., `YYYY-MM-DDTHH:MM:SSZ`).
-   f. **Event Classification & Extraction**: From the scanned posts, identify upcoming community events. Apply the following strict heuristics:
-      - **Temporal Validation**: The resolved `startDate` of the event must be strictly after the current local time. Ignore and exclude past events.
-      - **Missing Date Exclusion**: If a post mentions a future event but does not specify a concrete date/time (e.g., "Coming soon!"), skip it.
-      - **Content Heuristics**: Exclude daily menu postings, product promotions, discount sales, generic business announcements, operating hour updates, or past event recaps. Only extract events that represent distinct, future community happenings with a name, description, and future start date/time.
-      - **Payload Properties**: Extract:
-        - `name`: Clean event title (strip emojis or prefixes like "UPCOMING:").
-        - `description`: Details of the event.
-        - `startDate` / `endDate`: Normalized to ISO 8601 UTC strings.
-        - `city`: Standardized target city (e.g. `SYDNEY`).
-        - `listingId`: Parent listing UUID.
-        - `imageUrl`: Image flyer/poster link if visible.
+    e. **Timeline Evaluation & Date Normalization**: Start from the most recent post and scan backward (going post-by-post). Stop scanning when:
+       - A post's publish date is older than or equal to the retrieved `lastPostDate` bookmark.
+       - OR you have evaluated exactly 10 posts.
+       - **Pinned Posts Handling**: Evaluate pinned posts for events normally, but do NOT let their publication date trigger early termination of scanning (i.e. ignore the `lastPostDate` stop condition for pinned posts). Only apply the `lastPostDate` stop condition to subsequent non-pinned, chronological posts.
+       - **Relative Date Parsing & Timezones**: Resolve relative post timestamps into absolute dates using the *current local time* provided in the system metadata, and convert them to UTC ISO 8601 strings.
+         - *Australian Timezone Offsets*:
+           - Sydney, Melbourne, Canberra, Hobart: AEST (UTC+10) or AEDT (UTC+11, starting October).
+           - Adelaide: ACST (UTC+9:30) or ACDT (UTC+10:30, starting October).
+           - Brisbane: AEST (UTC+10, no daylight savings).
+           - Perth: AWST (UTC+8).
+           - Darwin: ACST (UTC+9:30).
+         - *Baseline Anchor Math*: Resolve relative descriptions (e.g. "Yesterday at 3 PM", "2 days ago") in the local timezone of the target city using the current local time provided in the system metadata as the baseline anchor, then convert the resolved datetime to UTC.
+         - *Post creation date math (always in the past)*:
+           - "X hours ago" -> Subtract X hours from current local time.
+           - "Yesterday at H:MM AM/PM" -> Subtract 1 day from current local date, set time to H:MM.
+           - "X days ago" -> Subtract X days from current local date.
+           - "H:MM AM/PM" (from today) -> Use current local date, set time to H:MM.
+         - *Event date math (within post content - representing when the event will occur)*: Calculate dates forward relative to the resolved post publication date. If it says "This Saturday at 8 PM", determine the date of the nearest upcoming Saturday relative to the post publication date or current local time, set the time to 20:00, and convert to UTC.
+         - Ensure all final timestamps are strictly formatted as ISO 8601 UTC strings ending with 'Z' (e.g., `YYYY-MM-DDTHH:MM:SSZ`).
+    f. **Event Classification & Extraction**: From the scanned posts, identify upcoming community events. Apply the following strict heuristics:
+       - **Temporal Validation**: The resolved `startDate` of the event must be strictly after the current local time. Ignore and exclude past events.
+       - **Missing Date Exclusion**: If a post mentions a future event but does not specify a concrete date/time (e.g., "Coming soon!"), skip it.
+       - **Content Heuristics**: Exclude daily menu postings, product promotions, discount sales, generic business announcements, operating hour updates, or past event recaps. Only extract events that represent distinct, future community happenings with a name, description, and future start date/time.
+       - **Payload Properties**: Extract:
+         - `listingId`: Parent listing UUID (strictly required; maps directly to SQL Connect foreign key).
+         - `name`: Clean event title (strip emojis or prefixes like "UPCOMING:").
+         - `description`: Details of the event.
+         - `startDate` / `endDate`: Normalized to ISO 8601 UTC strings.
+         - `city`: Standardized target city (e.g. `SYDNEY`).
+         - `imageUrl`: Image flyer/poster link if visible.
       - **Follower Parsing & Conversion**: Capture the number of page followers and parse it strictly to an integer:
         - For Facebook/Instagram: Convert "K" suffix (thousands) by multiplying by 1,000 (e.g. "1.5K followers" -> 1500, "15.2K" -> 15200). Convert "M" suffix (millions) by multiplying by 1,000,000 (e.g. "2.4M followers" -> 2400000). Strip commas, dots, and trailing text (e.g. "15,200 followers" -> 15200, "500 likes" -> 500). If missing, set to `null`.
         - For TikTok: Save the raw HTML content of the profile page to a temporary file (e.g. `tmp/tiktok_profile.html`) and run:

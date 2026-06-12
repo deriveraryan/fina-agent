@@ -56,6 +56,37 @@ async def process_single_item(operation: str, item_dict: dict, trace_id: str, ge
         BackendObservability.error("Validation Error: 'tiktokFollowers' must be an integer if provided.", conversation_id=trace_id)
         return {"error": "Validation Error: 'tiktokFollowers' must be an integer"}
 
+    if operation == "UpdateListingSocialUrls":
+        listing_id = item_dict.get("id")
+        if not listing_id:
+            BackendObservability.error("Validation Error: 'id' is required for UpdateListingSocialUrls.", conversation_id=trace_id)
+            return {"error": "Validation Error: 'id' is required"}
+        try:
+            BackendObservability.trace(f"Fetching existing listing {listing_id} for social URLs merging.", conversation_id=trace_id)
+            res = await execute_graphql_operation(operation_name="GetListing", variables={"id": listing_id})
+            existing = res.get("data", {}).get("listing")
+            if not existing:
+                BackendObservability.error(f"Listing with ID {listing_id} not found in database.", conversation_id=trace_id)
+                return {"error": f"Listing with ID {listing_id} not found"}
+            
+            merged_dict = {
+                "id": listing_id,
+                "facebookUrl": item_dict.get("facebookUrl") if "facebookUrl" in item_dict else existing.get("facebookUrl"),
+                "instagramUrl": item_dict.get("instagramUrl") if "instagramUrl" in item_dict else existing.get("instagramUrl"),
+                "tiktokUrl": item_dict.get("tiktokUrl") if "tiktokUrl" in item_dict else existing.get("tiktokUrl"),
+                "facebookFollowers": item_dict.get("facebookFollowers") if "facebookFollowers" in item_dict else existing.get("facebookFollowers"),
+                "instagramFollowers": item_dict.get("instagramFollowers") if "instagramFollowers" in item_dict else existing.get("instagramFollowers"),
+                "tiktokFollowers": item_dict.get("tiktokFollowers") if "tiktokFollowers" in item_dict else existing.get("tiktokFollowers"),
+            }
+            item_dict = merged_dict
+        except Exception as exc:
+            BackendObservability.error(
+                f"Failed to fetch or merge existing listing {listing_id}",
+                exception=exc,
+                conversation_id=trace_id
+            )
+            return {"error": f"Failed to fetch/merge existing listing: {exc}"}
+
     # Normalize category -> categories
     if "category" in item_dict:
         cat = item_dict.pop("category")
@@ -242,7 +273,54 @@ async def process_single_item(operation: str, item_dict: dict, trace_id: str, ge
         name = item_dict.get("name")
         city = item_dict.get("city")
         description = item_dict.get("description")
+        
+        # 1. Supply defaults for required variables
+        if "isRecurring" not in item_dict:
+            item_dict["isRecurring"] = False
+        if "verificationStatus" not in item_dict:
+            item_dict["verificationStatus"] = "UNVERIFIED"
+
         if name and city:
+            # 2. Event Deduplication Check
+            try:
+                import datetime
+                # Fetch upcoming events in the city (passing timestamp from 1 day ago)
+                now_ts = (datetime.datetime.now(datetime.timezone.utc) - datetime.timedelta(days=1)).strftime("%Y-%m-%dT%H:%M:%SZ")
+                BackendObservability.trace(f"Deduplication check for event '{name}' in {city} starting from {now_ts}", conversation_id=trace_id)
+                res = await execute_graphql_operation(operation_name="ListUpcomingEvents", variables={"city": city, "now": now_ts})
+                events = res.get("data", {}).get("events", []) if res else []
+                
+                from features.scanning.dedup import normalize_name
+                norm_new_name = normalize_name(name)
+                new_start_date = item_dict.get("startDate")
+                
+                for event in events:
+                    if normalize_name(event.get("name", "")) == norm_new_name:
+                        ev_start = event.get("startDate")
+                        if ev_start and new_start_date:
+                            # Compare up to the date portion (YYYY-MM-DD)
+                            if ev_start[:10] == new_start_date[:10]:
+                                BackendObservability.info(f"Duplicate event found in database: '{event.get('name')}' (ID: {event.get('id')})", conversation_id=trace_id)
+                                return {"status": "DUPLICATE", "existingId": event.get("id")}
+            except Exception as exc:
+                BackendObservability.error("Error during event duplicate check.", exception=exc, conversation_id=trace_id)
+
+            # 3. Geocode event address/venue if coordinates are missing
+            lat = item_dict.get("latitude")
+            lng = item_dict.get("longitude")
+            if lat is None or lng is None:
+                from features.scanning.sources.geocoder import geocode_address
+                addr = item_dict.get("address") or item_dict.get("venueName") or city
+                BackendObservability.trace(f"No coordinates provided for event. Geocoding address: '{addr}'", conversation_id=trace_id)
+                try:
+                    lat, lng = await geocode_address(addr, city)
+                    item_dict["latitude"] = lat
+                    item_dict["longitude"] = lng
+                    BackendObservability.info(f"Geocoded event address to coordinates: ({lat}, {lng})", conversation_id=trace_id)
+                except Exception as exc:
+                    BackendObservability.error(f"Failed to geocode event address: {addr}", exception=exc, conversation_id=trace_id)
+
+            # 4. Generate description embedding
             if generate_embeddings:
                 base_desc = f"{name} is a Filipino community event in {city}."
                 embedding_text = f"{base_desc} {description}" if description else base_desc
