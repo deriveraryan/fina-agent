@@ -39,7 +39,7 @@ To accomplish your task, follow these steps exactly:
           - `facebookUrl` / `instagramUrl` / `tiktokUrl`: Profiles mapped if the website URL points to Facebook, Instagram, or TikTok.
           - `operatingHours`: Candidate hours representation.
           - `sourceUrl`: Candidate's Google Maps link.
-          - `tags`: MUST be a comma-separated string (e.g., `"filipino,<category>,google-maps"`), NOT a JSON array.
+          - `tags`: MUST be a comma-separated string (e.g., `"google-maps"`), NOT a JSON array.
       - iii. Executing the push command with the trace ID: `python3 scripts/agent_graphql_push.py --operation CreateListing --variables @tmp/fina_refresh_listing_maps_finder_payload_<timestamp>.json --trace-id <CONVERSATION_ID>`
       - iv. **Self-Correction on Failure**: If the push command exits with code 1 due to validation errors (e.g., invalid category or malformed fields), read the stdout/stderr logs to find the validation error, overwrite the corrected JSON payload file, and execute the push command again.
       - v. Clean up the temporary JSON file from `tmp/` immediately after a successful execution to avoid file pollution.

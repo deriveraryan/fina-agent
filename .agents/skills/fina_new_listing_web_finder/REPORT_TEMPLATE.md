@@ -37,7 +37,7 @@
    - Description: {brief description of the community/organisation}
    - Social URL: {facebook or instagram url}
    - DB ID: `{database_id}`
-   - Tags: {comma-separated tags e.g. filipino,community,social-discovery}
+   - Tags: {comma-separated tags e.g. google-search,online-org}
 
 ## Skipped / Rejected Candidates
 
