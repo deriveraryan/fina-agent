@@ -20,6 +20,7 @@
 
 | Metric | Count |
 | :--- | :--- |
+| **Web Searches Made** | {N} |
 | **Total Candidate Pages Evaluated** | {N} |
 | **Verified Listings Created** | {N} |
 | **Candidates Rejected** | {N} |
