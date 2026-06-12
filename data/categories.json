@@ -24,24 +24,27 @@
     ],
     "examples": ["Pandesal & Co.", "Pinoy Brew Cafe", "Ube Desserts Parlor"],
     "searchTemplates": [
-      "Filipino cafe in {city}",
-      "Filipino coffee in {city}"
+      "Filipino cafe in {city}"
     ]
   },
   "SHOP": {
     "displayName": "Shops",
-    "description": "Retail stores, grocery shops, Asian/Filipino supermarkets, convenience stores, online shops, or sari-sari stores selling imported ingredients or merchandise.",
+    "description": "Retail stores, grocery shops, Asian/Filipino supermarkets, convenience stores, butchers, fish/seafood markets, fresh vegetable/produce shops, online shops, or sari-sari stores selling imported ingredients or merchandise.",
     "rules": [
-      "Sells physical packaged ingredients, imported groceries, clothing, or merchandise directly to consumers.",
+      "Sells physical packaged ingredients, fresh meats (butchers), seafood (fish), fresh produce (vegetables), imported groceries, clothing, or merchandise directly to consumers.",
       "Can operate as a physical retail space, an online-only (virtual) storefront, or both."
     ],
-    "examples": ["Luzon Sari-Sari Store", "Manila Asian Groceries", "Pinoy Supermarket"],
+    "examples": ["Luzon Sari-Sari Store", "Manila Asian Groceries", "Pinoy Supermarket", "Filo Meat & Seafood Hub"],
     "searchTemplates": [
       "Filipino grocery in {city}",
       "Filipino shop in {city}",
       "Filipino supermarket in {city}",
       "Filipino online shop in {city}",
-      "Filipino bakery in {city}"
+      "Filipino bakery in {city}",
+      "Filipino butcher in {city}",
+      "Filipino fish market in {city}",
+      "Filipino vegetable shop in {city}",
+      "Filipino fresh produce in {city}"
     ]
   },
   "CHURCH": {
