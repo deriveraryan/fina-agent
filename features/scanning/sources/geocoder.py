@@ -6,6 +6,17 @@ from typing import Any
 import httpx
 from features.shared.observability import BackendObservability
 
+# Global AsyncClient instance for connection reuse
+_client: httpx.AsyncClient | None = None
+
+
+def _get_client() -> httpx.AsyncClient:
+    global _client
+    if _client is None:
+        _client = httpx.AsyncClient()
+    return _client
+
+
 # Predefined central coordinates for major Australian cities to use as fallback
 CITY_CENTRAL_COORDINATES: dict[str, tuple[float, float]] = {
     "SYDNEY": (-33.8688, 151.2093),
@@ -16,6 +27,7 @@ CITY_CENTRAL_COORDINATES: dict[str, tuple[float, float]] = {
     "DARWIN": (-12.4634, 130.8456),
     "HOBART": (-42.8821, 147.3272),
     "CANBERRA": (-35.2809, 149.1300),
+    "GOLD COAST": (-28.0167, 153.4000),
     "GOLD_COAST": (-28.0167, 153.4000),
 }
 
@@ -25,7 +37,8 @@ AUSTRALIA_DEFAULT_CENTER: tuple[float, float] = (-35.2809, 149.1300)  # Canberra
 
 def get_city_fallback_coordinates(city_context: str) -> tuple[float, float]:
     """Retrieves central coordinates for a city, falling back to Canberra if unknown."""
-    coords = CITY_CENTRAL_COORDINATES.get(city_context.upper())
+    normalized_city = city_context.upper().strip().replace("_", " ")
+    coords = CITY_CENTRAL_COORDINATES.get(normalized_city)
     if coords:
         return coords
     BackendObservability.warning(
@@ -33,6 +46,7 @@ def get_city_fallback_coordinates(city_context: str) -> tuple[float, float]:
         f"Using default Australian center (Canberra) {AUSTRALIA_DEFAULT_CENTER} instead."
     )
     return AUSTRALIA_DEFAULT_CENTER
+
 
 
 async def geocode_address(address: str, city_context: str) -> tuple[float, float]:
@@ -69,10 +83,10 @@ async def geocode_address(address: str, city_context: str) -> tuple[float, float
     }
 
     try:
-        async with httpx.AsyncClient(timeout=10.0) as client:
-            response = await client.get(url, params=params)
-            response.raise_for_status()
-            data = response.json()
+        client = _get_client()
+        response = await client.get(url, params=params, timeout=10.0)
+        response.raise_for_status()
+        data = response.json()
 
         results: list[dict[str, Any]] = data.get("results", [])
         if not results:

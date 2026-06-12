@@ -38,6 +38,9 @@ async def load_valid_categories(trace_id: str | None = None) -> set[str]:
 
 
 async def process_single_item(operation: str, item_dict: dict, trace_id: str, generate_embeddings: bool = False) -> dict:
+    from features.scanning.url_normalization import normalize_listing_socials
+    item_dict = await normalize_listing_socials(item_dict, trace_id=trace_id)
+
     fb_followers = item_dict.get("facebookFollowers")
     if fb_followers is not None and not isinstance(fb_followers, int):
         BackendObservability.error("Validation Error: 'facebookFollowers' must be an integer if provided.", conversation_id=trace_id)

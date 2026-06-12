@@ -54,6 +54,26 @@ class TestGeocoder(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(lat, -37.8136)
         self.assertEqual(lng, 144.9631)
 
+    def test_get_city_fallback_coordinates_normalization(self) -> None:
+        """Tests that get_city_fallback_coordinates handles both spaces and underscores for Gold Coast."""
+        # Test Gold Coast variations
+        lat_space, lng_space = get_city_fallback_coordinates("gold coast")
+        lat_underscore, lng_underscore = get_city_fallback_coordinates("gold_coast")
+        lat_upper_space, lng_upper_space = get_city_fallback_coordinates("GOLD COAST")
+        lat_upper_underscore, lng_upper_underscore = get_city_fallback_coordinates("GOLD_COAST")
+
+        expected_lat, expected_lng = -28.0167, 153.4000
+        
+        self.assertEqual(lat_space, expected_lat)
+        self.assertEqual(lng_space, expected_lng)
+        self.assertEqual(lat_underscore, expected_lat)
+        self.assertEqual(lng_underscore, expected_lng)
+        self.assertEqual(lat_upper_space, expected_lat)
+        self.assertEqual(lng_upper_space, expected_lng)
+        self.assertEqual(lat_upper_underscore, expected_lat)
+        self.assertEqual(lng_upper_underscore, expected_lng)
+
 
 if __name__ == "__main__":
     unittest.main()
+

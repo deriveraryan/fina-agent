@@ -118,7 +118,7 @@ class TestAgentScripts(unittest.IsolatedAsyncioTestCase):
 
         mock_execute.assert_called_once_with(
             operation_name="UpdateListingSocialUrls",
-            variables={"id": "123", "facebookUrl": "https://facebook.com/resto"},
+            variables={"id": "123", "facebookUrl": "https://www.facebook.com/resto"},
         )
 
     @patch("agent_graphql_push.execute_graphql_operation", new_callable=AsyncMock)
@@ -146,7 +146,7 @@ class TestAgentScripts(unittest.IsolatedAsyncioTestCase):
         mock_open.assert_called_once_with("tmp/my_variables.json", "r")
         mock_execute.assert_called_once_with(
             operation_name="UpdateListingSocialUrls",
-            variables={"id": "123", "facebookUrl": "https://facebook.com/resto"},
+            variables={"id": "123", "facebookUrl": "https://www.facebook.com/resto"},
         )
 
     @patch("sys.stdout")
