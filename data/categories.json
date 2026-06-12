@@ -38,13 +38,9 @@
     "searchTemplates": [
       "Filipino grocery in {city}",
       "Filipino shop in {city}",
-      "Filipino supermarket in {city}",
-      "Filipino online shop in {city}",
       "Filipino bakery in {city}",
       "Filipino butcher in {city}",
-      "Filipino fish market in {city}",
-      "Filipino vegetable shop in {city}",
-      "Filipino fresh produce in {city}"
+      "Filipino fish market in {city}"
     ]
   },
   "CHURCH": {
