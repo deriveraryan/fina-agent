@@ -3,6 +3,23 @@ import json
 from typing import Union
 from features.shared.observability import BackendObservability
 
+# Pre-compiled regular expressions for performance
+RE_CLEAN_FOLLOWERS = re.compile(r"\s*FOLLOWERS?", re.IGNORECASE)
+RE_REHYDRATION = re.compile(
+    r'<script\s+id="__UNIVERSAL_DATA_FOR_REHYDRATION__"\s+type="application/json">(.*?)</script>',
+    re.DOTALL
+)
+RE_SIGI_STATE = re.compile(
+    r'<script\s+id="SIGI_STATE"\s+type="application/json">(.*?)</script>',
+    re.DOTALL
+)
+RE_DOM_FALLBACK = re.compile(r'data-e2e="followers-count"[^>]*>([^<]+)<')
+RE_META_DESC = re.compile(
+    r'<meta\s+(?:name|property)="[^"]*description"\s+content="([^"]*)"',
+    re.IGNORECASE
+)
+RE_FOLLOWERS_PATTERN = re.compile(r"([\d,.]+[KkMm]?)\s*Followers", re.IGNORECASE)
+
 
 def clean_follower_count(val_str: str) -> Union[int, None]:
     """Cleans a string representation of follower count and converts to integer.
@@ -14,7 +31,7 @@ def clean_follower_count(val_str: str) -> Union[int, None]:
     val_str = val_str.strip().upper()
 
     # Strip any trailing 'FOLLOWERS' text, spaces, or commas
-    val_str = re.sub(r"\s*FOLLOWERS?", "", val_str)
+    val_str = RE_CLEAN_FOLLOWERS.sub("", val_str)
     val_str = val_str.replace(",", "").strip()
 
     if not val_str:
@@ -42,11 +59,7 @@ def parse_tiktok_followers(html_content: Union[str, None]) -> Union[int, None]:
         return None
 
     # 1. Try __UNIVERSAL_DATA_FOR_REHYDRATION__ JSON block
-    rehydration_match = re.search(
-        r'<script\s+id="__UNIVERSAL_DATA_FOR_REHYDRATION__"\s+type="application/json">(.*?)</script>',
-        html_content,
-        re.DOTALL,
-    )
+    rehydration_match = RE_REHYDRATION.search(html_content)
     if rehydration_match:
         try:
             data = json.loads(rehydration_match.group(1).strip())
@@ -62,11 +75,7 @@ def parse_tiktok_followers(html_content: Union[str, None]) -> Union[int, None]:
             )
 
     # 2. Try SIGI_STATE JSON block
-    sigi_match = re.search(
-        r'<script\s+id="SIGI_STATE"\s+type="application/json">(.*?)</script>',
-        html_content,
-        re.DOTALL,
-    )
+    sigi_match = RE_SIGI_STATE.search(html_content)
     if sigi_match:
         try:
             data = json.loads(sigi_match.group(1).strip())
@@ -81,24 +90,16 @@ def parse_tiktok_followers(html_content: Union[str, None]) -> Union[int, None]:
             )
 
     # 3. Try DOM fallback pattern data-e2e="followers-count"
-    dom_match = re.search(
-        r'data-e2e="followers-count"[^>]*>([^<]+)<', html_content
-    )
+    dom_match = RE_DOM_FALLBACK.search(html_content)
     if dom_match:
         followers = clean_follower_count(dom_match.group(1))
         if followers is not None:
             return followers
 
     # 4. Try Meta Description/OG Description content
-    meta_matches = re.findall(
-        r'<meta\s+(?:name|property)="[^"]*description"\s+content="([^"]*)"',
-        html_content,
-        re.IGNORECASE,
-    )
+    meta_matches = RE_META_DESC.findall(html_content)
     for content in meta_matches:
-        follower_match = re.search(
-            r"([\d,.]+[KkMm]?)\s*Followers", content, re.IGNORECASE
-        )
+        follower_match = RE_FOLLOWERS_PATTERN.search(content)
         if follower_match:
             followers = clean_follower_count(follower_match.group(1))
             if followers is not None:
