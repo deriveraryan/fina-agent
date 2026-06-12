@@ -51,6 +51,8 @@ async def main() -> None:
                 targets.append({"id": l["id"], "url": l["facebookUrl"]})
             if l.get("instagramUrl"):
                 targets.append({"id": l["id"], "url": l["instagramUrl"]})
+            if l.get("tiktokUrl"):
+                targets.append({"id": l["id"], "url": l["tiktokUrl"]})
         BackendObservability.info(f"Retrieved {len(listings)} listings for {args.city}, extracted {len(targets)} social media targets.", conversation_id=args.trace_id)
         sys.stdout.write(json.dumps(targets))
     elif args.type == "city-listings":
@@ -66,7 +68,8 @@ async def main() -> None:
                 "id": l.get("id"),
                 "name": l.get("name"),
                 "facebookUrl": l.get("facebookUrl"),
-                "instagramUrl": l.get("instagramUrl")
+                "instagramUrl": l.get("instagramUrl"),
+                "tiktokUrl": l.get("tiktokUrl")
             })
         BackendObservability.info(f"Retrieved {len(listings)} listings for {args.city} deduplication context.", conversation_id=args.trace_id)
         sys.stdout.write(json.dumps(output_listings))

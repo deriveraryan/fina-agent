@@ -74,10 +74,10 @@ class TestAgentScripts(unittest.IsolatedAsyncioTestCase):
         mock_execute.return_value = {
             "data": {
                 "listings": [
-                    {"id": "1", "facebookUrl": "https://facebook.com/1", "instagramUrl": "https://instagram.com/1"},
-                    {"id": "2", "facebookUrl": None, "instagramUrl": "https://instagram.com/2"},
-                    {"id": "3", "facebookUrl": "https://facebook.com/3", "instagramUrl": None},
-                    {"id": "4", "facebookUrl": None, "instagramUrl": None}
+                    {"id": "1", "facebookUrl": "https://facebook.com/1", "instagramUrl": "https://instagram.com/1", "tiktokUrl": "https://tiktok.com/@1"},
+                    {"id": "2", "facebookUrl": None, "instagramUrl": "https://instagram.com/2", "tiktokUrl": None},
+                    {"id": "3", "facebookUrl": "https://facebook.com/3", "instagramUrl": None, "tiktokUrl": "https://tiktok.com/@3"},
+                    {"id": "4", "facebookUrl": None, "instagramUrl": None, "tiktokUrl": None}
                 ]
             }
         }
@@ -92,8 +92,10 @@ class TestAgentScripts(unittest.IsolatedAsyncioTestCase):
         expected_targets = [
             {"id": "1", "url": "https://facebook.com/1"},
             {"id": "1", "url": "https://instagram.com/1"},
+            {"id": "1", "url": "https://tiktok.com/@1"},
             {"id": "2", "url": "https://instagram.com/2"},
-            {"id": "3", "url": "https://facebook.com/3"}
+            {"id": "3", "url": "https://facebook.com/3"},
+            {"id": "3", "url": "https://tiktok.com/@3"}
         ]
         mock_stdout.write.assert_any_call(
             json.dumps(expected_targets)
@@ -318,7 +320,7 @@ class TestAgentScripts(unittest.IsolatedAsyncioTestCase):
     @patch("agent_fetch_targets.execute_graphql_operation", new_callable=AsyncMock)
     @patch("sys.stdout")
     async def test_fetch_targets_city_listings(self, mock_stdout: MagicMock, mock_execute: AsyncMock) -> None:
-        """Tests agent_fetch_targets.py --type city-listings invokes ListCityListings and formats ID, name, fb/ig URLs."""
+        """Tests agent_fetch_targets.py --type city-listings invokes ListCityListings and formats ID, name, fb/ig/tt URLs."""
         import agent_fetch_targets
 
         sys.argv = ["agent_fetch_targets.py", "--type", "city-listings", "--city", "SYDNEY"]
@@ -331,6 +333,7 @@ class TestAgentScripts(unittest.IsolatedAsyncioTestCase):
                         "name": "Manila Eats",
                         "facebookUrl": "https://facebook.com/manilaeats",
                         "instagramUrl": "https://instagram.com/manilaeats",
+                        "tiktokUrl": "https://tiktok.com/@manilaeats",
                         "otherField": "unused"
                     }
                 ]
@@ -349,7 +352,8 @@ class TestAgentScripts(unittest.IsolatedAsyncioTestCase):
                     "id": "listing-1",
                     "name": "Manila Eats",
                     "facebookUrl": "https://facebook.com/manilaeats",
-                    "instagramUrl": "https://instagram.com/manilaeats"
+                    "instagramUrl": "https://instagram.com/manilaeats",
+                    "tiktokUrl": "https://tiktok.com/@manilaeats"
                 }
             ])
         )
@@ -1241,6 +1245,40 @@ class TestAgentScripts(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(parsed["listings_missing"], 2)
         self.assertEqual(parsed["listings_processed"], 1)
         self.assertEqual(parsed["embeddings_generated"], 1)
+
+    def test_maps_fetch_format_place_socials_mapping(self) -> None:
+        """Tests that agent_maps_fetch.format_place extracts social URLs from websiteUri."""
+        import agent_maps_fetch
+
+        place_fb = {
+            "id": "mock_place_fb",
+            "displayName": {"text": "FB Business"},
+            "websiteUri": "https://www.facebook.com/myfbbusiness"
+        }
+        res_fb = agent_maps_fetch.format_place(place_fb, "Sydney", "RESTAURANT")
+        self.assertEqual(res_fb["facebookUrl"], "https://www.facebook.com/myfbbusiness")
+        self.assertIsNone(res_fb["instagramUrl"])
+        self.assertIsNone(res_fb["tiktokUrl"])
+
+        place_ig = {
+            "id": "mock_place_ig",
+            "displayName": {"text": "IG Business"},
+            "websiteUri": "https://instagram.com/myigbusiness"
+        }
+        res_ig = agent_maps_fetch.format_place(place_ig, "Sydney", "RESTAURANT")
+        self.assertIsNone(res_ig["facebookUrl"])
+        self.assertEqual(res_ig["instagramUrl"], "https://instagram.com/myigbusiness")
+        self.assertIsNone(res_ig["tiktokUrl"])
+
+        place_tt = {
+            "id": "mock_place_tt",
+            "displayName": {"text": "TikTok Business"},
+            "websiteUri": "https://tiktok.com/@mytiktokbusiness"
+        }
+        res_tt = agent_maps_fetch.format_place(place_tt, "Sydney", "RESTAURANT")
+        self.assertIsNone(res_tt["facebookUrl"])
+        self.assertIsNone(res_tt["instagramUrl"])
+        self.assertEqual(res_tt["tiktokUrl"], "https://tiktok.com/@mytiktokbusiness")
 
 
 

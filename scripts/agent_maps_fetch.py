@@ -90,6 +90,19 @@ def format_place(place: dict, city: str, category: str) -> dict:
     # Adopt the enum from the Google Places API businessStatus directly
     status = place.get("businessStatus", "OPERATIONAL")
     
+    website = place.get("websiteUri")
+    fb_url = None
+    ig_url = None
+    tt_url = None
+    if website:
+        website_lower = website.lower()
+        if "facebook.com" in website_lower or "fb.com" in website_lower:
+            fb_url = website
+        elif "instagram.com" in website_lower or "instagr.am" in website_lower:
+            ig_url = website
+        elif "tiktok.com" in website_lower:
+            tt_url = website
+            
     return {
         "id": place_id,
         "name": name,
@@ -98,7 +111,10 @@ def format_place(place: dict, city: str, category: str) -> dict:
         "latitude": float(lat) if lat is not None else None,
         "longitude": float(lng) if lng is not None else None,
         "phone": place.get("internationalPhoneNumber"),
-        "website": place.get("websiteUri"),
+        "website": website,
+        "facebookUrl": fb_url,
+        "instagramUrl": ig_url,
+        "tiktokUrl": tt_url,
         "hours": operating_hours_json,
         "description": editorial or f"A verified Filipino {category.lower()} in {city.title()}.",
         "sourceUrl": f"https://www.google.com/maps/place/?q=place_id:{place_id}",

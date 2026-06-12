@@ -27,7 +27,7 @@ To accomplish your task, follow these steps exactly:
       - Reject generic Asian grocers or pan-Asian restaurants unless specific descriptions verify they stock Filipino items or serve Filipino dishes.
    b. If verified, push it to the database immediately to avoid context bloat. Do this by:
       - i. Writing the JSON payload to an explicitly named, deterministic temporary file (e.g. `tmp/fina_refresh_listing_maps_finder_payload_<timestamp>.json`) using the `write_to_file` tool.
-      - ii. **Data Normalization & Alignment**: Ensure the payload fields are mapped and formatted correctly:
+       - ii. **Data Normalization & Alignment**: Ensure the payload fields are mapped and formatted correctly:
           - `name`: Clean place name.
           - `category`: Must match exactly `<CATEGORY>` (which must be one of the uppercase keys loaded from `data/categories.json` in step 1).
           - `city`: Standardized city name.
@@ -36,6 +36,7 @@ To accomplish your task, follow these steps exactly:
           - `latitude` / `longitude`: Floating point coordinates.
           - `phone`: Candidate phone number.
           - `website`: Candidate website URL.
+          - `facebookUrl` / `instagramUrl` / `tiktokUrl`: Profiles mapped if the website URL points to Facebook, Instagram, or TikTok.
           - `operatingHours`: Candidate hours representation.
           - `sourceUrl`: Candidate's Google Maps link.
           - `tags`: MUST be a comma-separated string (e.g., `"filipino,<category>,google-maps"`), NOT a JSON array.
