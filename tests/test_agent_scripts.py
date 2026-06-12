@@ -23,6 +23,8 @@ sys.path.insert(
     ),
 )
 
+import features.shared.embeddings
+
 class TestAgentScripts(unittest.IsolatedAsyncioTestCase):
     """Offline unit test suite for agent helper CLI scripts."""
 
