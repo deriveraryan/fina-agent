@@ -42,23 +42,23 @@ Here is the registry of the 6 specialized Antigravity subagents:
     5. Pushes verified listings using the `CreateListing` mutation.
 
 ### 2. `fina_new_listing_web_finder`
-*   **Role**: Discovers new listing candidates on Facebook, Instagram, and web platforms. Strictly targets a single category and city per run.
+*   **Role**: Discovers new listing candidates on Facebook, Instagram, TikTok, and web platforms. Strictly targets a single category and city per run.
 *   **Trigger**: No single CLI script is used. Uses native web search, file-based deduplication lookups, and Chrome DevTools browser verification.
 *   **Logic**:
     1. Runs `scripts/agent_fetch_targets.py --type city-listings --city <CITY> --trace-id <CONVERSATION_ID> > tmp/existing_city_listings.json` to write existing city context to a file.
     2. Uses native web search with site-specific queries to find candidate community pages.
     3. Checks for duplicates by looking up names/URLs directly in `tmp/existing_city_listings.json` on disk to avoid context bloat.
-    4. Navigates to candidate pages via Chrome DevTools, extracting only visible text/selectors to prevent raw HTML bloat.
-    5. Creates verified listings via `agent_graphql_push.py --operation CreateListing` (without `--generate-embeddings`) with self-correction on validation failure.
+    4. Navigates to candidate pages via Chrome DevTools, extracting only visible text/selectors to prevent raw HTML bloat (and uses python parser for TikTok followers).
+    5. Creates verified listings via `agent_graphql_push.py --operation CreateListing` (without `--generate-embeddings`, including `tiktokUrl` and `tiktokFollowers`) with self-correction on validation failure.
 
 ### 3. `fina_enrich_listing_socials_finder`
-*   **Role**: Enriches existing database listings with missing Facebook and Instagram URLs. Strictly targets a single city per run.
+*   **Role**: Enriches existing database listings with missing Facebook, Instagram, and TikTok URLs. Strictly targets a single city per run.
 *   **CLI Trigger**: `python3 scripts/agent_fetch_targets.py --type missing-social --city <CITY> --trace-id <CONVERSATION_ID> > tmp/missing_socials_targets.json`
 *   **Logic**:
     1. Fetches seed listings missing social links for the specified city and writes them directly to a file to prevent context bloat.
-    2. Searches the web using LLM-driven site filters.
-    3. Verifies that matches correspond to the business details using Chrome DevTools (selectors/visible text only).
-    4. Enriches listings using the `UpdateListingSocialUrls` mutation with validation self-correction on failure.
+    2. Searches the web using LLM-driven site filters (including `site:tiktok.com` queries).
+    3. Verifies that matches correspond to the business details using Chrome DevTools (selectors/visible text only). For TikTok, extracts the HTML and parses follower count via the python parsing command.
+    4. Enriches listings using the `UpdateListingSocialUrls` mutation (including `tiktokUrl` and `tiktokFollowers`) with validation self-correction on failure.
 
 ### 4. `fina_listing_embedder`
 *   **Role**: Generates and updates description vector embeddings for listings missing them. Strictly targets a single city per run.
@@ -77,8 +77,8 @@ Here is the registry of the 6 specialized Antigravity subagents:
     1. Retrieves verified social media URLs for a city and redirects them to a file to prevent context bloat.
     2. Retrieves the last scanned post timestamp bookmark from the database via the social-post-tracker endpoint.
     3. Uses Chrome DevTools to navigate to candidate pages, extracting only visible text/selectors (follower count and post content) to avoid outerHTML bloat.
-    4. Evaluates posts chronologically, using current local time to resolve relative dates into UTC ISO 8601 strings and parsing follower counts to integers.
-    5. Filters events against strict heuristics (future-bound, non-promotional) and pushes events, bookmarks, and follower counts using mutations with validation self-correction on failure.
+    4. Evaluates posts chronologically, using current local time to resolve relative dates into UTC ISO 8601 strings and parsing follower counts to integers (including using the python parser for TikTok).
+    5. Filters events against strict heuristics (future-bound, non-promotional) and pushes events, bookmarks, and follower counts (facebookFollowers, instagramFollowers, or tiktokFollowers) using mutations with validation self-correction on failure.
 
 
 ### 6. `fina_docs_reviewer`

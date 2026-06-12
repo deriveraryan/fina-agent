@@ -438,7 +438,8 @@ class TestAgentScripts(unittest.IsolatedAsyncioTestCase):
                 "sourceUrl": None,
                 "status": "CLOSED_TEMPORARILY",
                 "facebookFollowers": None,
-                "instagramFollowers": None
+                "instagramFollowers": None,
+                "tiktokFollowers": None
             },
         )
         
@@ -859,6 +860,25 @@ class TestAgentScripts(unittest.IsolatedAsyncioTestCase):
         stderr_calls = "".join(call.args[0] for call in mock_stderr.write.call_args_list)
         self.assertIn("Validation Error: 'instagramFollowers' must be an integer if provided.", stderr_calls)
 
+    @patch("sys.stderr")
+    async def test_graphql_push_validation_invalid_tiktok_followers_type(self, mock_stderr: MagicMock) -> None:
+        """Tests agent_graphql_push.py exits with code 1 if tiktokFollowers is not an integer."""
+        import agent_graphql_push
+
+        sys.argv = [
+            "agent_graphql_push.py",
+            "--operation",
+            "CreateListing",
+            "--variables",
+            '{"name": "Some Resto", "city": "SYDNEY", "tiktokFollowers": "not-an-int"}'
+        ]
+
+        with self.assertRaises(SystemExit) as cm:
+            await agent_graphql_push.main()
+        self.assertEqual(cm.exception.code, 1)
+        stderr_calls = "".join(call.args[0] for call in mock_stderr.write.call_args_list)
+        self.assertIn("Validation Error: 'tiktokFollowers' must be an integer if provided.", stderr_calls)
+
     def test_merge_listing_data_overwrites_followers(self) -> None:
         """Tests that merge_listing_data overwrites existing follower counts with new ones."""
         from features.scanning.dedup import merge_listing_data
@@ -868,15 +888,18 @@ class TestAgentScripts(unittest.IsolatedAsyncioTestCase):
             "name": "Test Resto",
             "facebookFollowers": 100,
             "instagramFollowers": 200,
+            "tiktokFollowers": 300,
         }
         new_data = {
             "facebookFollowers": 150,
             "instagramFollowers": None,
+            "tiktokFollowers": 350,
         }
 
         merged = merge_listing_data(existing, new_data)
         self.assertEqual(merged["facebookFollowers"], 150)
         self.assertEqual(merged["instagramFollowers"], 200)
+        self.assertEqual(merged["tiktokFollowers"], 350)
 
     @patch("agent_fetch_targets.execute_graphql_operation", new_callable=AsyncMock)
     @patch("sys.stdout")

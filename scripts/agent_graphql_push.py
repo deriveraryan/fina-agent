@@ -51,6 +51,11 @@ async def process_single_item(operation: str, item_dict: dict, trace_id: str, ge
         BackendObservability.error("Validation Error: 'instagramFollowers' must be an integer if provided.", conversation_id=trace_id)
         return {"error": "Validation Error: 'instagramFollowers' must be an integer"}
 
+    tt_followers = item_dict.get("tiktokFollowers")
+    if tt_followers is not None and not isinstance(tt_followers, int):
+        BackendObservability.error("Validation Error: 'tiktokFollowers' must be an integer if provided.", conversation_id=trace_id)
+        return {"error": "Validation Error: 'tiktokFollowers' must be an integer"}
+
     # Normalize category -> categories
     if "category" in item_dict:
         cat = item_dict.pop("category")
@@ -167,6 +172,7 @@ async def process_single_item(operation: str, item_dict: dict, trace_id: str, ge
                             "status": merged.get("status"),
                             "facebookFollowers": merged.get("facebookFollowers"),
                             "instagramFollowers": merged.get("instagramFollowers"),
+                            "tiktokFollowers": merged.get("tiktokFollowers"),
                         },
                     )
                     BackendObservability.info(f"Successfully updated duplicate listing ID={existing['id']} data/status.", conversation_id=trace_id)

@@ -41,13 +41,15 @@ Your Workflow:
         - `listingId`: Parent listing UUID.
         - `imageUrl`: Image flyer/poster link if visible.
       - **Follower Parsing & Conversion**: Capture the number of page followers and parse it strictly to an integer:
-        - Convert "K" suffix (thousands) by multiplying by 1,000 (e.g. "1.5K followers" -> 1500, "15.2K" -> 15200).
-        - Convert "M" suffix (millions) by multiplying by 1,000,000 (e.g. "2.4M followers" -> 2400000).
-        - Strip commas, dots, and trailing text (e.g. "15,200 followers" -> 15200, "500 likes" -> 500).
-        - If missing, inaccessible, or requires login to view, set the follower field to `null`.
+        - For Facebook/Instagram: Convert "K" suffix (thousands) by multiplying by 1,000 (e.g. "1.5K followers" -> 1500, "15.2K" -> 15200). Convert "M" suffix (millions) by multiplying by 1,000,000 (e.g. "2.4M followers" -> 2400000). Strip commas, dots, and trailing text (e.g. "15,200 followers" -> 15200, "500 likes" -> 500). If missing, set to `null`.
+        - For TikTok: Save the raw HTML content of the profile page to a temporary file (e.g. `tmp/tiktok_profile.html`) and run:
+          ```bash
+          python3 -c "import sys; from features.scanning.tiktok_parser import parse_tiktok_followers; print(parse_tiktok_followers(sys.stdin.read()))" < tmp/tiktok_profile.html
+          ```
+          Use the returned integer count (or `null` if it prints `None` or fails) for `tiktokFollowers`.
 3. Push the extracted data to the database immediately to avoid context bloat:
    a. For every upcoming event found, write the event JSON payload to a temporary file (e.g. `tmp/fina_events_finder_payload_<timestamp>.json`) and execute the push command: `python3 scripts/agent_graphql_push.py --operation CreateEvent --variables @tmp/fina_events_finder_payload_<timestamp>.json --trace-id <CONVERSATION_ID> --generate-embeddings` (generate embeddings automatically).
-   b. Push the captured follower count by writing an update JSON payload to a temporary file (e.g. `tmp/fina_enrich_listing_socials_finder_payload_<timestamp>.json`) containing `id` (the listing ID), and `facebookFollowers` (Int) or `instagramFollowers` (Int) based on the platform, and execute: `python3 scripts/agent_graphql_push.py --operation UpdateListingSocialUrls --variables @tmp/fina_enrich_listing_socials_finder_payload_<timestamp>.json --trace-id <CONVERSATION_ID>`.
+   b. Push the captured follower count by writing an update JSON payload to a temporary file (e.g. `tmp/fina_enrich_listing_socials_finder_payload_<timestamp>.json`) containing `id` (the listing ID), and one of `facebookFollowers` (Int), `instagramFollowers` (Int), or `tiktokFollowers` (Int) based on the platform, and execute: `python3 scripts/agent_graphql_push.py --operation UpdateListingSocialUrls --variables @tmp/fina_enrich_listing_socials_finder_payload_<timestamp>.json --trace-id <CONVERSATION_ID>`.
    c. Record the newest post scanned during this run as the new bookmark: Write a tracker JSON payload containing `listingId` (the listing ID), `platform` (the capitalized platform name, e.g. `FACEBOOK` or `INSTAGRAM`), and `lastPostDate` (the ISO 8601 UTC timestamp of the newest post scanned) to a temporary file (e.g. `tmp/fina_tracker_payload_<timestamp>.json`) and execute: `python3 scripts/agent_graphql_push.py --operation UpsertSocialPostTracker --variables @tmp/fina_tracker_payload_<timestamp>.json --trace-id <CONVERSATION_ID>`.
    d. **Self-Correction on Failure**: If any push command exits with code 1 due to validation errors:
       - Read the stdout/stderr logs from the push command to locate the validation error (e.g. `Validation Error: 'facebookFollowers' must be an integer`, `Field 'startDate' must be a valid ISO-8601 datetime`).

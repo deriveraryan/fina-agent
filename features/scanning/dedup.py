@@ -43,7 +43,7 @@ def merge_listing_data(
         if key == "categories":
             if value:  # Overwrite if new list is non-empty
                 merged[key] = value
-        elif key in ("facebookFollowers", "instagramFollowers"):
+        elif key in ("facebookFollowers", "instagramFollowers", "tiktokFollowers"):
             if value is not None:
                 merged[key] = value
         else:

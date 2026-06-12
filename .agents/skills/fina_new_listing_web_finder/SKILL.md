@@ -32,7 +32,13 @@ Your Workflow:
       - `description`: Descriptive page text.
       - `category`: Must match exactly `<CATEGORY>` (which must be one of the uppercase keys in `data/categories.json`).
       - `facebookUrl`, `instagramUrl`, or `tiktokUrl`: Direct profile page link.
-      - `facebookFollowers`, `instagramFollowers`, or `tiktokFollowers`: Convert text representation to integer (e.g. "1.5K followers" -> 1500, "2.4M followers" -> 2400000, "500 followers" -> 500). If no followers are found, set to `null`.
+      - `facebookFollowers`, `instagramFollowers`, or `tiktokFollowers`: Convert text representation to integer.
+        - For Facebook/Instagram: Convert text (e.g. "1.5K followers" -> 1500, "2.4M followers" -> 2400000, "500 followers" -> 500). If missing, set to `null`.
+        - For TikTok: Save the raw HTML content of the profile page to a temporary file (e.g. `tmp/tiktok_profile.html`) and run:
+          ```bash
+          python3 -c "import sys; from features.scanning.tiktok_parser import parse_tiktok_followers; print(parse_tiktok_followers(sys.stdin.read()))" < tmp/tiktok_profile.html
+          ```
+          Use the returned integer count (or `null` if it prints `None` or fails) for `tiktokFollowers`.
       - `status`: Determine the business operational status. If the page description, bio, or recent posts explicitly state the business is permanently closed or retired, set to `'CLOSED_PERMANENTLY'`. If they mention a temporary, seasonal, or extended closure, set to `'CLOSED_TEMPORARILY'`. Otherwise, default to `'OPERATIONAL'`.
    e. If the page shows a physical street address, extract it. If there is NO street address (online-only community), set address to the city name (e.g. 'Sydney, NSW') and use city center coordinates. Add 'online-community' to the tags.
    f. If verified as a NEW Filipino-affiliated listing, push to the database immediately to avoid context bloat. Do this by:
