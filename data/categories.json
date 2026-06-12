@@ -25,8 +25,7 @@
     "examples": ["Pandesal & Co.", "Pinoy Brew Cafe", "Ube Desserts Parlor"],
     "searchTemplates": [
       "Filipino cafe in {city}",
-      "Filipino coffee in {city}",
-      "Filipino bakery in {city}"
+      "Filipino coffee in {city}"
     ]
   },
   "SHOP": {
@@ -41,7 +40,8 @@
       "Filipino grocery in {city}",
       "Filipino shop in {city}",
       "Filipino supermarket in {city}",
-      "Filipino online shop in {city}"
+      "Filipino online shop in {city}",
+      "Filipino bakery in {city}"
     ]
   },
   "CHURCH": {
@@ -103,12 +103,12 @@
     "searchTemplates": [
       "Filipino services in {city}",
       "Filipino business in {city}",
-      "Filipino accountant in {city}",
+      "Filipino recruitment in {city}",
+      "Filipino migration agent in {city}",
       "Filipino logistics in {city}",
+      "Filipino accountant in {city}",
       "Filipino freight in {city}",
       "Filipino cleaning service in {city}",
-      "Filipino migration agent in {city}",
-      "Filipino recruitment in {city}",
       "Filipino catering in {city}",
       "Filipino baker in {city}",
       "Filipino event planner in {city}",
