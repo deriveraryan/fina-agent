@@ -50,7 +50,7 @@ You can trigger these discovery scans manually through the Antigravity Chat UI o
 ### 1. The Scraper Agents
 
 * **`fina_refresh_listing_maps_finder`**: Queries Google Places Text Search.
-* **`fina_new_listing_web_finder`**: Discovers new Filipino listings on social platforms using a task-based state machine (1 location × 1 category × 1 template per run).
+* **`fina_listing_web_search`**: Discovers new Filipino listings on social platforms using a task-based state machine (1 location × 1 category × 1 template per run).
 * **`fina_enrich_listing_socials_finder`**: Enriches existing listings with missing Facebook/Instagram URLs.
 * **`fina_listing_embedder`**: Audits and generates vector description embeddings for listings missing them.
 * **`fina_events_finder`**: Crawls business social media pages to harvest upcoming events.
@@ -73,9 +73,9 @@ By default, the `fina_refresh_listing_maps_finder` caches Google Places search r
     > **To force a fresh live scan bypassing the local cache:**
     > "Use the `fina_refresh_listing_maps_finder` skill to scan Google Places with **refresh** for RESTAURANT in SYDNEY."
 *   *Web/Social Discovery*:
-    > **Task-Based Queue System**: The `fina_new_listing_web_finder` skill targets a **single city** and automatically executes the next pending search task (location × category × search template) from the generated task queue.
+    > **Task-Based Queue System**: The `fina_listing_web_search` skill targets a **single city** and automatically executes the next pending search task (location × category × search template) from the generated task queue.
     >
-    > "Use the `fina_new_listing_web_finder` skill to search the web for new listings in SYDNEY."
+    > "Use the `fina_listing_web_search` skill to search the web for new listings in SYDNEY."
 *   *Missing Socials Finder*:
     > "Use the `fina_enrich_listing_socials_finder` skill to back-fill missing social URLs in SYDNEY."
 *   *Listing Embedder*:
@@ -141,7 +141,7 @@ You can schedule the agents to run periodic background scans using the `/schedul
     ```
 *   *Community Scan Schedule*:
     ```bash
-    /schedule CronExpression="0 0 * * *" Prompt="Use the fina_new_listing_web_finder skill to scan for events and listings across all cities."
+    /schedule CronExpression="0 0 * * *" Prompt="Use the fina_listing_web_search skill to scan for events and listings across all cities."
     ```
 *   *Listing Embedding Generator Schedule*:
     ```bash

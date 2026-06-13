@@ -15,7 +15,7 @@ flowchart TD
     AgentSelect -->|fina_refresh_listing_maps_finder| PlacesFlow["Google Places Discovery"]
     AgentSelect -->|fina_enrich_listing_socials_finder| SocialsFlow["Missing Socials Enrichment"]
     AgentSelect -->|fina_events_finder| EventsFlow["Upcoming Events Scraper"]
-    AgentSelect -->|fina_new_listing_web_finder| CommFlow["Social Community Discovery"]
+    AgentSelect -->|fina_listing_web_search| CommFlow["Social Community Discovery"]
     AgentSelect -->|fina_listing_embedder| EmbedFlow["Vector Embedding Backfill"]
 
     %% Shared logic
@@ -41,7 +41,7 @@ Here is the registry of the 6 specialized Antigravity subagents:
     4. Evaluates name and description context internally to verify authentic Filipino affiliation.
     5. Pushes verified listings using the `CreateListing` mutation.
 
-### 2. `fina_new_listing_web_finder`
+### 2. `fina_listing_web_search`
 *   **Role**: Discovers new listing candidates on Facebook, Instagram, TikTok, and web platforms. Each run is scoped to a single task (1 location × 1 category × 1 search template) with a limit of 10 new listings or 10 search result pages.
 *   **CLI Trigger**: `python3 scripts/agent_search_tasks.py --action next --city <CITY> --trace-id <CONVERSATION_ID>`
 *   **Logic**:
