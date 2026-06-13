@@ -59,6 +59,7 @@
     ]
   },
   "GOVERNMENT": {
+    "cityOnly": true,
     "displayName": "Government",
     "description": "Official Philippine government listings, consulates, embassies, and honorary consular services.",
     "rules": [

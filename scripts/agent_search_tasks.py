@@ -30,6 +30,7 @@ from features.scanning.search_tasks import (
     complete_task,
     get_progress_summary,
     reclaim_stale_tasks,
+    merge_existing_state,
 )
 
 
@@ -71,6 +72,12 @@ def main() -> None:
         default=60,
         help="Minutes after which an IN_PROGRESS task is considered stale and reclaimed (default: 60).",
     )
+    parser.add_argument(
+        "--force",
+        action="store_true",
+        default=False,
+        help="Force regeneration of tasks, merging existing state into the new file.",
+    )
 
     # Arguments for action="complete"
     parser.add_argument("--task-id", type=str, help="Task ID to complete.")
@@ -91,38 +98,52 @@ def main() -> None:
 
     try:
         if args.action == "generate":
-            if os.path.exists(tasks_path):
-                existing = load_tasks(tasks_path)
-                if existing:
-                    BackendObservability.info(
-                        f"Tasks file already exists at {tasks_path} with {len(existing)} tasks. Skipping generation.",
-                        conversation_id=args.trace_id,
-                    )
-                    print(json.dumps({
-                        "generated": False,
-                        "reason": "file_exists",
-                        "total_tasks": len(existing),
-                        "file": tasks_path,
-                    }))
-                    return
+            existing_tasks = load_tasks(tasks_path)
+
+            if existing_tasks and not args.force:
+                BackendObservability.info(
+                    f"Tasks file already exists at {tasks_path} with {len(existing_tasks)} tasks. "
+                    f"Use --force to regenerate with state merge.",
+                    conversation_id=args.trace_id,
+                )
+                print(json.dumps({
+                    "generated": False,
+                    "reason": "file_exists",
+                    "total_tasks": len(existing_tasks),
+                    "file": tasks_path,
+                }))
+                return
 
             BackendObservability.info(
-                f"Generating search tasks for city={args.city}",
+                f"Generating search tasks for city={args.city}"
+                + (" (force merge)" if args.force else ""),
                 conversation_id=args.trace_id,
             )
-            tasks = generate_tasks(
+            new_tasks = generate_tasks(
                 city=args.city,
                 categories_path=args.categories_file,
                 suburbs_path=args.suburbs_file,
             )
-            save_tasks(tasks_path, tasks)
+            merge_result = merge_existing_state(new_tasks, existing_tasks)
+
+            # Atomic file replacement via temp file
+            tmp_path = tasks_path + ".tmp"
+            save_tasks(tmp_path, new_tasks)
+            os.replace(tmp_path, tasks_path)
+
             BackendObservability.info(
-                f"Generated {len(tasks)} tasks at {tasks_path}",
+                f"Generated {len(new_tasks)} tasks at {tasks_path} "
+                f"(merged={merge_result['merged_count']}, "
+                f"new={merge_result['new_count']}, "
+                f"removed={merge_result['removed_count']})",
                 conversation_id=args.trace_id,
             )
             print(json.dumps({
                 "generated": True,
-                "total_tasks": len(tasks),
+                "total_tasks": len(new_tasks),
+                "merged_count": merge_result["merged_count"],
+                "new_count": merge_result["new_count"],
+                "removed_count": merge_result["removed_count"],
                 "file": tasks_path,
             }))
 

@@ -63,6 +63,7 @@ def generate_tasks(
         templates = category_cfg.get("searchTemplates", [])
         if not templates:
             continue
+        city_only = category_cfg.get("cityOnly", False)
 
         for template_index, template_str in enumerate(templates):
             # City-level task
@@ -75,6 +76,9 @@ def generate_tasks(
                 location=city_display,
                 location_type="city",
             ))
+
+            if city_only:
+                continue
 
             # Suburb tasks
             for suburb in suburbs:
@@ -184,6 +188,60 @@ def save_tasks(tasks_path: str, tasks: List[Dict[str, Any]]) -> None:
     os.makedirs(os.path.dirname(tasks_path) or ".", exist_ok=True)
     with open(tasks_path, "w", encoding="utf-8") as f:
         json.dump(tasks, f, indent=2, ensure_ascii=False)
+
+
+_MUTABLE_FIELDS = (
+    "status", "started_at", "completed_at",
+    "listings_created", "pages_searched",
+    "candidates_evaluated", "candidates_rejected",
+    "candidates_duplicate", "errors",
+)
+
+
+def merge_existing_state(
+    new_tasks: List[Dict[str, Any]],
+    existing_tasks: List[Dict[str, Any]],
+) -> Dict[str, int]:
+    """Merge mutable state from existing tasks into new tasks by ID match.
+
+    For each task in new_tasks, if a matching task ID exists in existing_tasks,
+    all mutable state fields (status, timestamps, metrics, errors) are copied
+    from the existing task into the new task.
+
+    Args:
+        new_tasks: The freshly generated task list (mutated in place).
+        existing_tasks: The previously persisted task list.
+
+    Returns:
+        A dictionary with merge statistics:
+        - merged_count: Tasks with state preserved from existing.
+        - new_count: Tasks with no existing match (fresh PENDING).
+        - removed_count: Existing tasks not present in the new list.
+    """
+    existing_lookup: Dict[str, Dict[str, Any]] = {
+        task["id"]: task for task in existing_tasks
+    }
+
+    new_ids: set = set()
+    merged_count = 0
+
+    for task in new_tasks:
+        new_ids.add(task["id"])
+        existing_task = existing_lookup.get(task["id"])
+        if existing_task is not None:
+            for field in _MUTABLE_FIELDS:
+                if field in existing_task:
+                    task[field] = existing_task[field]
+            merged_count += 1
+
+    new_count = len(new_tasks) - merged_count
+    removed_count = len(existing_tasks) - merged_count
+
+    return {
+        "merged_count": merged_count,
+        "new_count": new_count,
+        "removed_count": removed_count,
+    }
 
 
 def _is_stale_task(task: Dict[str, Any], cutoff: datetime) -> bool:

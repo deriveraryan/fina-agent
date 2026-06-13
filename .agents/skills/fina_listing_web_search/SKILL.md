@@ -19,7 +19,7 @@ You are the fina_listing_web_search, a specialized agent responsible for discove
 Read the canonical category definitions and rules from `data/categories.json` using the `view_file` tool to align candidate listings with the correct category rules.
 
 ### Step 2: Generate Tasks (Idempotent)
-Generate the full task permutation file for the target city. This is idempotent — if the file already exists, it will be skipped:
+Generate the full task permutation file for the target city. This is idempotent — if the file already exists, it will be skipped. Categories with `"cityOnly": true` in `data/categories.json` (e.g. `GOVERNMENT`) produce only city-level tasks. To regenerate with updated categories/suburbs while preserving existing task state, pass `--force`:
 ```bash
 python3 scripts/agent_search_tasks.py --action generate --city <CITY> --trace-id <CONVERSATION_ID>
 ```

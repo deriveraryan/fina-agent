@@ -19,6 +19,7 @@ from features.scanning.search_tasks import (
     complete_task,
     get_progress_summary,
     reclaim_stale_tasks,
+    merge_existing_state,
 )
 
 
@@ -468,6 +469,162 @@ class TestGetProgressSummaryWithStale(unittest.TestCase):
         ]
         summary = get_progress_summary(tasks)
         self.assertNotIn("stale", summary)
+
+
+class TestCityOnlyCategory(unittest.TestCase):
+    """Tests for the cityOnly flag in generate_tasks."""
+
+    def setUp(self) -> None:
+        """Create temp files with a cityOnly category and a normal one."""
+        self.tmpdir = tempfile.mkdtemp()
+        self.categories_path = os.path.join(self.tmpdir, "categories.json")
+        self.suburbs_path = os.path.join(self.tmpdir, "suburbs.json")
+
+        self.suburbs_data = {"sydney": ["Parramatta", "Blacktown"]}
+        with open(self.suburbs_path, "w") as f:
+            json.dump(self.suburbs_data, f)
+
+    def _write_categories(self, data: dict) -> None:
+        with open(self.categories_path, "w") as f:
+            json.dump(data, f)
+
+    def test_city_only_category_skips_suburbs(self) -> None:
+        """A category with cityOnly: true should produce only city-level tasks."""
+        self._write_categories({
+            "GOVERNMENT": {
+                "cityOnly": True,
+                "searchTemplates": ["Philippine consulate in {city}"],
+            },
+        })
+        tasks = generate_tasks("Sydney", self.categories_path, self.suburbs_path)
+        self.assertEqual(len(tasks), 1)
+        self.assertEqual(tasks[0]["location_type"], "city")
+
+    def test_city_only_does_not_affect_other_categories(self) -> None:
+        """A normal category alongside a cityOnly category should still produce suburb tasks."""
+        self._write_categories({
+            "GOVERNMENT": {
+                "cityOnly": True,
+                "searchTemplates": ["Philippine consulate in {city}"],
+            },
+            "RESTAURANT": {
+                "searchTemplates": ["Filipino restaurant in {city}"],
+            },
+        })
+        tasks = generate_tasks("Sydney", self.categories_path, self.suburbs_path)
+        gov_tasks = [t for t in tasks if t["category"] == "GOVERNMENT"]
+        rest_tasks = [t for t in tasks if t["category"] == "RESTAURANT"]
+        self.assertEqual(len(gov_tasks), 1)  # city-only
+        self.assertEqual(len(rest_tasks), 3)  # city + 2 suburbs
+
+    def test_city_only_false_explicit(self) -> None:
+        """cityOnly: false should behave identically to absent (produces suburb tasks)."""
+        self._write_categories({
+            "RESTAURANT": {
+                "cityOnly": False,
+                "searchTemplates": ["Filipino restaurant in {city}"],
+            },
+        })
+        tasks = generate_tasks("Sydney", self.categories_path, self.suburbs_path)
+        self.assertEqual(len(tasks), 3)  # city + 2 suburbs
+
+    def test_mixed_categories_with_city_only(self) -> None:
+        """Correct total with a mix of cityOnly and regular categories."""
+        self._write_categories({
+            "GOVERNMENT": {
+                "cityOnly": True,
+                "searchTemplates": ["Template A in {city}", "Template B in {city}"],
+            },
+            "CAFE": {
+                "searchTemplates": ["Filipino cafe in {city}"],
+            },
+        })
+        tasks = generate_tasks("Sydney", self.categories_path, self.suburbs_path)
+        # GOVERNMENT: 2 templates × 1 city-only = 2
+        # CAFE: 1 template × 3 locations = 3
+        self.assertEqual(len(tasks), 5)
+
+
+class TestMergeExistingState(unittest.TestCase):
+    """Tests for the merge_existing_state function."""
+
+    def test_merges_completed_state(self) -> None:
+        """COMPLETED task state fields should be preserved."""
+        new_tasks = [
+            {"id": "a", "status": "PENDING", "started_at": None,
+             "completed_at": None, "listings_created": 0, "pages_searched": 0,
+             "candidates_evaluated": 0, "candidates_rejected": 0,
+             "candidates_duplicate": 0, "errors": []},
+        ]
+        existing_tasks = [
+            {"id": "a", "status": "COMPLETED", "started_at": "2026-01-01T00:00:00+00:00",
+             "completed_at": "2026-01-01T01:00:00+00:00", "listings_created": 5,
+             "pages_searched": 3, "candidates_evaluated": 10,
+             "candidates_rejected": 2, "candidates_duplicate": 3, "errors": ["err1"]},
+        ]
+        result = merge_existing_state(new_tasks, existing_tasks)
+        self.assertEqual(result["merged_count"], 1)
+        self.assertEqual(result["new_count"], 0)
+        self.assertEqual(new_tasks[0]["status"], "COMPLETED")
+        self.assertEqual(new_tasks[0]["listings_created"], 5)
+        self.assertEqual(new_tasks[0]["errors"], ["err1"])
+
+    def test_new_tasks_stay_pending(self) -> None:
+        """Tasks not in existing list should remain PENDING."""
+        new_tasks = [
+            {"id": "new_task", "status": "PENDING", "started_at": None,
+             "completed_at": None, "listings_created": 0, "pages_searched": 0,
+             "candidates_evaluated": 0, "candidates_rejected": 0,
+             "candidates_duplicate": 0, "errors": []},
+        ]
+        existing_tasks = [
+            {"id": "old_task", "status": "COMPLETED", "started_at": "2026-01-01T00:00:00+00:00",
+             "completed_at": "2026-01-01T01:00:00+00:00", "listings_created": 5,
+             "pages_searched": 3, "candidates_evaluated": 10,
+             "candidates_rejected": 2, "candidates_duplicate": 3, "errors": []},
+        ]
+        result = merge_existing_state(new_tasks, existing_tasks)
+        self.assertEqual(result["new_count"], 1)
+        self.assertEqual(result["merged_count"], 0)
+        self.assertEqual(new_tasks[0]["status"], "PENDING")
+
+    def test_removed_tasks_counted(self) -> None:
+        """Old tasks not in new list should be counted as removed."""
+        new_tasks = [
+            {"id": "a", "status": "PENDING", "started_at": None,
+             "completed_at": None, "listings_created": 0, "pages_searched": 0,
+             "candidates_evaluated": 0, "candidates_rejected": 0,
+             "candidates_duplicate": 0, "errors": []},
+        ]
+        existing_tasks = [
+            {"id": "a", "status": "COMPLETED", "started_at": "2026-01-01T00:00:00+00:00",
+             "completed_at": "2026-01-01T01:00:00+00:00", "listings_created": 5,
+             "pages_searched": 3, "candidates_evaluated": 10,
+             "candidates_rejected": 2, "candidates_duplicate": 3, "errors": []},
+            {"id": "removed_task", "status": "PENDING", "started_at": None,
+             "completed_at": None, "listings_created": 0, "pages_searched": 0,
+             "candidates_evaluated": 0, "candidates_rejected": 0,
+             "candidates_duplicate": 0, "errors": []},
+        ]
+        result = merge_existing_state(new_tasks, existing_tasks)
+        self.assertEqual(result["removed_count"], 1)
+
+    def test_empty_existing_returns_all_new(self) -> None:
+        """Empty existing list means all tasks are new."""
+        new_tasks = [
+            {"id": "a", "status": "PENDING", "started_at": None,
+             "completed_at": None, "listings_created": 0, "pages_searched": 0,
+             "candidates_evaluated": 0, "candidates_rejected": 0,
+             "candidates_duplicate": 0, "errors": []},
+            {"id": "b", "status": "PENDING", "started_at": None,
+             "completed_at": None, "listings_created": 0, "pages_searched": 0,
+             "candidates_evaluated": 0, "candidates_rejected": 0,
+             "candidates_duplicate": 0, "errors": []},
+        ]
+        result = merge_existing_state(new_tasks, [])
+        self.assertEqual(result["new_count"], 2)
+        self.assertEqual(result["merged_count"], 0)
+        self.assertEqual(result["removed_count"], 0)
 
 
 if __name__ == "__main__":
