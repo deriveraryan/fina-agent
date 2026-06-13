@@ -222,11 +222,9 @@ def merge_existing_state(
         task["id"]: task for task in existing_tasks
     }
 
-    new_ids: set = set()
     merged_count = 0
 
     for task in new_tasks:
-        new_ids.add(task["id"])
         existing_task = existing_lookup.get(task["id"])
         if existing_task is not None:
             for field in _MUTABLE_FIELDS:
