@@ -7,7 +7,7 @@ and progress aggregation.
 
 import json
 import os
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from typing import Any, Dict, List, Optional
 
 
@@ -186,15 +186,77 @@ def save_tasks(tasks_path: str, tasks: List[Dict[str, Any]]) -> None:
         json.dump(tasks, f, indent=2, ensure_ascii=False)
 
 
-def get_next_task(tasks: List[Dict[str, Any]]) -> Optional[Dict[str, Any]]:
+def _is_stale_task(task: Dict[str, Any], cutoff: datetime) -> bool:
+    """Check if an IN_PROGRESS task has exceeded the stale cutoff.
+
+    Args:
+        task: A task dictionary.
+        cutoff: The UTC datetime threshold. Tasks started before this
+            are considered stale.
+
+    Returns:
+        True if the task is IN_PROGRESS and started before the cutoff.
+    """
+    if task.get("status") != "IN_PROGRESS":
+        return False
+    started_at_str = task.get("started_at")
+    if not started_at_str:
+        return False
+    return datetime.fromisoformat(started_at_str) < cutoff
+
+
+def reclaim_stale_tasks(
+    tasks: List[Dict[str, Any]],
+    stale_timeout_minutes: int,
+) -> List[str]:
+    """Reset IN_PROGRESS tasks that have exceeded the stale timeout to PENDING.
+
+    Scans the task list for IN_PROGRESS tasks whose started_at timestamp
+    is older than now minus the stale_timeout_minutes threshold. Matching
+    tasks are reset to PENDING with started_at cleared.
+
+    Args:
+        tasks: The list of task dictionaries (mutated in place).
+        stale_timeout_minutes: The number of minutes after which an
+            IN_PROGRESS task is considered stale.
+
+    Returns:
+        A list of task IDs that were reclaimed.
+    """
+    cutoff = datetime.now(timezone.utc) - timedelta(minutes=stale_timeout_minutes)
+    reclaimed_ids: List[str] = []
+
+    for task in tasks:
+        if _is_stale_task(task, cutoff):
+            task["status"] = "PENDING"
+            task["started_at"] = None
+            reclaimed_ids.append(task["id"])
+
+    return reclaimed_ids
+
+
+def get_next_task(
+    tasks: List[Dict[str, Any]],
+    stale_timeout_minutes: Optional[int] = None,
+) -> Optional[Dict[str, Any]]:
     """Return the first task with PENDING status, or None if all are done.
+
+    When stale_timeout_minutes is provided, IN_PROGRESS tasks that have
+    exceeded the timeout are first reset to PENDING before scanning.
+    Since stale tasks appear earlier in the list than untouched PENDING
+    tasks, they are returned first.
 
     Args:
         tasks: The list of task dictionaries.
+        stale_timeout_minutes: Optional timeout in minutes. When provided,
+            stale IN_PROGRESS tasks are automatically reclaimed.
 
     Returns:
         The first PENDING task dictionary, or None.
     """
+    if stale_timeout_minutes is not None:
+        reclaim_stale_tasks(tasks, stale_timeout_minutes)
+
     for task in tasks:
         if task.get("status") == "PENDING":
             return task
@@ -273,11 +335,17 @@ def complete_task(
     raise ValueError(f"Task '{task_id}' not found in task list")
 
 
-def get_progress_summary(tasks: List[Dict[str, Any]]) -> Dict[str, Any]:
+def get_progress_summary(
+    tasks: List[Dict[str, Any]],
+    stale_timeout_minutes: Optional[int] = None,
+) -> Dict[str, Any]:
     """Compute aggregate progress statistics across all tasks.
 
     Args:
         tasks: The list of task dictionaries.
+        stale_timeout_minutes: Optional timeout in minutes. When provided,
+            IN_PROGRESS tasks exceeding the timeout are counted as 'stale'
+            in the output.
 
     Returns:
         A dictionary with aggregate counts and totals.
@@ -294,7 +362,7 @@ def get_progress_summary(tasks: List[Dict[str, Any]]) -> Dict[str, Any]:
     total_duplicate = sum(t.get("candidates_duplicate", 0) for t in tasks)
     total_errors = sum(len(t.get("errors", [])) for t in tasks)
 
-    return {
+    summary: Dict[str, Any] = {
         "total": total,
         "pending": pending,
         "in_progress": in_progress,
@@ -306,3 +374,10 @@ def get_progress_summary(tasks: List[Dict[str, Any]]) -> Dict[str, Any]:
         "total_candidates_duplicate": total_duplicate,
         "total_errors": total_errors,
     }
+
+    if stale_timeout_minutes is not None:
+        cutoff = datetime.now(timezone.utc) - timedelta(minutes=stale_timeout_minutes)
+        stale = sum(1 for t in tasks if _is_stale_task(t, cutoff))
+        summary["stale"] = stale
+
+    return summary

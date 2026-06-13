@@ -29,6 +29,7 @@ from features.scanning.search_tasks import (
     start_task,
     complete_task,
     get_progress_summary,
+    reclaim_stale_tasks,
 )
 
 
@@ -62,7 +63,13 @@ def main() -> None:
         "--tasks-file",
         type=str,
         default=None,
-        help="Path to the search tasks JSON file. Defaults to data/search_tasks_{city}.json",
+        help="Path to the search tasks JSON file. Defaults to data/listing_web_search_tasks_{city}.json",
+    )
+    parser.add_argument(
+        "--stale-timeout-minutes",
+        type=int,
+        default=60,
+        help="Minutes after which an IN_PROGRESS task is considered stale and reclaimed (default: 60).",
     )
 
     # Arguments for action="complete"
@@ -80,7 +87,7 @@ def main() -> None:
     if args.tasks_file:
         tasks_path = args.tasks_file
     else:
-        tasks_path = f"data/search_tasks_{city_key}.json"
+        tasks_path = f"data/listing_web_search_tasks_{city_key}.json"
 
     try:
         if args.action == "generate":
@@ -128,6 +135,13 @@ def main() -> None:
                 )
                 print("null")
                 return
+
+            reclaimed_ids = reclaim_stale_tasks(tasks, args.stale_timeout_minutes)
+            for rid in reclaimed_ids:
+                BackendObservability.warning(
+                    f"Reclaimed stale task {rid} (exceeded {args.stale_timeout_minutes}m timeout)",
+                    conversation_id=args.trace_id,
+                )
 
             next_task = get_next_task(tasks)
             if next_task is None:
@@ -187,10 +201,10 @@ def main() -> None:
                     f"No tasks found at {tasks_path}.",
                     conversation_id=args.trace_id,
                 )
-                print(json.dumps(get_progress_summary([])))
+                print(json.dumps(get_progress_summary([], stale_timeout_minutes=args.stale_timeout_minutes)))
                 return
 
-            summary = get_progress_summary(tasks)
+            summary = get_progress_summary(tasks, stale_timeout_minutes=args.stale_timeout_minutes)
             BackendObservability.info(
                 f"Progress summary for {args.city}: {summary}",
                 conversation_id=args.trace_id,

@@ -29,6 +29,8 @@ Retrieve and start the next pending task:
 ```bash
 python3 scripts/agent_search_tasks.py --action next --city <CITY> --trace-id <CONVERSATION_ID>
 ```
+This automatically reclaims any `IN_PROGRESS` tasks that have been stale for more than 60 minutes (configurable via `--stale-timeout-minutes`), resetting them to `PENDING` so they are picked up as the next task.
+
 Read the JSON output to extract the task parameters:
 - `id`: The task ID (used to mark completion later).
 - `city`: Target city.

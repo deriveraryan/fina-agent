@@ -8,7 +8,7 @@ import json
 import os
 import tempfile
 import unittest
-from datetime import datetime
+from datetime import datetime, timedelta, timezone
 
 from features.scanning.search_tasks import (
     generate_tasks,
@@ -18,6 +18,7 @@ from features.scanning.search_tasks import (
     start_task,
     complete_task,
     get_progress_summary,
+    reclaim_stale_tasks,
 )
 
 
@@ -330,6 +331,143 @@ class TestGetProgressSummary(unittest.TestCase):
         self.assertEqual(summary["total"], 0)
         self.assertEqual(summary["completed"], 0)
         self.assertEqual(summary["total_listings_created"], 0)
+
+
+def _make_in_progress_task(task_id: str, minutes_ago: int) -> dict:
+    """Helper to create an IN_PROGRESS task started N minutes ago."""
+    started = datetime.now(timezone.utc) - timedelta(minutes=minutes_ago)
+    return {
+        "id": task_id,
+        "status": "IN_PROGRESS",
+        "started_at": started.isoformat(),
+        "completed_at": None,
+        "listings_created": 0,
+        "pages_searched": 0,
+        "candidates_evaluated": 0,
+        "candidates_rejected": 0,
+        "candidates_duplicate": 0,
+        "errors": [],
+    }
+
+
+class TestReclaimStaleTasks(unittest.TestCase):
+    """Tests for the reclaim_stale_tasks function."""
+
+    def test_reclaims_task_exceeding_timeout(self) -> None:
+        """A task started >60m ago should be reset to PENDING."""
+        tasks = [_make_in_progress_task("a", minutes_ago=90)]
+        reclaimed_ids = reclaim_stale_tasks(tasks, stale_timeout_minutes=60)
+        self.assertEqual(reclaimed_ids, ["a"])
+        self.assertEqual(tasks[0]["status"], "PENDING")
+
+    def test_does_not_reclaim_fresh_in_progress(self) -> None:
+        """A task started <60m ago should stay IN_PROGRESS."""
+        tasks = [_make_in_progress_task("a", minutes_ago=30)]
+        reclaimed_ids = reclaim_stale_tasks(tasks, stale_timeout_minutes=60)
+        self.assertEqual(reclaimed_ids, [])
+        self.assertEqual(tasks[0]["status"], "IN_PROGRESS")
+
+    def test_returns_reclaimed_task_ids(self) -> None:
+        """Should return IDs of all reclaimed tasks."""
+        tasks = [
+            _make_in_progress_task("a", minutes_ago=120),
+            _make_in_progress_task("b", minutes_ago=90),
+            _make_in_progress_task("c", minutes_ago=10),
+        ]
+        reclaimed_ids = reclaim_stale_tasks(tasks, stale_timeout_minutes=60)
+        self.assertEqual(sorted(reclaimed_ids), ["a", "b"])
+
+    def test_clears_started_at_on_reclaim(self) -> None:
+        """started_at should be set to None after reclaim."""
+        tasks = [_make_in_progress_task("a", minutes_ago=90)]
+        reclaim_stale_tasks(tasks, stale_timeout_minutes=60)
+        self.assertIsNone(tasks[0]["started_at"])
+
+    def test_does_not_touch_completed_or_pending(self) -> None:
+        """COMPLETED and PENDING tasks should remain unchanged."""
+        tasks = [
+            {"id": "a", "status": "COMPLETED", "started_at": "2024-01-01T00:00:00+00:00"},
+            {"id": "b", "status": "PENDING", "started_at": None},
+        ]
+        reclaimed_ids = reclaim_stale_tasks(tasks, stale_timeout_minutes=60)
+        self.assertEqual(reclaimed_ids, [])
+        self.assertEqual(tasks[0]["status"], "COMPLETED")
+        self.assertEqual(tasks[1]["status"], "PENDING")
+
+
+class TestGetNextTaskWithStaleReclaim(unittest.TestCase):
+    """Tests for get_next_task with stale_timeout_minutes parameter."""
+
+    def test_returns_stale_task_before_pending(self) -> None:
+        """Stale task (earlier in list) should be reclaimed and returned first."""
+        tasks = [
+            _make_in_progress_task("stale", minutes_ago=120),
+            {"id": "pending", "status": "PENDING"},
+        ]
+        result = get_next_task(tasks, stale_timeout_minutes=60)
+        self.assertIsNotNone(result)
+        self.assertEqual(result["id"], "stale")
+        # Verify the stale task was reset to PENDING
+        self.assertEqual(tasks[0]["status"], "PENDING")
+
+    def test_returns_pending_when_no_stale(self) -> None:
+        """When no stale tasks exist, returns the first PENDING task."""
+        tasks = [
+            _make_in_progress_task("fresh", minutes_ago=10),
+            {"id": "pending", "status": "PENDING"},
+        ]
+        result = get_next_task(tasks, stale_timeout_minutes=60)
+        self.assertIsNotNone(result)
+        self.assertEqual(result["id"], "pending")
+        # Fresh IN_PROGRESS should not be touched
+        self.assertEqual(tasks[0]["status"], "IN_PROGRESS")
+
+    def test_backward_compatible_without_timeout(self) -> None:
+        """get_next_task(tasks) without timeout should behave identically to current."""
+        tasks = [
+            _make_in_progress_task("stale", minutes_ago=120),
+            {"id": "pending", "status": "PENDING"},
+        ]
+        result = get_next_task(tasks)
+        # Without timeout, stale task is NOT reclaimed; returns pending
+        self.assertEqual(result["id"], "pending")
+        self.assertEqual(tasks[0]["status"], "IN_PROGRESS")
+
+
+class TestGetProgressSummaryWithStale(unittest.TestCase):
+    """Tests for get_progress_summary with stale_timeout_minutes parameter."""
+
+    def test_counts_stale_tasks(self) -> None:
+        """Summary should include a 'stale' count for expired IN_PROGRESS tasks."""
+        started_long_ago = (datetime.now(timezone.utc) - timedelta(minutes=120)).isoformat()
+        started_recently = (datetime.now(timezone.utc) - timedelta(minutes=10)).isoformat()
+        tasks = [
+            {"status": "IN_PROGRESS", "started_at": started_long_ago,
+             "listings_created": 0, "pages_searched": 0,
+             "candidates_evaluated": 0, "candidates_rejected": 0,
+             "candidates_duplicate": 0, "errors": []},
+            {"status": "IN_PROGRESS", "started_at": started_recently,
+             "listings_created": 0, "pages_searched": 0,
+             "candidates_evaluated": 0, "candidates_rejected": 0,
+             "candidates_duplicate": 0, "errors": []},
+            {"status": "PENDING", "listings_created": 0, "pages_searched": 0,
+             "candidates_evaluated": 0, "candidates_rejected": 0,
+             "candidates_duplicate": 0, "errors": []},
+        ]
+        summary = get_progress_summary(tasks, stale_timeout_minutes=60)
+        self.assertEqual(summary["stale"], 1)
+        self.assertEqual(summary["in_progress"], 2)
+
+    def test_no_stale_without_timeout(self) -> None:
+        """Without timeout parameter, 'stale' should not be in the summary."""
+        tasks = [
+            {"status": "IN_PROGRESS", "started_at": "2024-01-01T00:00:00+00:00",
+             "listings_created": 0, "pages_searched": 0,
+             "candidates_evaluated": 0, "candidates_rejected": 0,
+             "candidates_duplicate": 0, "errors": []},
+        ]
+        summary = get_progress_summary(tasks)
+        self.assertNotIn("stale", summary)
 
 
 if __name__ == "__main__":
