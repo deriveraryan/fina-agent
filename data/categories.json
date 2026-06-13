@@ -36,7 +36,11 @@
     ],
     "examples": ["Luzon Sari-Sari Store", "Manila Asian Groceries", "Pinoy Supermarket", "Filo Meat & Seafood Hub"],
     "searchTemplates": [
-      "Filipino grocery in {city}"
+      "Filipino grocery in {city}",
+      "Filipino shop in {city}",
+      "Filipino bakery in {city}",
+      "Filipino butcher in {city}",
+      "Filipino fish market in {city}"
     ]
   },
   "CHURCH": {
