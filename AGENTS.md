@@ -42,15 +42,17 @@ Here is the registry of the 6 specialized Antigravity subagents:
     5. Pushes verified listings using the `CreateListing` mutation.
 
 ### 2. `fina_new_listing_web_finder`
-*   **Role**: Discovers new listing candidates on Facebook, Instagram, TikTok, and web platforms. Strictly targets a single category and city per run.
-*   **Trigger**: No single CLI script is used. Uses native web search, file-based deduplication lookups, and Chrome DevTools browser verification.
+*   **Role**: Discovers new listing candidates on Facebook, Instagram, TikTok, and web platforms. Each run is scoped to a single task (1 location × 1 category × 1 search template) with a limit of 10 new listings or 10 search result pages.
+*   **CLI Trigger**: `python3 scripts/agent_search_tasks.py --action next --city <CITY> --trace-id <CONVERSATION_ID>`
 *   **Logic**:
-    1. Runs `scripts/agent_fetch_targets.py --type city-listings --city <CITY> --trace-id <CONVERSATION_ID> > tmp/existing_city_listings.json` to write existing city context to a file.
-    2. Runs `python3 scripts/agent_web_finder_session.py --city <CITY> --category <CATEGORY> --trace-id <CONVERSATION_ID> > tmp/web_finder_session_run.json` to retrieve and rotate the next sequential search template from the session cache file `.antigravity_saves/web_finder_session.json`.
-    3. Uses native web search with site-specific queries in three sequential rounds (Facebook, Instagram, and General Web) using only the single formatted template retrieved from the session run JSON.
-    4. Checks for duplicates by running `python3 scripts/agent_check_duplicate.py --file tmp/existing_city_listings.json --name "<NAME>" --url "<URL>"` to avoid context bloat and sidestep gitignore limits on native grep tools.
-    5. Navigates to candidate pages via Chrome DevTools, extracting only visible text/selectors to prevent raw HTML bloat (and uses python parser for TikTok followers).
-    6. Creates verified listings via `agent_graphql_push.py --operation CreateListing` (without `--generate-embeddings`, including `tiktokUrl` and `tiktokFollowers`) with self-correction on validation failure.
+    1. Generates all task permutations for a city (idempotent) via `scripts/agent_search_tasks.py --action generate --city <CITY>`, producing `data/search_tasks_{city}.json` with all (category × template × location) combinations ordered by category, template index, and city-level first then suburbs from `data/top_suburbs_per_city.json`.
+    2. Retrieves the next pending task via `--action next`, which atomically transitions it to `IN_PROGRESS` and returns the task's pre-formatted search query, category, and location.
+    3. Runs `scripts/agent_fetch_targets.py --type city-listings --city <CITY> --trace-id <CONVERSATION_ID> > tmp/existing_city_listings.json` to write existing city context to a file.
+    4. Uses native web search with site-specific queries in three sequential rounds (Facebook, Instagram, and General Web) using the task's `formatted_query`.
+    5. Checks for duplicates by running `python3 scripts/agent_check_duplicate.py --file tmp/existing_city_listings.json --name "<NAME>" --url "<URL>"`.
+    6. Navigates to candidate pages via Chrome DevTools, extracting only visible text/selectors to prevent raw HTML bloat.
+    7. Creates verified listings via `agent_graphql_push.py --operation CreateListing` (without `--generate-embeddings`, including `tiktokUrl` and `tiktokFollowers`) with self-correction on validation failure.
+    8. Marks the task as `COMPLETED` with metrics via `--action complete --task-id <ID> --listings-created N --pages-searched N --candidates-evaluated N --candidates-rejected N --candidates-duplicate N`.
 
 ### 3. `fina_enrich_listing_socials_finder`
 *   **Role**: Enriches existing database listings with missing Facebook, Instagram, and TikTok URLs. Strictly targets a single city per run.

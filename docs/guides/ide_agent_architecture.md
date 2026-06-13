@@ -55,9 +55,11 @@ flowchart TD
     CheckHasMore -->|Yes| ReadSlices
     CheckHasMore -->|No| FinishMaps(["Maps Refresh/Discovery Completed"])
 
-    %% ════════ 2. NEW LISTING WEB FINDER FLOW (SOCIAL) ════════
-    InvokeNewListingWebFinder --> FetchCityListings["Execute: python3 scripts/agent_fetch_targets.py --type city-listings<br>--city C > tmp/existing_city_listings.json"]
-    FetchCityListings --> NativeWebSearch["Subagent uses Native Web Search<br>(e.g., Google site:facebook.com)"]
+    %% ════════ 2. NEW LISTING WEB FINDER FLOW (TASK-BASED) ════════
+    InvokeNewListingWebFinder --> GenerateTasks["Execute: python3 scripts/agent_search_tasks.py<br>--action generate --city C (idempotent)"]
+    GenerateTasks --> GetNextTask["Execute: python3 scripts/agent_search_tasks.py<br>--action next --city C"]
+    GetNextTask --> FetchCityListings["Execute: python3 scripts/agent_fetch_targets.py --type city-listings<br>--city C > tmp/existing_city_listings.json"]
+    FetchCityListings --> NativeWebSearch["Subagent uses Native Web Search<br>(3 rounds: Facebook, Instagram, General Web)<br>using task's formatted_query"]
     NativeWebSearch --> FilterKnown["Filters out existing URLs/Names by<br>inspecting tmp/existing_city_listings.json on disk"]
     
     FilterKnown --> BrowserVerify["For each NEW candidate URL:<br>Subagent uses chrome-devtools to inspect page<br>(visible text/selectors only)"]
@@ -73,9 +75,10 @@ flowchart TD
     DBTransactionListing --> CheckHasMoreSocial
     BrowserVerify -->|Not Affiliated| CheckHasMoreSocial
     
-    CheckHasMoreSocial{"Found 10 new listings<br>OR checked 10 pages?"}
+    CheckHasMoreSocial{"Found 10 new listings<br>OR scanned 10 pages?"}
     CheckHasMoreSocial -->|No| NativeWebSearch
-    CheckHasMoreSocial -->|Yes| FinishSocial(["Web Discovery Completed"])
+    CheckHasMoreSocial -->|Yes| CompleteTask["Execute: python3 scripts/agent_search_tasks.py<br>--action complete --task-id ID"]
+    CompleteTask --> FinishSocial(["Task Completed — Next run picks up next task"])
 
     %% ════════ 3. ENRICH LISTING SOCIALS FINDER FLOW (BACKFILL) ════════
     InvokeEnrichListingSocialsFinder --> ExecGetMissingSocial["Execute: python3 scripts/agent_fetch_targets.py --type missing-social<br>--city C > tmp/missing_socials_targets.json"]
@@ -104,32 +107,7 @@ flowchart TD
     
     EnrichLoop -.->|No more listings| FinishEnrich(["Socials Enrichment Completed"])
 
-    %% ════════ 4. LISTING AUDITOR FLOW (CATEGORY AUDIT) ════════
-    InvokeListingAuditor --> ExecAudit["Execute: python3 scripts/agent_audit_listings.py<br>--city C --limit 10 --offset O"]
-    
-    subgraph agent_audit_listings["Inside scripts/agent_audit_listings.py"]
-        QueryCityListings["GraphQL Query: ListCityListings"]
-        QueryCityListings --> DBCityListings[("PostgreSQL Database")]
-        DBCityListings -.-> ReturnAuditPage["Return JSON Page (listings, total, has_more)"]
-    end
-    
-    ExecAudit --> QueryCityListings
-    ReturnAuditPage --> VerifyAuditHeuristic["Subagent checks listing categories<br>against data/categories.json"]
-    
-    VerifyAuditHeuristic -->|Needs Corrections & Not Dry-Run| ExecPushAudit["Execute: python3 scripts/agent_graphql_push.py<br>--operation UpdateListingData"]
-    subgraph agent_graphql_push_audit["Inside scripts/agent_graphql_push.py"]
-        GQLMutationAudit["GraphQL Mutation<br>(UpdateListingData)"]
-    end
-    ExecPushAudit --> GQLMutationAudit
-    GQLMutationAudit --> DBTransactionAudit[("PostgreSQL Database")]
-    
-    DBTransactionAudit --> CheckHasMoreAudit
-    VerifyAuditHeuristic -->|No corrections OR Dry-Run| CheckHasMoreAudit
-    
-    CheckHasMoreAudit{"Has More Listings?"}
-    CheckHasMoreAudit -->|Yes| NextPageAudit["Increment offset by 10 and query again"]
-    NextPageAudit --> ExecAudit
-    CheckHasMoreAudit -->|No| FinishAudit(["Audit Completed"])
+
 
     %% ════════ 5. EVENTS FINDER FLOW (BUSINESS PAGES) ════════
     InvokeEventsFinder --> ExecGetBusinessSocial["Execute: python3 scripts/agent_fetch_targets.py<br>--type business-socials --city C"]
@@ -193,10 +171,10 @@ This subagent automates business research on Google Maps:
 *   **Omission of Embeddings Flag**: Does NOT use the `--generate-embeddings` flag when pushing listings via the GraphQL client. Listing description vector embeddings are backfilled asynchronously by the dedicated `fina_listing_embedder` agent.
 
 ### 2. The `fina_new_listing_web_finder` Subagent (Community Scanner)
-This subagent actively searches Facebook and Instagram for Filipino community organisations:
-*   **Single Target Tuple Restriction**: Strictly targets a single `<CITY>` and `<CATEGORY>` per execution run to prevent context bloat.
+This subagent actively searches Facebook, Instagram, and TikTok for Filipino listings using a deterministic task-based state machine:
+*   **Task-Based Execution**: Each run is scoped to a single task (1 location × 1 category × 1 search template) with a limit of 10 new listings or 10 search result pages scanned. Tasks are managed via `scripts/agent_search_tasks.py`, which generates all permutations for a city (`data/search_tasks_{city}.json`) and provides `next`/`complete` actions for state transitions (PENDING → IN_PROGRESS → COMPLETED).
 *   **Context Setup (No-Bloat)**: Executes `scripts/agent_fetch_targets.py --type city-listings --city C > tmp/existing_city_listings.json` to write the deduplication context directly to disk. The agent checks if a candidate exists by searching the file directly on disk, avoiding terminal stdout dumps.
-*   **Web Discovery**: Executes `python3 scripts/agent_web_finder_session.py` to retrieve and rotate the next sequential search template from the session cache file `.antigravity_saves/web_finder_session.json`, and uses the native web search tool to run queries using strictly this single formatted template across three search rounds (Facebook, Instagram, and General Web), avoiding redundant search templates.
+*   **Web Discovery**: Uses the task's pre-formatted search query to run three sequential search rounds (Facebook, Instagram, and General Web). Each task's query is pre-generated from the `searchTemplates` in `data/categories.json` combined with the location (city or suburb from `data/top_suburbs_per_city.json`).
 *   **Browser Verification (No-Bloat)**: The subagent uses the `chrome-devtools` skill to inspect candidate pages, extracting only visible text or target DOM selectors (such as the follower count element or the bio description), rather than loading full raw page HTML into prompt history.
 *   **Category Standardization**: The subagent is instructed to view [categories.json](file:///Users/ryan/.gemini/antigravity/scratch/fina-agent/data/categories.json) to ensure extracted categories map precisely to canonical definitions before pushing.
 *   **Listing Persistence**: Verified organizations are pushed directly to the `Listing` table using `CreateListing`. For online-only communities (no physical street address), the address is set to the city name with city center coordinates and tagged with `online-org`.

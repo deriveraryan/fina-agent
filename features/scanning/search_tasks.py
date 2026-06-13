@@ -1,0 +1,308 @@
+"""Module to manage the task-based search state machine for the web finder agent.
+
+Generates all search task permutations for a city (categories × templates × locations),
+and provides pure functions for state transitions (PENDING → IN_PROGRESS → COMPLETED)
+and progress aggregation.
+"""
+
+import json
+import os
+from datetime import datetime, timezone
+from typing import Any, Dict, List, Optional
+
+
+def generate_tasks(
+    city: str,
+    categories_path: str,
+    suburbs_path: str,
+) -> List[Dict[str, Any]]:
+    """Generate all search task permutations for a city.
+
+    Creates one task per (category × template × location) combination.
+    Location is either the city itself or a suburb from the suburbs file.
+
+    Ordering: categories in file order → template index ascending →
+    city-level first, then suburbs in list order.
+
+    Args:
+        city: Target city name (e.g. "Sydney").
+        categories_path: Path to data/categories.json.
+        suburbs_path: Path to data/top_suburbs_per_city.json.
+
+    Returns:
+        A list of task dictionaries, each with tracking metadata.
+
+    Raises:
+        ValueError: If the city is not defined in the suburbs file,
+                    or the categories file is missing/invalid.
+    """
+    if not os.path.exists(categories_path):
+        raise ValueError(f"Categories file not found at {categories_path}")
+    if not os.path.exists(suburbs_path):
+        raise ValueError(f"Suburbs file not found at {suburbs_path}")
+
+    with open(categories_path, "r", encoding="utf-8") as f:
+        categories_data: Dict[str, Any] = json.load(f)
+
+    with open(suburbs_path, "r", encoding="utf-8") as f:
+        suburbs_data: Dict[str, List[str]] = json.load(f)
+
+    city_key = city.lower().strip()
+    if city_key not in suburbs_data:
+        raise ValueError(
+            f"City '{city}' is not defined in {suburbs_path}. "
+            f"Valid cities: {list(suburbs_data.keys())}"
+        )
+
+    city_display = city.strip()
+    suburbs = suburbs_data[city_key]
+
+    tasks: List[Dict[str, Any]] = []
+
+    for category_key, category_cfg in categories_data.items():
+        templates = category_cfg.get("searchTemplates", [])
+        if not templates:
+            continue
+
+        for template_index, template_str in enumerate(templates):
+            # City-level task
+            tasks.append(_build_task(
+                city_key=city_key,
+                city_display=city_display,
+                category=category_key,
+                template_index=template_index,
+                template=template_str,
+                location=city_display,
+                location_type="city",
+            ))
+
+            # Suburb tasks
+            for suburb in suburbs:
+                tasks.append(_build_task(
+                    city_key=city_key,
+                    city_display=city_display,
+                    category=category_key,
+                    template_index=template_index,
+                    template=template_str,
+                    location=suburb,
+                    location_type="suburb",
+                ))
+
+    return tasks
+
+
+def _build_task(
+    city_key: str,
+    city_display: str,
+    category: str,
+    template_index: int,
+    template: str,
+    location: str,
+    location_type: str,
+) -> Dict[str, Any]:
+    """Build a single task dictionary with all required fields.
+
+    For city-level tasks, the query is formatted as the template with {city}
+    replaced by the city name. For suburb tasks, the query is formatted as
+    the raw template text (without {city} substitution) + ' in {suburb}, {city}'.
+
+    Args:
+        city_key: Lowercased city identifier for the task ID.
+        city_display: Display-cased city name.
+        category: Canonical category key (e.g. "RESTAURANT").
+        template_index: Index of the template in searchTemplates array.
+        template: Raw template string (e.g. "Filipino restaurant in {city}").
+        location: The location name (city display name or suburb name).
+        location_type: Either "city" or "suburb".
+
+    Returns:
+        A task dictionary with all tracking fields initialized.
+    """
+    location_id = location.lower().strip().replace(" ", "_")
+    task_id = f"{city_key}__{category}__{template_index}__{location_id}"
+
+    if location_type == "city":
+        formatted_query = template.replace("{city}", city_display)
+    else:
+        # Extract the descriptive part before "{city}" to build suburb query
+        # e.g. "Filipino restaurant in {city}" → "Filipino restaurant in Parramatta, Sydney"
+        base_query = template.replace(" in {city}", "").replace("{city}", "").strip()
+        formatted_query = f"{base_query} in {location}, {city_display}"
+
+    return {
+        "id": task_id,
+        "city": city_display,
+        "location": location,
+        "location_type": location_type,
+        "category": category,
+        "template_index": template_index,
+        "template": template,
+        "formatted_query": formatted_query,
+        "status": "PENDING",
+        "started_at": None,
+        "completed_at": None,
+        "listings_created": 0,
+        "pages_searched": 0,
+        "candidates_evaluated": 0,
+        "candidates_rejected": 0,
+        "candidates_duplicate": 0,
+        "errors": [],
+    }
+
+
+def load_tasks(tasks_path: str) -> List[Dict[str, Any]]:
+    """Load the task list from a JSON file.
+
+    Args:
+        tasks_path: Absolute path to the tasks JSON file.
+
+    Returns:
+        A list of task dictionaries, or an empty list if the file
+        is missing or contains invalid JSON.
+    """
+    if not os.path.exists(tasks_path):
+        return []
+    try:
+        with open(tasks_path, "r", encoding="utf-8") as f:
+            data = f.read().strip()
+            if not data:
+                return []
+            return json.loads(data)
+    except (json.JSONDecodeError, IOError):
+        return []
+
+
+def save_tasks(tasks_path: str, tasks: List[Dict[str, Any]]) -> None:
+    """Save the task list to a JSON file atomically.
+
+    Creates parent directories if they do not exist.
+
+    Args:
+        tasks_path: Absolute path to the tasks JSON file.
+        tasks: The list of task dictionaries to serialize.
+    """
+    os.makedirs(os.path.dirname(tasks_path) or ".", exist_ok=True)
+    with open(tasks_path, "w", encoding="utf-8") as f:
+        json.dump(tasks, f, indent=2, ensure_ascii=False)
+
+
+def get_next_task(tasks: List[Dict[str, Any]]) -> Optional[Dict[str, Any]]:
+    """Return the first task with PENDING status, or None if all are done.
+
+    Args:
+        tasks: The list of task dictionaries.
+
+    Returns:
+        The first PENDING task dictionary, or None.
+    """
+    for task in tasks:
+        if task.get("status") == "PENDING":
+            return task
+    return None
+
+
+def start_task(
+    tasks: List[Dict[str, Any]],
+    task_id: str,
+) -> List[Dict[str, Any]]:
+    """Transition a task from PENDING to IN_PROGRESS.
+
+    Args:
+        tasks: The list of task dictionaries (mutated in place).
+        task_id: The ID of the task to start.
+
+    Returns:
+        The updated list of task dictionaries.
+
+    Raises:
+        ValueError: If the task ID is not found or the task is not PENDING.
+    """
+    for task in tasks:
+        if task["id"] == task_id:
+            if task["status"] != "PENDING":
+                raise ValueError(
+                    f"Cannot start task '{task_id}': status is '{task['status']}', expected 'PENDING'"
+                )
+            task["status"] = "IN_PROGRESS"
+            task["started_at"] = datetime.now(timezone.utc).isoformat()
+            return tasks
+
+    raise ValueError(f"Task '{task_id}' not found in task list")
+
+
+def complete_task(
+    tasks: List[Dict[str, Any]],
+    task_id: str,
+    metrics: Dict[str, Any],
+) -> List[Dict[str, Any]]:
+    """Transition a task from IN_PROGRESS to COMPLETED with metrics.
+
+    Args:
+        tasks: The list of task dictionaries (mutated in place).
+        task_id: The ID of the task to complete.
+        metrics: A dictionary of metric values to merge into the task
+                 (e.g. listings_created, pages_searched).
+
+    Returns:
+        The updated list of task dictionaries.
+
+    Raises:
+        ValueError: If the task ID is not found or the task is not IN_PROGRESS.
+    """
+    for task in tasks:
+        if task["id"] == task_id:
+            if task["status"] != "IN_PROGRESS":
+                raise ValueError(
+                    f"Cannot complete task '{task_id}': status is '{task['status']}', expected 'IN_PROGRESS'"
+                )
+            task["status"] = "COMPLETED"
+            task["completed_at"] = datetime.now(timezone.utc).isoformat()
+
+            # Merge provided metrics into the task
+            allowed_metrics = {
+                "listings_created", "pages_searched",
+                "candidates_evaluated", "candidates_rejected",
+                "candidates_duplicate",
+            }
+            for key, value in metrics.items():
+                if key in allowed_metrics:
+                    task[key] = value
+
+            return tasks
+
+    raise ValueError(f"Task '{task_id}' not found in task list")
+
+
+def get_progress_summary(tasks: List[Dict[str, Any]]) -> Dict[str, Any]:
+    """Compute aggregate progress statistics across all tasks.
+
+    Args:
+        tasks: The list of task dictionaries.
+
+    Returns:
+        A dictionary with aggregate counts and totals.
+    """
+    total = len(tasks)
+    pending = sum(1 for t in tasks if t.get("status") == "PENDING")
+    in_progress = sum(1 for t in tasks if t.get("status") == "IN_PROGRESS")
+    completed = sum(1 for t in tasks if t.get("status") == "COMPLETED")
+
+    total_listings = sum(t.get("listings_created", 0) for t in tasks)
+    total_pages = sum(t.get("pages_searched", 0) for t in tasks)
+    total_candidates = sum(t.get("candidates_evaluated", 0) for t in tasks)
+    total_rejected = sum(t.get("candidates_rejected", 0) for t in tasks)
+    total_duplicate = sum(t.get("candidates_duplicate", 0) for t in tasks)
+    total_errors = sum(len(t.get("errors", [])) for t in tasks)
+
+    return {
+        "total": total,
+        "pending": pending,
+        "in_progress": in_progress,
+        "completed": completed,
+        "total_listings_created": total_listings,
+        "total_pages_searched": total_pages,
+        "total_candidates_evaluated": total_candidates,
+        "total_candidates_rejected": total_rejected,
+        "total_candidates_duplicate": total_duplicate,
+        "total_errors": total_errors,
+    }

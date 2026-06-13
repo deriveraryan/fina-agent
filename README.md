@@ -50,7 +50,7 @@ You can trigger these discovery scans manually through the Antigravity Chat UI o
 ### 1. The Scraper Agents
 
 * **`fina_refresh_listing_maps_finder`**: Queries Google Places Text Search.
-* **`fina_new_listing_web_finder`**: Searches social platforms for Filipino community pages.
+* **`fina_new_listing_web_finder`**: Discovers new Filipino listings on social platforms using a task-based state machine (1 location × 1 category × 1 template per run).
 * **`fina_enrich_listing_socials_finder`**: Enriches existing listings with missing Facebook/Instagram URLs.
 * **`fina_listing_embedder`**: Audits and generates vector description embeddings for listings missing them.
 * **`fina_events_finder`**: Crawls business social media pages to harvest upcoming events.
@@ -91,6 +91,20 @@ By default, the `fina_refresh_listing_maps_finder` caches Google Places search r
 ### 3. Running Scripts via CLI
 You can execute the underlying discovery and database push scripts directly in your shell.
 
+*   **Search Task Manager (Web Finder)**:
+    ```bash
+    # Generate all search task permutations for a city (idempotent — skips if file exists)
+    python3 scripts/agent_search_tasks.py --action generate --city SYDNEY --trace-id <CONVERSATION_ID>
+
+    # Get the next pending task (atomically transitions to IN_PROGRESS)
+    python3 scripts/agent_search_tasks.py --action next --city SYDNEY --trace-id <CONVERSATION_ID>
+
+    # Mark a task as completed with metrics
+    python3 scripts/agent_search_tasks.py --action complete --city SYDNEY --task-id sydney__RESTAURANT__0__sydney --listings-created 5 --pages-searched 3 --candidates-evaluated 8 --candidates-rejected 1 --candidates-duplicate 2 --trace-id <CONVERSATION_ID>
+
+    # View aggregate progress
+    python3 scripts/agent_search_tasks.py --action summary --city SYDNEY --trace-id <CONVERSATION_ID>
+    ```
 *   **Listing Vector Embedding Generator**:
     ```bash
     # Generate and back-fill description embeddings for listings missing them
