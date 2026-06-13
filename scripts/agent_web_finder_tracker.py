@@ -44,6 +44,12 @@ def main() -> None:
         default=None,
         help="Path to the tracker JSON file. Defaults to .antigravity_saves/web_finder_tracker_{trace_id}.json",
     )
+    parser.add_argument(
+        "--suburbs-file",
+        type=str,
+        default="data/top_suburbs_per_city.json",
+        help="Path to the top suburbs JSON file.",
+    )
 
     # Arguments for action="init"
     parser.add_argument("--city", type=str, help="Target city (e.g. Sydney).")
@@ -133,6 +139,7 @@ def main() -> None:
                 platform=args.platform,
                 pages_read=args.pages_read,
                 tracker_path=tracker_path,
+                suburbs_path=args.suburbs_file,
             )
             print('{"added_search": true}')
 
@@ -180,6 +187,7 @@ def main() -> None:
                 tracker_path=tracker_path,
                 template_path=args.template_file,
                 logs_dir=args.logs_dir,
+                suburbs_path=args.suburbs_file,
             )
             BackendObservability.info(
                 f"Successfully compiled report at {report_path}",

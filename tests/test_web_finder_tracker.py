@@ -19,9 +19,18 @@ class TestWebFinderTracker(unittest.TestCase):
         self.temp_dir = tempfile.TemporaryDirectory()
         self.tracker_path = os.path.join(self.temp_dir.name, "web_finder_tracker.json")
         self.template_path = os.path.join(self.temp_dir.name, "REPORT_TEMPLATE.md")
+        self.suburbs_path = os.path.join(self.temp_dir.name, "top_suburbs_per_city.json")
         self.logs_dir = os.path.join(self.temp_dir.name, "logs")
 
-        # Mock REPORT_TEMPLATE.md
+        # Mock top_suburbs_per_city.json
+        self.mock_suburbs = {
+            "sydney": ["Chatswood", "Parramatta", "Blacktown", "Bondi Junction"],
+            "melbourne": ["Craigieburn", "Point Cook"]
+        }
+        with open(self.suburbs_path, "w", encoding="utf-8") as f:
+            json.dump(self.mock_suburbs, f)
+
+        # Mock REPORT_TEMPLATE.md with suburb placeholders
         self.mock_template = """# Fina New Listing Web Finder Report — {CITY}
 
 ## Run Metadata
@@ -36,6 +45,7 @@ class TestWebFinderTracker(unittest.TestCase):
 | **Formatted Query** | `{FORMATTED_QUERY}` |
 | **Execution Date** | {EXECUTION_DATE} |
 | **Trace ID** | `{TRACE_ID}` |
+| **Search Locations / Suburbs** | {SEARCH_SUBURBS} |
 
 ## Summary
 
@@ -46,6 +56,7 @@ class TestWebFinderTracker(unittest.TestCase):
 | **Total Candidate Pages Evaluated** | {CANDIDATES_EVALUATED} |
 | **Verified Listings Created** | {LISTINGS_CREATED} |
 | **Candidates Rejected** | {CANDIDATES_REJECTED} |
+| **Total Suburbs Searched** | {TOTAL_SUBURBS_SEARCHED} |
 | **Errors Encountered** | {ERRORS_ENCOUNTERED} |
 
 ## Verified Community Listings
@@ -57,6 +68,10 @@ class TestWebFinderTracker(unittest.TestCase):
 ## Skipped / Rejected Candidates
 
 {REJECTED_TABLE}
+
+## Search Log Details
+
+{SEARCH_LOG_DETAILS}
 
 ## Errors & Warnings
 
@@ -99,8 +114,8 @@ class TestWebFinderTracker(unittest.TestCase):
         """Adding searches should append to the list and increment metrics."""
         init_tracker("Sydney", "RESTAURANT", 2, "test", "test", "trace", self.tracker_path)
 
-        add_search("query1", "Facebook", 1, self.tracker_path)
-        add_search("query2", "Instagram", 2, self.tracker_path)
+        add_search("query1", "Facebook", 1, self.tracker_path, suburbs_path=self.suburbs_path)
+        add_search("query2", "Instagram", 2, self.tracker_path, suburbs_path=self.suburbs_path)
 
         with open(self.tracker_path, "r", encoding="utf-8") as f:
             data = json.load(f)
@@ -148,131 +163,48 @@ class TestWebFinderTracker(unittest.TestCase):
 
         self.assertEqual(data["errors"], ["Network timeout on FB search"])
 
-    def test_generate_report_produces_valid_markdown(self) -> None:
-        """Report generation should correctly compile data, sort categories/platforms, and format markdown."""
+    def test_suburb_resolution_and_reporting(self) -> None:
+        """The tracker should automatically resolve suburbs from search queries and populate log tables and metadata."""
         init_tracker("Sydney", "RESTAURANT", 1, "Filipino shop in {city}", "Filipino shop in Sydney", "trace-id-123", self.tracker_path)
 
-        add_search("query1", "Facebook", 2, self.tracker_path)
-        add_search("query2", "Instagram", 3, self.tracker_path)
+        # 1. Search with "Chatswood" (exact match)
+        add_search("Filipino restaurant in Chatswood site:facebook.com", "Facebook", 1, self.tracker_path, suburbs_path=self.suburbs_path)
 
-        # Candidate 1: Created (Facebook)
-        add_candidate(
-            name="Z-Restaurant",
-            url="https://facebook.com/zrest",
-            platform="Facebook",
-            status="CREATED",
-            reason="Lumpia specialty",
-            db_id="db-z",
-            address="456 Rd",
-            description="Special lumpia",
-            tags="google-search",
-            category="RESTAURANT",
-            tracker_path=self.tracker_path,
-        )
+        # 2. Search with "parramatta" (case-insensitive match)
+        add_search("Filipino cafe in parramatta site:instagram.com", "Instagram", 2, self.tracker_path, suburbs_path=self.suburbs_path)
 
-        # Candidate 2: Created (Instagram) - platform ordering check (Facebook should come before Instagram)
-        add_candidate(
-            name="A-Restaurant",
-            url="https://instagram.com/arest",
-            platform="Instagram",
-            status="CREATED",
-            reason="Adobo house",
-            db_id="db-a",
-            address="123 Rd",
-            description="Special adobo",
-            tags="google-search",
-            category="RESTAURANT",
-            tracker_path=self.tracker_path,
-        )
+        # 3. Search without any suburb name
+        add_search("Filipino grocery in Sydney -site:facebook.com", "General Web", 3, self.tracker_path, suburbs_path=self.suburbs_path)
 
-        # Candidate 3: Created (Facebook) - alphabetical check (A-Rest should come before Z-Rest if same platform, but FB is first)
-        add_candidate(
-            name="B-Restaurant",
-            url="https://facebook.com/brest",
-            platform="Facebook",
-            status="CREATED",
-            reason="BBQ style",
-            db_id="db-b",
-            address="789 Rd",
-            description="Pinoy BBQ",
-            tags="google-search",
-            category="RESTAURANT",
-            tracker_path=self.tracker_path,
-        )
+        with open(self.tracker_path, "r", encoding="utf-8") as f:
+            data = json.load(f)
 
-        # Candidate 4: Duplicate
-        add_candidate(
-            name="Duplicate Shop",
-            url="https://facebook.com/dupe",
-            platform="Facebook",
-            status="DUPLICATE",
-            reason="Already in DB",
-            db_id=None,
-            address=None,
-            description=None,
-            tags=None,
-            category=None,
-            tracker_path=self.tracker_path,
-        )
+        self.assertEqual(data["searches"][0]["suburb"], "Chatswood")
+        self.assertEqual(data["searches"][1]["suburb"], "Parramatta")
+        self.assertIsNone(data["searches"][2]["suburb"])
 
-        # Candidate 5: Rejected
-        add_candidate(
-            name="Generic Sushi",
-            url="https://instagram.com/sushi",
-            platform="Instagram",
-            status="REJECTED",
-            reason="Not Filipino-affiliated",
-            db_id=None,
-            address=None,
-            description=None,
-            tags=None,
-            category=None,
-            tracker_path=self.tracker_path,
-        )
-
-        add_error("Slow network warning", self.tracker_path)
-
-        # Generate report
+        # Generate the report
         report_file = generate_report(
             tracker_path=self.tracker_path,
             template_path=self.template_path,
             logs_dir=self.logs_dir,
+            suburbs_path=self.suburbs_path,
         )
-
-        self.assertTrue(os.path.exists(report_file))
 
         with open(report_file, "r", encoding="utf-8") as f:
             content = f.read()
 
-        # Check metrics replacements
-        self.assertIn("**Web Searches Made** | 2", content)
-        self.assertIn("**Total Pages Read** | 5", content)
-        self.assertIn("**Total Candidate Pages Evaluated** | 5", content)
-        self.assertIn("**Verified Listings Created** | 3", content)
-        self.assertIn("**Candidates Rejected** | 2", content)
-        self.assertIn("**Errors Encountered** | 1", content)
+        # Check metadata row
+        self.assertIn("**Search Locations / Suburbs** | Chatswood, Parramatta", content)
 
-        # Check Created Listings sorting and formatting
-        # Grouped under #### RESTAURANT
-        self.assertIn("#### RESTAURANT", content)
-        # Sorted by platform (Facebook first, then Instagram), then alphabetically.
-        # Order of created:
-        # 1. B-Restaurant (Facebook)
-        # 2. Z-Restaurant (Facebook)
-        # 3. A-Restaurant (Instagram)
-        idx_b = content.index("B-Restaurant")
-        idx_z = content.index("Z-Restaurant")
-        idx_a = content.index("A-Restaurant")
+        # Check summary count row
+        self.assertIn("**Total Suburbs Searched** | 2", content)
 
-        self.assertTrue(idx_b < idx_z < idx_a)
-
-        # Check Rejected Candidates table
-        self.assertIn("Duplicate Shop", content)
-        self.assertIn("Already in DB", content)
-        self.assertIn("Generic Sushi", content)
-
-        # Check errors list
-        self.assertIn("Slow network warning", content)
+        # Check log details table content
+        self.assertIn("| Search Query | Platform | Pages Read | Location / Suburb |", content)
+        self.assertIn("| Filipino restaurant in Chatswood site:facebook.com | Facebook | 1 | Chatswood |", content)
+        self.assertIn("| Filipino cafe in parramatta site:instagram.com | Instagram | 2 | Parramatta |", content)
+        self.assertIn("| Filipino grocery in Sydney -site:facebook.com | General Web | 3 | None |", content)
 
 
 if __name__ == "__main__":

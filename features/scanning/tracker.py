@@ -84,23 +84,46 @@ def add_search(
     platform: str,
     pages_read: int,
     tracker_path: str,
+    suburbs_path: str = "data/top_suburbs_per_city.json",
 ) -> None:
     """Record a web search action and pages read count.
+
+    Automatically detects if a suburb from the city's suburb list is part of the query.
 
     Args:
         query: The search term or query string executed.
         platform: Platform type (Facebook, Instagram, General Web, etc.).
         pages_read: Number of result pages read or inspected during this search.
         tracker_path: Path to the tracker JSON file.
+        suburbs_path: Path to the top_suburbs_per_city.json file.
     """
     data = load_tracker_data(tracker_path)
     if not data:
         raise ValueError(f"Tracker state not initialized or missing at {tracker_path}")
 
+    city = data.get("city", "")
+    matched_suburb = None
+
+    if city and os.path.exists(suburbs_path):
+        try:
+            with open(suburbs_path, "r", encoding="utf-8") as sf:
+                suburbs_map = json.load(sf)
+            city_key = city.lower().strip()
+            city_suburbs = suburbs_map.get(city_key, [])
+            query_lower = query.lower()
+            # Match case-insensitively, prioritize matching longer names first if any overlap
+            for suburb in sorted(city_suburbs, key=len, reverse=True):
+                if suburb.lower() in query_lower:
+                    matched_suburb = suburb
+                    break
+        except Exception:
+            pass
+
     search_record = {
         "query": query,
         "platform": platform,
         "pages_read": pages_read,
+        "suburb": matched_suburb,
     }
     data.setdefault("searches", []).append(search_record)
     save_tracker_data(tracker_path, data)
@@ -138,11 +161,15 @@ def add_candidate(
     if not data:
         raise ValueError(f"Tracker state not initialized or missing at {tracker_path}")
 
+    normalized_status = status.upper().strip()
+    if normalized_status not in ("CREATED", "DUPLICATE", "REJECTED", "ERROR"):
+        raise ValueError(f"Invalid candidate status: '{status}'. Must be CREATED, DUPLICATE, REJECTED, or ERROR.")
+
     candidate_record = {
         "name": name,
         "url": url,
         "platform": platform,
-        "status": status.upper().strip(),
+        "status": normalized_status,
         "reason": reason,
         "db_id": db_id,
         "address": address,
@@ -173,6 +200,7 @@ def generate_report(
     tracker_path: str,
     template_path: str,
     logs_dir: str,
+    suburbs_path: str = "data/top_suburbs_per_city.json",
 ) -> str:
     """Compile the final markdown report from the tracker session data.
 
@@ -183,6 +211,7 @@ def generate_report(
         tracker_path: Path to the tracker JSON file.
         template_path: Path to REPORT_TEMPLATE.md.
         logs_dir: Output root logs folder.
+        suburbs_path: Path to the top_suburbs_per_city.json file.
 
     Returns:
         The absolute path to the generated markdown report file.
@@ -209,12 +238,18 @@ def generate_report(
     candidates_rejected = sum(1 for c in candidates if c.get("status") in ("REJECTED", "DUPLICATE"))
     errors_count = len(errors)
 
+    # Suburbs metrics
+    unique_suburbs = sorted(list(set(
+        s.get("suburb") for s in searches if s.get("suburb")
+    )))
+    search_suburbs_str = ", ".join(unique_suburbs) if unique_suburbs else "None"
+    total_suburbs_searched = len(unique_suburbs)
+
     # Derive unique platforms searched
     unique_platforms = sorted(list(
         set(s.get("platform", "") for s in searches) |
         set(c.get("platform", "") for c in candidates)
     ))
-    # Filter empty platform strings
     unique_platforms = [p for p in unique_platforms if p]
     platforms_str = ", ".join(unique_platforms) if unique_platforms else "Facebook, Instagram, General Web"
 
@@ -225,7 +260,6 @@ def generate_report(
         cat = (listing.get("category") or data.get("category") or "UNKNOWN").upper().strip()
         grouped_created.setdefault(cat, []).append(listing)
 
-    # Sorting priority for platforms: Facebook -> Instagram -> General Web -> others
     platform_priority = {"Facebook": 0, "Instagram": 1, "General Web": 2}
 
     def sort_key(listing: Dict[str, Any]) -> Any:
@@ -234,7 +268,6 @@ def generate_report(
         return (platform_priority.get(plat, 99), name.lower())
 
     created_md_blocks = []
-    # Sort categories alphabetically
     for cat in sorted(grouped_created.keys()):
         created_md_blocks.append(f"#### {cat}\n")
         sorted_listings = sorted(grouped_created[cat], key=sort_key)
@@ -273,11 +306,27 @@ def generate_report(
         reason = c.get("reason") or "No reason provided"
         rejected_rows.append(f"| {name} | {plat} | {reason} |")
 
-    # If there are no skipped/rejected candidates, append a placeholder row
     if len(rejected_candidates) == 0:
         rejected_rows.append("| None | None | No candidates skipped or rejected |")
 
     rejected_table_md = "\n".join(rejected_rows)
+
+    # Build Search Log Details table
+    log_rows = [
+        "| Search Query | Platform | Pages Read | Location / Suburb |",
+        "| :--- | :--- | :--- | :--- |"
+    ]
+    for s in searches:
+        query_val = s.get("query") or "None"
+        plat_val = s.get("platform") or "Web"
+        pages_val = s.get("pages_read") or 0
+        suburb_val = s.get("suburb") or "None"
+        log_rows.append(f"| {query_val} | {plat_val} | {pages_val} | {suburb_val} |")
+
+    if not searches:
+        log_rows.append("| None | None | 0 | None |")
+
+    search_log_details_md = "\n".join(log_rows)
 
     # Build Errors & Warnings list
     if errors:
@@ -294,14 +343,17 @@ def generate_report(
         "{FORMATTED_QUERY}": data.get("formatted_query", ""),
         "{EXECUTION_DATE}": data.get("execution_date", ""),
         "{TRACE_ID}": data.get("trace_id", ""),
+        "{SEARCH_SUBURBS}": search_suburbs_str,
         "{WEB_SEARCHES_MADE}": str(web_searches_made),
         "{TOTAL_PAGES_READ}": str(total_pages_read),
         "{CANDIDATES_EVALUATED}": str(total_candidates),
         "{LISTINGS_CREATED}": str(listings_created),
         "{CANDIDATES_REJECTED}": str(candidates_rejected),
+        "{TOTAL_SUBURBS_SEARCHED}": str(total_suburbs_searched),
         "{ERRORS_ENCOUNTERED}": str(errors_count),
         "{CREATED_LISTINGS}": created_listings_md,
         "{REJECTED_TABLE}": rejected_table_md,
+        "{SEARCH_LOG_DETAILS}": search_log_details_md,
         "{ERRORS_LIST}": errors_md,
     }
 
@@ -309,7 +361,6 @@ def generate_report(
     for placeholder, val in replacements.items():
         report_content = report_content.replace(placeholder, val)
 
-    # Format output filename: logs/YYYYMMDD/fina_new_listing_web_finder_report_CITY_CATEGORY_YYYYMMDD_HHMM.md
     now = datetime.now()
     yyyymmdd = now.strftime("%Y%m%d")
     hhmm = now.strftime("%H%M")
@@ -324,5 +375,12 @@ def generate_report(
 
     with open(report_path, "w", encoding="utf-8") as f:
         f.write(report_content)
+
+    # Clean up temporary session JSON on successful report generation
+    try:
+        if os.path.exists(tracker_path):
+            os.remove(tracker_path)
+    except OSError:
+        pass
 
     return report_path

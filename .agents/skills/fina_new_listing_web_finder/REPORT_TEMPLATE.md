@@ -18,6 +18,7 @@
 | **Formatted Query** | `{FORMATTED_QUERY}` |
 | **Execution Date** | {EXECUTION_DATE} |
 | **Trace ID** | `{TRACE_ID}` |
+| **Search Locations / Suburbs** | {SEARCH_SUBURBS} |
 
 ## Summary
 
@@ -28,6 +29,7 @@
 | **Total Candidate Pages Evaluated** | {CANDIDATES_EVALUATED} |
 | **Verified Listings Created** | {LISTINGS_CREATED} |
 | **Candidates Rejected** | {CANDIDATES_REJECTED} |
+| **Total Suburbs Searched** | {TOTAL_SUBURBS_SEARCHED} |
 | **Errors Encountered** | {ERRORS_ENCOUNTERED} |
 
 ## Verified Community Listings
@@ -39,6 +41,10 @@
 ## Skipped / Rejected Candidates
 
 {REJECTED_TABLE}
+
+## Search Log Details
+
+{SEARCH_LOG_DETAILS}
 
 ## Errors & Warnings
 
