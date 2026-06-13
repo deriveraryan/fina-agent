@@ -25,19 +25,43 @@ Your Workflow:
       - `template`: The raw template string (str).
       - `formatted_query`: The query formatted with the city name (str).
       - `total`: The total number of templates for this category (int).
-   c. Delete `tmp/web_finder_session_run.json` immediately using the `delete_file` or equivalent cleanup command to prevent file clutter.
-   d. Track the total number of web searches made. Execute a search query pattern in three sequential rounds using strictly the retrieved `formatted_query` (do not run additional generic searches for the category name itself):
+   c. Initialize the tracker immediately with the selected template variables:
+      ```bash
+      python3 scripts/agent_web_finder_tracker.py --action init --city <CITY> --category <CATEGORY> --template-index <INDEX> --template-string "<TEMPLATE>" --formatted-query "<FORMATTED_QUERY>" --trace-id <CONVERSATION_ID>
+      ```
+   d. Delete `tmp/web_finder_session_run.json` immediately using the `delete_file` or equivalent cleanup command to prevent file clutter.
+   e. Execute a search query pattern in three sequential rounds using strictly the retrieved `formatted_query` (do not run additional generic searches for the category name itself). For each round, perform the web search, then record the search and the number of pages read:
       - **Round 1 (Facebook)**: Search specifically for Facebook profiles: `<formatted_query> site:facebook.com`.
+        Log search action:
+        ```bash
+        python3 scripts/agent_web_finder_tracker.py --action add-search --query "<formatted_query> site:facebook.com" --platform Facebook --pages-read <PAGES_READ> --trace-id <CONVERSATION_ID>
+        ```
       - **Round 2 (Instagram)**: Search specifically for Instagram profiles: `<formatted_query> site:instagram.com`.
-      - **Round 3 (General Web)**: Search the general web excluding the social domains: `<formatted_query> -site:facebook.com -site:instagram.com` to find independent websites, local blog reviews, and directory lists. **Important**: When visiting independent websites, make sure to look for and extract any official TikTok profile URLs in addition to Facebook or Instagram pages.
+        Log search action:
+        ```bash
+        python3 scripts/agent_web_finder_tracker.py --action add-search --query "<formatted_query> site:instagram.com" --platform Instagram --pages-read <PAGES_READ> --trace-id <CONVERSATION_ID>
+        ```
+      - **Round 3 (General Web)**: Search the general web excluding the social domains: `<formatted_query> -site:facebook.com -site:instagram.com`.
+        Log search action:
+        ```bash
+        python3 scripts/agent_web_finder_tracker.py --action add-search --query "<formatted_query> -site:facebook.com -site:instagram.com" --platform "General Web" --pages-read <PAGES_READ> --trace-id <CONVERSATION_ID>
+        ```
+        *Important*: When visiting independent websites, make sure to look for and extract any official TikTok profile URLs in addition to Facebook or Instagram pages.
 4. For each candidate URL discovered in the search results:
-   a. **Name Normalization & Duplication Check**: Check if the candidate is a duplicate by running `python3 scripts/agent_check_duplicate.py --file tmp/existing_city_listings.json --name "<Candidate Name>" --url "<Candidate Social URL>"` (do NOT use the native `grep_search` tool, which fails silently on ignored/tmp directories due to gitignore). If the script outputs `{"duplicate": true}`, skip it. If the normalized name matches an existing listing but the candidate URL is a new source, the script will output `{"duplicate": false}`—in this case, do NOT skip it; continue to extract and push so that the backend can merge the new information into the existing record.
-   b. Use the `chrome-devtools` skill to explicitly navigate to the candidate's page (Facebook, Instagram, TikTok, or independent website homepage). For independent websites, if the homepage lacks details, navigate to their "About Us" or "Contact" pages. To prevent massive context bloat, **do NOT** read or print the full raw HTML page source or outerHTML. Instead, only extract the visible text, target DOM selectors, or accessibility tree (such as follower count elements or bio description). If it is an independent website, make sure to extract any Facebook, Instagram, or TikTok page URLs linked on the site to help check for duplicates.
-   c. **Authenticity / Affiliation Evaluation**: Evaluate if the candidate is an authentic Filipino listing (restaurant, cafe, shop, church group, community organization, professional network, government office, etc.) by checking for:
+   a. **Name Normalization & Duplication Check**: Check if the candidate is a duplicate by running `python3 scripts/agent_check_duplicate.py --file tmp/existing_city_listings.json --name "<Candidate Name>" --url "<Candidate Social URL>"`. If the script outputs `{"duplicate": true}`, record the candidate as a duplicate and skip it:
+      ```bash
+      python3 scripts/agent_web_finder_tracker.py --action add-candidate --name "<Candidate Name>" --url "<Candidate Social URL>" --platform "<Platform>" --status DUPLICATE --reason "Duplicate checking match" --trace-id <CONVERSATION_ID>
+      ```
+      If the normalized name matches an existing listing but the candidate URL is a new source, the script will output `{"duplicate": false}`—in this case, do NOT skip it; continue to extract and push so that the backend can merge the new information into the existing record.
+   b. Use the `chrome-devtools` skill to explicitly navigate to the candidate's page (Facebook, Instagram, TikTok, or independent website homepage). For independent websites, if the homepage lacks details, navigate to their "About Us" or "Contact" pages. To prevent massive context bloat, **do NOT** read or print the full raw HTML page source or outerHTML. Instead, only extract the visible text, target DOM selectors, or accessibility tree. If it is an independent website, make sure to extract any Facebook, Instagram, or TikTok page URLs linked on the site to help check for duplicates.
+   c. **Authenticity / Affiliation Evaluation**: Evaluate if the candidate is an authentic Filipino listing by checking for:
       - Cultural/Culinary keywords (e.g., adobo, sinigang, pinoy, sari-sari, filipino, tagalog, ph, pinoy/pinay).
       - Mentions of Filipino heritage, ownership, or community focus in the page name, description/bio, or recent posts.
       - User comments or reviews referencing Filipino diaspora events, food, or community.
-      - Do NOT classify generic Southeast Asian listings as Filipino unless a clear connection is verified.
+      - If evaluated as not Filipino-affiliated, log the rejection:
+        ```bash
+        python3 scripts/agent_web_finder_tracker.py --action add-candidate --name "<Candidate Name>" --url "<Candidate Social URL>" --platform "<Platform>" --status REJECTED --reason "Not Filipino-affiliated" --trace-id <CONVERSATION_ID>
+        ```
    d. **Information Extraction**: Extract the following details:
       - `name`: Raw business name.
       - `description`: Descriptive page text.
@@ -55,8 +79,22 @@ Your Workflow:
    f. If verified as a NEW Filipino-affiliated listing, push to the database immediately to avoid context bloat. Do this by:
       - i. Writing the JSON payload to an explicitly named, deterministic temporary file (e.g. `tmp/fina_new_listing_web_finder_payload_<timestamp>.json`) using the `write_to_file` tool.
       - ii. Executing the push command with the trace ID: `python3 scripts/agent_graphql_push.py --operation CreateListing --variables @tmp/fina_new_listing_web_finder_payload_<timestamp>.json --trace-id <CONVERSATION_ID>`
-      with fields: name, category, city, description, address, latitude, longitude, facebookUrl/instagramUrl/tiktokUrl, facebookFollowers (Int), instagramFollowers (Int), tiktokFollowers (Int), sourceUrl, tags (MUST be a comma-separated string, e.g., "google-search", NOT a JSON array), verificationStatus ('UNVERIFIED'), status (use the status extracted in step 4.d).
-      - iii. **Self-Correction on Failure**: If the push command exits with code 1 due to validation errors (e.g., invalid category or non-integer follower formats), read the stdout/stderr logs to find the validation error, overwrite the corrected JSON payload file, and execute the push command again.
-      - iv. Clean up the temporary JSON file from `tmp/` immediately after a successful execution to avoid file pollution.
+      - iii. **Self-Correction on Failure**: If the push command exits with code 1 due to validation errors (e.g., invalid category or non-integer follower formats), read the stdout/stderr logs to find the validation error, overwrite the corrected JSON payload file, and execute the push command again. If failure persists, record the candidate status as ERROR:
+        ```bash
+        python3 scripts/agent_web_finder_tracker.py --action add-candidate --name "<Candidate Name>" --url "<Candidate Social URL>" --platform "<Platform>" --status ERROR --reason "<Validation/Push Error Details>" --trace-id <CONVERSATION_ID>
+        ```
+      - iv. Upon successful push, extract the database ID from the command output (e.g., `listing ID: <UUID>`), and log the created candidate:
+        ```bash
+        python3 scripts/agent_web_finder_tracker.py --action add-candidate --name "<Candidate Name>" --url "<Candidate Social URL>" --platform "<Platform>" --status CREATED --reason "Verified Filipino listing" --db-id "<DB_UUID>" --address "<Address>" --description "<Description>" --tags "<Tags>" --category "<Category>" --trace-id <CONVERSATION_ID>
+        ```
+      - v. Clean up the temporary JSON file from `tmp/` immediately after a successful execution to avoid file pollution.
+   g. If any general/system errors are encountered during the candidate evaluation loop (e.g. page loading timeouts), log an error:
+      ```bash
+      python3 scripts/agent_web_finder_tracker.py --action add-error --error "<Error Message>" --trace-id <CONVERSATION_ID>
+      ```
 5. Keep searching and evaluating until you have successfully found, verified, and pushed exactly 20 new listings (created listings, not merged updates), or until you have processed up to 30 pages of search results (if it has 30 or more pages, else end early) for the target `<CATEGORY>` in `<CITY>`. Do NOT search for or process any other categories or cities in this execution. Be highly mindful of context window bloat: explicitly close browser tabs or clear unused context as you finish evaluating each candidate.
-6. Write a single final status report for the target city and category run to a markdown file in the `logs/{YYYYMMDD}/` directory using the filename format `logs/{YYYYMMDD}/fina_new_listing_web_finder_report_{CITY}_{CATEGORY}_{YYYYMMDD}_{HHMM}.md`. Ensure to include the total number of web searches made in the summary table of the report, and include the template index, raw template string, and formatted search template query in the Run Metadata table. Read and follow the report template in `REPORT_TEMPLATE.md` to produce the final report. You MUST follow the template structure exactly.
+6. Generate the final status report for the run by executing:
+   ```bash
+   python3 scripts/agent_web_finder_tracker.py --action generate-report --trace-id <CONVERSATION_ID>
+   ```
+   This command programmatically reads the updated `REPORT_TEMPLATE.md` file, populates all metrics, candidate lists/tables, and logs, and outputs the final report to the logs directory. Check stdout/stderr of the command to verify the final file path generated.

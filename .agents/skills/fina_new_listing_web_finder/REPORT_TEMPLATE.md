@@ -12,47 +12,34 @@
 | :--- | :--- |
 | **Agent** | fina_new_listing_web_finder |
 | **Target City** | {CITY} |
-| **Platforms Searched** | {Facebook, Instagram} |
+| **Platforms Searched** | {PLATFORMS} |
 | **Search Template Index** | `[{INDEX}]` |
 | **Search Template String** | `{TEMPLATE_STRING}` |
 | **Formatted Query** | `{FORMATTED_QUERY}` |
-| **Execution Date** | {YYYY-MM-DD HH:MM AEST} |
+| **Execution Date** | {EXECUTION_DATE} |
 | **Trace ID** | `{TRACE_ID}` |
 
 ## Summary
 
 | Metric | Count |
 | :--- | :--- |
-| **Web Searches Made** | {N} |
-| **Total Candidate Pages Evaluated** | {N} |
-| **Verified Listings Created** | {N} |
-| **Candidates Rejected** | {N} |
-| **Errors Encountered** | {N} |
+| **Web Searches Made** | {WEB_SEARCHES_MADE} |
+| **Total Pages Read** | {TOTAL_PAGES_READ} |
+| **Total Candidate Pages Evaluated** | {CANDIDATES_EVALUATED} |
+| **Verified Listings Created** | {LISTINGS_CREATED} |
+| **Candidates Rejected** | {CANDIDATES_REJECTED} |
+| **Errors Encountered** | {ERRORS_ENCOUNTERED} |
 
 ## Verified Community Listings
 
 ### Created Listings
 
-<!-- Group entries by Category (e.g., #### RESTAURANT). Within each category, sort entries by platform (Facebook first, then Instagram), then alphabetically. -->
-
-1. **{Name}** ({Platform})
-   - Category: {COMMUNITY / CHURCH / GOVERNMENT / SERVICES / etc.}
-   - Address: {full address or "Online-only — city center coordinates"}
-   - Description: {brief description of the community/organisation}
-   - Social URL: {facebook or instagram url}
-   - DB ID: `{database_id}`
-   - Tags: {comma-separated tags e.g. google-search,online-org}
+{CREATED_LISTINGS}
 
 ## Skipped / Rejected Candidates
 
-<!-- List all candidate pages that were evaluated but NOT pushed to the database. -->
-
-| Candidate Name | Platform | Reason |
-| :--- | :--- | :--- |
-| {name} | {Facebook / Instagram} | {Not Filipino-affiliated / Duplicate / Inactive page / Personal profile / etc.} |
+{REJECTED_TABLE}
 
 ## Errors & Warnings
 
-- None encountered.
-
-<!-- If errors occurred, replace the above line with a bullet list describing each error/warning. -->
+{ERRORS_LIST}
