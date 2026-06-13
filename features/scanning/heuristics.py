@@ -31,7 +31,7 @@ BLOCKLIST_CHAINS = [
     "Bunnings", "Bunnings Warehouse", "Mitre 10", "Home Timber & Hardware", 
     "Total Tools", "Sydney Tools", "JB Hi-Fi", "JB HiFi", "Harvey Norman", 
     "The Good Guys", "Officeworks", "Supercheap Auto", "Repco", "Autobarn", 
-    "BCF", "Anaconda", "Spotlight", "Kathmandu", "Adairs", "House", 
+    "BCF", "Anaconda", "Spotlight", "Kathmandu", "Adairs",
     "Robins Kitchen", "Bed Bath N' Table", "Bed Bath N Table", "Sheridan", 
     "IKEA", "Fantastic Furniture", "Amart Furniture", "Freedom", "Snooze", 
     "Forty Winks", "Pillow Talk", "Dusk", "TK Maxx",
