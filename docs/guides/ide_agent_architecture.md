@@ -55,8 +55,8 @@ flowchart TD
     CheckHasMore -->|Yes| ReadSlices
     CheckHasMore -->|No| FinishMaps(["Maps Refresh/Discovery Completed"])
 
-    %% ════════ 2. NEW LISTING WEB FINDER FLOW (TASK-BASED) ════════
-    InvokeNewListingWebFinder --> GenerateTasks["Execute: python3 scripts/agent_search_tasks.py<br>--action generate --city C (idempotent)"]
+    %% ════════ 2. LISTING WEB SEARCH FLOW (TASK-BASED) ════════
+    InvokeListingWebSearch --> GenerateTasks["Execute: python3 scripts/agent_search_tasks.py<br>--action generate --city C (idempotent)"]
     GenerateTasks --> GetNextTask["Execute: python3 scripts/agent_search_tasks.py<br>--action next --city C"]
     GetNextTask --> FetchCityListings["Execute: python3 scripts/agent_fetch_targets.py --type city-listings<br>--city C > tmp/existing_city_listings.json"]
     FetchCityListings --> NativeWebSearch["Subagent uses Native Web Search<br>(3 rounds: Facebook, Instagram, General Web)<br>using task's formatted_query"]
