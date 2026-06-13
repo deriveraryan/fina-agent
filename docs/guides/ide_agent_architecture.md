@@ -107,13 +107,26 @@ flowchart TD
     
     EnrichLoop -.->|No more listings| FinishEnrich(["Socials Enrichment Completed"])
 
+    %% ════════ 4. LISTING EMBEDDER FLOW (VECTOR BACKFILL) ════════
+    InvokeListingEmbedder --> ExecEmbeddings["Execute: python3 scripts/agent_generate_embeddings.py<br>--city C --trace-id TID --limit L > tmp/fina_listing_embedder_run.json"]
 
+    subgraph agent_generate_embeddings["Inside scripts/agent_generate_embeddings.py"]
+        QueryMissing[("PostgreSQL Database<br>(ListListingsMissingEmbedding)")]
+        GenVector["Generate 768-dim vector<br>via Google GenAI"]
+        PushVector["GraphQL Mutation<br>(UpdateListingData)"]
+    end
+
+    ExecEmbeddings --> QueryMissing
+    QueryMissing -.-> GenVector
+    GenVector --> PushVector
+    PushVector --> DBTransactionEmbed[("PostgreSQL Database")]
+    DBTransactionEmbed --> FinishEmbed(["Embedding Backfill Completed"])
 
     %% ════════ 5. EVENTS FINDER FLOW (BUSINESS PAGES) ════════
     InvokeEventsFinder --> ExecGetBusinessSocial["Execute: python3 scripts/agent_fetch_targets.py<br>--type business-socials --city C"]
     
     subgraph agent_fetch_business_social["Inside scripts/agent_fetch_targets.py"]
-        DBQueryBusinessSocial[("PostgreSQL Database<br>(ListCityListings)")]
+        DBQueryBusinessSocial[("PostgreSQL Database<br>(ListAdminListings)")]
         ReturnBusinessSocial["Returns JSON list of Business Social URLs"]
     end
     
@@ -220,6 +233,9 @@ To maintain security and ensure all data mutations pass through the authorized G
 *   `scripts/agent_graphql_push.py`: Pushes verified JSON objects or updates to the backend using GraphQL operations (including `CreateListing`, `UpdateListingSocialUrls`, `CreateEvent`, and `UpsertSocialPostTracker`). It normalizes platform names, dynamically validates and normalizes categories against [categories.json](file:///Users/ryan/.gemini/antigravity/scratch/fina-agent/data/categories.json) (enforcing case-insensitive uppercase normalization and throwing a fatal exit code 1 if invalid), caches loaded categories in module scope to prevent redundant disk reads, and synchronously handles geocoding and deduplication before creating new listings.
 *   `scripts/agent_maps_fetch.py`: Searches Google Places (New) Text Search with caching and pagination.
 *   `scripts/agent_generate_embeddings.py`: Queries listings missing vector embeddings, generates 768-dimension vectors, and updates them via the GraphQL push client.
+*   `scripts/agent_check_duplicate.py`: Checks a local JSON file of existing listings for duplicate candidates by name and/or social URL match. Used by `fina_listing_web_search` before pushing new listings.
+*   `scripts/agent_search_tasks.py`: Manages the deterministic task-based state machine for `fina_listing_web_search`, supporting `generate`, `next`, `complete`, and `summary` actions for web search task lifecycle management.
+*   `scripts/migrate_embeddings.py`: One-time migration utility for backfilling vector embeddings across all or a specific city.
 
 ### 8. Synchronous Geocoding & Deduplication
 To simplify the architecture and reduce cloud function dependencies, heavy transactional logic is handled synchronously by `agent_graphql_push.py` before inserting data into the database:

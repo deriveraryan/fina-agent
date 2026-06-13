@@ -8,10 +8,11 @@ This repository houses the data discovery, verification, enrichment, and scrapin
 
 This project is decoupled from the main Fina application backend. It runs lightweight Python scripts locally inside the Antigravity IDE:
 * **Google Maps Scraper**: Scrapes candidate businesses matching category & city.
-* **Social Web Searcher**: Discovers missing social media handles for listings.
+* **Web & Social Searcher**: Discovers new Filipino listing candidates on Facebook, Instagram, TikTok, and general web platforms using a task-based state machine.
+* **Social Enricher**: Enriches existing listings with missing Facebook, Instagram, and TikTok URLs.
 * **Browser Event Crawler**: Crawls business pages to harvest upcoming temporal events.
-* **Community Discoverer**: Crawls Facebook and Instagram for online groups and communities.
-* **Category Auditor**: Audits and recategorizes listing categories using canonical definitions and LLM validation.
+* **Listing Embedder**: Generates and backfills vector description embeddings for semantic search.
+* **Documentation Reviewer**: Audits repository documentation for alignment with the codebase.
 
 ---
 
@@ -116,10 +117,23 @@ You can execute the underlying discovery and database push scripts directly in y
     ```bash
     python3 scripts/agent_maps_fetch.py --city SYDNEY --category RESTAURANT --limit 10 --offset 0 --refresh --trace-id <CONVERSATION_ID>
     ```
-*   **Fetch Targets (e.g. retrieve social post tracker)**:
+*   **Fetch Targets**:
     ```bash
-    # Retrieve scan bookmark for a listing on Facebook
+    # Retrieve listings missing social URLs for a city
+    python3 scripts/agent_fetch_targets.py --type missing-social --city SYDNEY --trace-id <CONVERSATION_ID> > tmp/missing_socials_targets.json
+
+    # Retrieve business social URLs for a city (used by events finder)
+    python3 scripts/agent_fetch_targets.py --type business-socials --city SYDNEY --trace-id <CONVERSATION_ID> > tmp/business_socials_targets.json
+
+    # Retrieve all city listings for deduplication context (used by web finder)
+    python3 scripts/agent_fetch_targets.py --type city-listings --city SYDNEY --trace-id <CONVERSATION_ID> > tmp/existing_city_listings.json
+
+    # Retrieve scan bookmark for a listing on a platform (used by events finder)
     python3 scripts/agent_fetch_targets.py --type social-post-tracker --listing-id <LISTING_UUID> --platform facebook --trace-id <CONVERSATION_ID>
+    ```
+*   **Check Duplicate**:
+    ```bash
+    python3 scripts/agent_check_duplicate.py --file tmp/existing_city_listings.json --name "<NAME>" --url "<URL>" --trace-id <CONVERSATION_ID>
     ```
 *   **GraphQL Database Push**:
     ```bash

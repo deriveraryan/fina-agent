@@ -17,12 +17,15 @@ flowchart TD
     AgentSelect -->|fina_events_finder| EventsFlow["Upcoming Events Scraper"]
     AgentSelect -->|fina_listing_web_search| CommFlow["Social Community Discovery"]
     AgentSelect -->|fina_listing_embedder| EmbedFlow["Vector Embedding Backfill"]
+    AgentSelect -->|fina_docs_reviewer| DocsFlow["Documentation Audit"]
 
     %% Shared logic
     PlacesFlow & SocialsFlow & EventsFlow & CommFlow & EmbedFlow --> PythonCLI["Execute Python CLI Scripts"]
     PythonCLI --> Verification{"Authenticity Heuristic / Web Verification"}
     Verification -->|Verified| GQLPush["Execute agent_graphql_push.py / agent_generate_embeddings.py"]
     GQLPush --> PostgreSQL[(PostgreSQL Database)]
+    DocsFlow --> AuditDocs["Audit Docs Against Codebase"]
+    AuditDocs --> UpdateDocs["Update Markdown Files / Write Report"]
 ```
 
 ---
@@ -114,7 +117,10 @@ pip install -r requirements.txt
 - **Fetch Targets**:
   ```bash
   # Fetch targets and redirect output to a file to prevent context bloat
-  python3 scripts/agent_fetch_targets.py --type <missing-social|business-socials|city-listings> --city <CITY> --trace-id <CONVERSATION_ID> > tmp/targets_output.json
+  python3 scripts/agent_fetch_targets.py --type <missing-social|business-socials|city-listings|social-post-tracker> --city <CITY> --trace-id <CONVERSATION_ID> > tmp/targets_output.json
+
+  # Retrieve social post tracker bookmark (requires --listing-id and --platform)
+  python3 scripts/agent_fetch_targets.py --type social-post-tracker --listing-id <LISTING_UUID> --platform <facebook|instagram|tiktok> --trace-id <CONVERSATION_ID>
   ```
 - **Maps Fetch**:
   ```bash
@@ -125,13 +131,36 @@ pip install -r requirements.txt
   ```bash
   python3 scripts/agent_generate_embeddings.py --city <CITY> --trace-id <CONVERSATION_ID> --limit <LIMIT> > tmp/fina_listing_embedder_run.json
   ```
+- **Search Tasks (Web Finder)**:
+  ```bash
+  # Generate task permutations for a city (idempotent, pass --force to regenerate)
+  python3 scripts/agent_search_tasks.py --action generate --city <CITY> --trace-id <CONVERSATION_ID>
+
+  # Get next pending task (atomically transitions to IN_PROGRESS)
+  python3 scripts/agent_search_tasks.py --action next --city <CITY> --trace-id <CONVERSATION_ID>
+
+  # Mark task as completed with metrics
+  python3 scripts/agent_search_tasks.py --action complete --city <CITY> --task-id <ID> --listings-created N --pages-searched N --candidates-evaluated N --candidates-rejected N --candidates-duplicate N --trace-id <CONVERSATION_ID>
+
+  # View aggregate progress
+  python3 scripts/agent_search_tasks.py --action summary --city <CITY> --trace-id <CONVERSATION_ID>
+  ```
+- **Check Duplicate**:
+  ```bash
+  # Check local listings file for duplicate name or URL match
+  python3 scripts/agent_check_duplicate.py --file tmp/existing_city_listings.json --name "<NAME>" --url "<URL>" --trace-id <CONVERSATION_ID>
+  ```
 - **GraphQL Push**:
   ```bash
   # Single Payload (Note: Omit --generate-embeddings for maps and web finder discovery agents)
-  python3 scripts/agent_graphql_push.py --operation <CreateListing|UpdateListingSocialUrls|CreateEvent> --variables @tmp/payload.json --trace-id <CONVERSATION_ID>
+  python3 scripts/agent_graphql_push.py --operation <CreateListing|UpdateListingSocialUrls|CreateEvent|UpsertSocialPostTracker> --variables @tmp/payload.json --trace-id <CONVERSATION_ID>
   
   # Bulk Payload (Array of JSON Objects)
   python3 scripts/agent_graphql_push.py --operation BulkCreateListing --variables @tmp/bulk_payload.json --trace-id <CONVERSATION_ID>
+  ```
+- **Migrate Embeddings** (one-time migration utility):
+  ```bash
+  python3 scripts/migrate_embeddings.py --city <CITY> --trace-id <CONVERSATION_ID>
   ```
 
 ---
@@ -239,8 +268,8 @@ To ensure modern SaaS capabilities remain completely native to the Firebase and 
 We eliminate external project management tools entirely, managing all work dynamically via in-repo specifications:
 
 1. **Lean In-Repo Documentation Directory**:
-   * `/docs/ROADMAP.md`: The single, overarching document tying all features and moving pieces together.
-   * `/docs/specs/`: Concise feature specifications defining requirements, data boundaries, and API bounds.
+   * `/docs/guides/ide_agent_architecture.md`: The comprehensive architecture and runbook guide detailing agent flows, mechanics, and database integration.
+   * Future specifications can be added under `/docs/specs/` as the project scales.
 2. **Refactoring & Refinement Workflow**:
    * **Active Specifications**: Specs guide implementation and TDD tests. Breaking changes and schema updates are highly encouraged during active greenfield development.
    * **Codebase as Source of Truth**: Once a spec is fully implemented, verified, and merged into the master branch, the codebase itself becomes the ultimate source of truth.
