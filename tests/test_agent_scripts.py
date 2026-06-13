@@ -87,8 +87,12 @@ class TestAgentScripts(unittest.IsolatedAsyncioTestCase):
         await agent_fetch_targets.main()
 
         mock_execute.assert_called_once_with(
-            operation_name="ListCityListings",
-            variables={"city": "SYDNEY"}
+            operation_name="ListAdminListings",
+            variables={
+                "city": "SYDNEY",
+                "limit": 1000,
+                "verificationStatuses": ["VERIFIED", "UNVERIFIED"]
+            }
         )
         # Should flatten and filter out None values, returning objects with id and url
         expected_targets = [
@@ -353,8 +357,12 @@ class TestAgentScripts(unittest.IsolatedAsyncioTestCase):
         await agent_fetch_targets.main()
 
         mock_execute.assert_called_once_with(
-            operation_name="ListCityListings",
-            variables={"city": "SYDNEY"}
+            operation_name="ListAdminListings",
+            variables={
+                "city": "SYDNEY",
+                "limit": 1000,
+                "verificationStatuses": ["VERIFIED", "UNVERIFIED"]
+            }
         )
         mock_stdout.write.assert_any_call(
             json.dumps([
@@ -914,6 +922,23 @@ class TestAgentScripts(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(merged["facebookFollowers"], 150)
         self.assertEqual(merged["instagramFollowers"], 200)
         self.assertEqual(merged["tiktokFollowers"], 350)
+
+    def test_merge_listing_data_unions_categories(self) -> None:
+        """Tests that merge_listing_data unions existing categories with incoming categories."""
+        from features.scanning.dedup import merge_listing_data
+
+        existing = {
+            "id": "123",
+            "name": "Test Cafe",
+            "categories": ["RESTAURANT"],
+        }
+        new_data = {
+            "categories": ["CAFE"],
+        }
+
+        merged = merge_listing_data(existing, new_data)
+        self.assertEqual(sorted(merged["categories"]), sorted(["RESTAURANT", "CAFE"]))
+
 
     @patch("agent_fetch_targets.execute_graphql_operation", new_callable=AsyncMock)
     @patch("sys.stdout")

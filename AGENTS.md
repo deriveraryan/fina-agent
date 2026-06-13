@@ -47,7 +47,7 @@ Here is the registry of the 6 specialized Antigravity subagents:
 *   **Logic**:
     1. Runs `scripts/agent_fetch_targets.py --type city-listings --city <CITY> --trace-id <CONVERSATION_ID> > tmp/existing_city_listings.json` to write existing city context to a file.
     2. Uses native web search with site-specific queries to find candidate community pages.
-    3. Checks for duplicates by looking up names/URLs directly in `tmp/existing_city_listings.json` on disk to avoid context bloat.
+    3. Checks for duplicates by running `python3 scripts/agent_check_duplicate.py --file tmp/existing_city_listings.json --name "<NAME>" --url "<URL>"` to avoid context bloat and sidestep gitignore limits on native grep tools.
     4. Navigates to candidate pages via Chrome DevTools, extracting only visible text/selectors to prevent raw HTML bloat (and uses python parser for TikTok followers).
     5. Creates verified listings via `agent_graphql_push.py --operation CreateListing` (without `--generate-embeddings`, including `tiktokUrl` and `tiktokFollowers`) with self-correction on validation failure.
 

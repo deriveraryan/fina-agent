@@ -41,8 +41,9 @@ def merge_listing_data(
             continue
 
         if key == "categories":
-            if value:  # Overwrite if new list is non-empty
-                merged[key] = value
+            if value:
+                existing_cats = existing.get("categories") or []
+                merged[key] = list(set(existing_cats + value))
         elif key in ("facebookFollowers", "instagramFollowers", "tiktokFollowers"):
             if value is not None:
                 merged[key] = value
@@ -102,8 +103,12 @@ async def check_duplicate(
     # 1. Exact match check against active listings in the city
     try:
         response = await execute_graphql_operation(
-            operation_name="ListCityListings",
-            variables={"city": city},
+            operation_name="ListAdminListings",
+            variables={
+                "city": city,
+                "limit": 1000,
+                "verificationStatuses": ["VERIFIED", "UNVERIFIED"]
+            },
         )
         listings = ((response or {}).get("data") or {}).get("listings") or []
         for listing in listings:

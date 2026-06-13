@@ -42,8 +42,15 @@ async def main() -> None:
         if not args.city:
             BackendObservability.fatal("Validation Error: --city is required for business-socials", conversation_id=args.trace_id)
             sys.exit(1)
-        BackendObservability.trace(f"Executing GraphQL operation ListCityListings with variables: {{'city': '{args.city}'}}", conversation_id=args.trace_id)
-        result = await execute_graphql_operation(operation_name="ListCityListings", variables={"city": args.city})
+        BackendObservability.trace(f"Executing GraphQL operation ListAdminListings with variables: {{'city': '{args.city}', 'limit': 1000}}", conversation_id=args.trace_id)
+        result = await execute_graphql_operation(
+            operation_name="ListAdminListings",
+            variables={
+                "city": args.city,
+                "limit": 1000,
+                "verificationStatuses": ["VERIFIED", "UNVERIFIED"]
+            }
+        )
         listings = result.get("data", {}).get("listings", [])
         targets = []
         for l in listings:
@@ -59,8 +66,15 @@ async def main() -> None:
         if not args.city:
             BackendObservability.fatal("Validation Error: --city is required for city-listings", conversation_id=args.trace_id)
             sys.exit(1)
-        BackendObservability.trace(f"Executing GraphQL operation ListCityListings with variables: {{'city': '{args.city}'}}", conversation_id=args.trace_id)
-        result = await execute_graphql_operation(operation_name="ListCityListings", variables={"city": args.city})
+        BackendObservability.trace(f"Executing GraphQL operation ListAdminListings with variables: {{'city': '{args.city}', 'limit': 1000}}", conversation_id=args.trace_id)
+        result = await execute_graphql_operation(
+            operation_name="ListAdminListings",
+            variables={
+                "city": args.city,
+                "limit": 1000,
+                "verificationStatuses": ["VERIFIED", "UNVERIFIED"]
+            }
+        )
         listings = result.get("data", {}).get("listings", [])
         output_listings = []
         for l in listings:
