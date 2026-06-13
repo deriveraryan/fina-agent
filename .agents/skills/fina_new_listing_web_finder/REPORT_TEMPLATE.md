@@ -13,6 +13,9 @@
 | **Agent** | fina_new_listing_web_finder |
 | **Target City** | {CITY} |
 | **Platforms Searched** | {Facebook, Instagram} |
+| **Search Template Index** | `[{INDEX}]` |
+| **Search Template String** | `{TEMPLATE_STRING}` |
+| **Formatted Query** | `{FORMATTED_QUERY}` |
 | **Execution Date** | {YYYY-MM-DD HH:MM AEST} |
 | **Trace ID** | `{TRACE_ID}` |
 
