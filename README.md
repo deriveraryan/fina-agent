@@ -66,14 +66,16 @@ By default, the `fina_refresh_listing_maps_finder` caches Google Places search r
 
 *   *Places Discovery*:
 > [!IMPORTANT]
-    > **Single Category & City Target Restriction**: To prevent prompt context window bloat and ensure high reliability, both the `fina_refresh_listing_maps_finder` and `fina_new_listing_web_finder` skills strictly target a **single category** and a **single city** per execution run. Multi-category or multi-city sweeps must be run in separate, independent agent sessions.
+    > **Single Category & City Target Restriction**: To prevent prompt context window bloat and ensure high reliability, the `fina_refresh_listing_maps_finder` skill strictly targets a **single category** and a **single city** per execution run. Multi-category or multi-city sweeps must be run in separate, independent agent sessions.
     >
     > "Use the `fina_refresh_listing_maps_finder` skill to scan Google Places in SYDNEY for RESTAURANT."
     >
     > **To force a fresh live scan bypassing the local cache:**
     > "Use the `fina_refresh_listing_maps_finder` skill to scan Google Places with **refresh** for RESTAURANT in SYDNEY."
-*   *Community Scanning*:
-    > "Use the `fina_new_listing_web_finder` skill to search the web for RESTAURANT in SYDNEY."
+*   *Web/Social Discovery*:
+    > **Task-Based Queue System**: The `fina_new_listing_web_finder` skill targets a **single city** and automatically executes the next pending search task (location × category × search template) from the generated task queue.
+    >
+    > "Use the `fina_new_listing_web_finder` skill to search the web for new listings in SYDNEY."
 *   *Missing Socials Finder*:
     > "Use the `fina_enrich_listing_socials_finder` skill to back-fill missing social URLs in SYDNEY."
 *   *Listing Embedder*:
