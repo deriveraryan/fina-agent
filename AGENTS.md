@@ -46,8 +46,8 @@ Here is the registry of the 6 specialized Antigravity subagents:
 *   **Trigger**: No single CLI script is used. Uses native web search, file-based deduplication lookups, and Chrome DevTools browser verification.
 *   **Logic**:
     1. Runs `scripts/agent_fetch_targets.py --type city-listings --city <CITY> --trace-id <CONVERSATION_ID> > tmp/existing_city_listings.json` to write existing city context to a file.
-    2. Loads `.antigravity_saves/web_finder_session.json` to retrieve the last used template index for the target `<CITY>` and `<CATEGORY>`. It increments the index by 1 (wrapping around via modulo of the total templates for the category) to select a single template, then immediately saves the updated index back to the session file.
-    3. Uses native web search with site-specific queries in three sequential rounds (Facebook, Instagram, and General Web) using only the single formatted template.
+    2. Runs `python3 scripts/agent_web_finder_session.py --city <CITY> --category <CATEGORY> --trace-id <CONVERSATION_ID> > tmp/web_finder_session_run.json` to retrieve and rotate the next sequential search template from the session cache file `.antigravity_saves/web_finder_session.json`.
+    3. Uses native web search with site-specific queries in three sequential rounds (Facebook, Instagram, and General Web) using only the single formatted template retrieved from the session run JSON.
     4. Checks for duplicates by running `python3 scripts/agent_check_duplicate.py --file tmp/existing_city_listings.json --name "<NAME>" --url "<URL>"` to avoid context bloat and sidestep gitignore limits on native grep tools.
     5. Navigates to candidate pages via Chrome DevTools, extracting only visible text/selectors to prevent raw HTML bloat (and uses python parser for TikTok followers).
     6. Creates verified listings via `agent_graphql_push.py --operation CreateListing` (without `--generate-embeddings`, including `tiktokUrl` and `tiktokFollowers`) with self-correction on validation failure.
