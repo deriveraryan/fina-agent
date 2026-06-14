@@ -60,6 +60,10 @@ async def execute_graphql_operation(
         "GetSocialPostTracker",
         "ListCategories",
         "ListAdminListings",
+        "ListAllListings",
+        "ListAllReviews",
+        "ListAllEvents",
+        "ListAllAgentScanLogs",
     }
 
 
