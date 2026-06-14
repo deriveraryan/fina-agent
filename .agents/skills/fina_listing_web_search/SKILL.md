@@ -86,9 +86,24 @@ If the normalized name matches but the URL is new (`{"duplicate": false}`), cont
   ```
 - `status`: `'OPERATIONAL'` (default), `'CLOSED_PERMANENTLY'`, or `'CLOSED_TEMPORARILY'`.
 
-**e. Address Handling:** If the page shows a physical street address, extract it. If there is NO street address (online-only community), set address to the city name (e.g. `'Sydney, NSW'`) and use city center coordinates. Add `'online-org'` to the tags.
+**e. Google Maps Enrichment (Best-Effort):** Attempt to enrich the candidate with structured data from Google Maps via Chrome DevTools:
 
-**f. Push to Database:** Write the JSON payload to `tmp/fina_listing_web_search_payload_<timestamp>.json` and execute:
+1. **Navigate**: Use the `chrome-devtools` skill to open `https://www.google.com/maps/search/<URL-encoded candidate name>+<city>`.
+2. **Validate match**: Check that the top result's displayed business name closely matches the candidate name (fuzzy match). If no close match is found, skip enrichment and proceed to step 6f with the data already extracted.
+3. **Extract fields** (fill only if the current value is empty/null):
+   - `latitude` / `longitude`: Parse from the URL bar after the page loads (pattern: `@<lat>,<lng>,<zoom>z`).
+   - `address`: Extract the full street address from the business info panel.
+   - `operatingHours`: Extract the day-by-day opening hours from the hours section.
+   - `phone`: Extract the phone number from the business info panel.
+   - `sourceUrl`: Construct from the Place ID or final Maps URL (e.g. `https://www.google.com/maps/place/?q=place_id:<ID>`).
+   - `website`: Extract only if no website was found in prior steps.
+4. **Merge rule**: Existing data from social/web pages always takes precedence. Maps data only fills empty fields.
+5. **Tag**: If at least one field was successfully enriched from Maps, add `google-maps` to the listing's tags.
+6. **On failure**: If the Maps page fails to load or no matching result is found, proceed to step 6f without any Maps data. Do NOT skip the listing.
+
+**f. Address Handling:** If neither the social/web page nor Google Maps provided a physical street address, set address to the city name (e.g. `'Sydney, NSW'`) and use city center coordinates. Add `'online-org'` to the tags.
+
+**g. Push to Database:** Write the JSON payload to `tmp/fina_listing_web_search_payload_<timestamp>.json` and execute:
 ```bash
 python3 scripts/agent_graphql_push.py --operation CreateListing --variables @tmp/fina_listing_web_search_payload_<timestamp>.json --trace-id <CONVERSATION_ID>
 ```

@@ -62,6 +62,10 @@ class TestFilipinoAffiliation(unittest.TestCase):
         # Linguistic signals
         self.assertTrue(verify_filipino_affiliation("Filo Place", reviews=[{"text": "masarap and authentic"}]))
         self.assertTrue(verify_filipino_affiliation("Cafe", reviews=[{"text": "salamat po, will come again"}]))
+        self.assertTrue(verify_filipino_affiliation("Tagalog Groceries"))
+        self.assertTrue(verify_filipino_affiliation("Halo-Halo Desserts"))
+        self.assertTrue(verify_filipino_affiliation("Sari-Sari Store"))
+        self.assertTrue(verify_filipino_affiliation("Lola's Cafe", reviews=[{"text": "They serve halo halo and sari sari items"}]))
 
     def test_false_positives_rejection(self):
         # Tapas/salami substring collision

@@ -114,7 +114,15 @@ def verify_filipino_affiliation(name: str, description: str = "", reviews: list 
                 
     full_text = " ".join(text_parts).lower()
     
-    # Split text into word tokens (alphabetic only to handle hashtags, punctuation, etc.)
+    # 1. Direct checks for compound phrases or terms in the combined lowercase text
+    compound_phrases = {
+        "halo-halo", "halo halo", "sari-sari", "sari sari", "salamat po"
+    }
+    for phrase in compound_phrases:
+        if phrase in full_text:
+            return True
+            
+    # 2. Split text into word tokens (alphabetic only to handle hashtags, punctuation, etc.)
     words = re.findall(r'[a-z]+', full_text)
     
     # Keyword sets
@@ -123,12 +131,13 @@ def verify_filipino_affiliation(name: str, description: str = "", reviews: list 
         "masarap", "sarap", "salamat", "kabayan", "mabuhay", 
         "adobo", "sinigang", "lechon", "sisig", "pancit", "lumpia", 
         "halohalo", "caldereta", "bagnet", "tocino", "pandesal",
-        "filipino", "pinoy", "manila", "lola", "bahay"
+        "filipino", "pinoy", "manila", "lola", "bahay", "tagalog",
+        "sarisari"
     }
     
     for word in words:
         # Check low-collision compound/suffix matches first (e.g. #BidaAngSarap or tapsilog)
-        if "sarap" in word or "silog" in word or "halohalo" in word or "halo-halo" in word:
+        if "sarap" in word or "silog" in word or "halohalo" in word:
             return True
             
         # Clean possessives and plurals for standard words

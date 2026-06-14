@@ -45,7 +45,7 @@ class TestDeduplication(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(merged["phone"], "0400111222")  # Filled null
         self.assertEqual(merged["website"], "https://manilabistro.com.au")  # Filled empty string
         self.assertEqual(merged["imageUrl"], "http://new.img")  # Overwritten by non-empty new imageUrl
-        self.assertEqual(merged["categories"], ["RESTAURANT", "CAFE"])  # Overwritten by non-empty categories
+        self.assertEqual(sorted(merged["categories"]), ["CAFE", "RESTAURANT"])  # Merged categories
 
         # Test that empty or null incoming fields do NOT overwrite existing non-empty fields
         existing2 = {
@@ -81,9 +81,9 @@ class TestDeduplication(unittest.IsolatedAsyncioTestCase):
         deduped = deduplicate_batch(batch)
         self.assertEqual(len(deduped), 2)
         
-        # Check Lola's Kitchen merged correctly by overwriting sequentially (last non-empty categories is SHOP)
+        # Check Lola's Kitchen merged correctly by unioning categories sequentially
         lola = next(item for item in deduped if item["name"] == "Lola's Kitchen")
-        self.assertEqual(lola["categories"], ["SHOP"])
+        self.assertEqual(sorted(lola["categories"]), ["CAFE", "RESTAURANT", "SHOP"])
         
         # Check Unique Place exists
         unique = next(item for item in deduped if item["name"] == "Unique Place")
@@ -110,8 +110,12 @@ class TestDeduplication(unittest.IsolatedAsyncioTestCase):
         self.assertIsNotNone(result)
         self.assertEqual(result["id"], "abc-123")
         mock_execute.assert_called_once_with(
-            operation_name="ListCityListings",
-            variables={"city": "SYDNEY"},
+            operation_name="ListAdminListings",
+            variables={
+                "city": "SYDNEY",
+                "limit": 1000,
+                "verificationStatuses": ["VERIFIED", "UNVERIFIED"]
+            },
         )
 
     @patch("features.shared.embeddings.get_embedding")

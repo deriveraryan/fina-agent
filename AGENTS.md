@@ -57,8 +57,9 @@ Here is the registry of the 6 specialized Antigravity subagents:
     4. Uses native web search with site-specific queries in three sequential rounds (Facebook, Instagram, and General Web) using the task's `formatted_query`.
     5. Checks for duplicates by running `python3 scripts/agent_check_duplicate.py --file tmp/existing_city_listings.json --name "<NAME>" --url "<URL>"`.
     6. Navigates to candidate pages via Chrome DevTools, extracting only visible text/selectors to prevent raw HTML bloat.
-    7. Creates verified listings via `agent_graphql_push.py --operation CreateListing` (without `--generate-embeddings`, including `tiktokUrl` and `tiktokFollowers`) with self-correction on validation failure.
-    8. Marks the task as `COMPLETED` with metrics via `--action complete --task-id <ID> --listings-created N --pages-searched N --candidates-evaluated N --candidates-rejected N --candidates-duplicate N --trace-id <CONVERSATION_ID>`.
+    7. Navigates to Google Maps via Chrome DevTools to enrich verified candidates with latitude/longitude (parsed from URL bar), address, opening hours, phone, Place ID, and website — filling only empty fields. Adds a `google-maps` tag when enrichment succeeds. Proceeds to push regardless of Maps enrichment outcome.
+    8. Creates verified listings via `agent_graphql_push.py --operation CreateListing` (without `--generate-embeddings`, including `tiktokUrl` and `tiktokFollowers`) with self-correction on validation failure.
+    9. Marks the task as `COMPLETED` with metrics via `--action complete --task-id <ID> --listings-created N --pages-searched N --candidates-evaluated N --candidates-rejected N --candidates-duplicate N --trace-id <CONVERSATION_ID>`.
 
 ### 3. `fina_enrich_listing_socials_finder`
 *   **Role**: Enriches existing database listings with missing Facebook, Instagram, and TikTok URLs. Strictly targets a single city per run.
