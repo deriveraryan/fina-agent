@@ -11,7 +11,7 @@ Use this skill when the user provides a rough draft, scattered thoughts, or an i
 
 1. **Analyze the Draft**: Read the user's draft to extract the core goal, the specific subagents, scripts, or features involved.
 2. **Contextualize with Fina Agent Architecture**:
-   - Translate general ideas into Fina Agent-specific components (e.g. `fina_refresh_listing_maps_finder`, `fina_listing_web_search`, `agent_graphql_push.py` REST impersonation operations, categories validations via `data/categories.json`, or cached results in `.antigravity_saves/`).
+   - Translate general ideas into Fina Agent-specific components (e.g. `fina_listing_map_search`, `fina_listing_web_search`, `agent_graphql_push.py` REST impersonation operations, categories validations via `data/categories.json`).
    - Reference appropriate CLI triggers (`scripts/agent_*.py` or `features/**/*.py`).
    - Align the goals with standard project workflows (such as TDD under `tests/`, Trace ID correlation via `--trace-id`, and GraphQL impersonation REST layer).
 3. **Draft the Refined Prompt**: Present a structured, clear, and actionable prompt. Ensure it outlines:

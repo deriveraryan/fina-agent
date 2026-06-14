@@ -1,6 +1,6 @@
 # Fina Native IDE Agent Architecture & Runbook
 
-This reference document provides a comprehensive overview of the design, logic, and operational execution flow of the Fina Native IDE Agent pipeline. It details how the `fina_refresh_listing_maps_finder`, `fina_listing_web_search`, `fina_enrich_listing_socials_finder`, `fina_listing_embedder`, `fina_events_finder`, and `fina_docs_reviewer` subagents interact with the Google Places API and the Firebase SQL Connect database (hosted in the core `fina` repository) to automate discovery tasks without paid Gemini API keys.
+This reference document provides a comprehensive overview of the design, logic, and operational execution flow of the Fina Native IDE Agent pipeline. It details how the `fina_listing_map_search`, `fina_listing_web_search`, `fina_enrich_listing_socials_finder`, `fina_listing_embedder`, `fina_events_finder`, and `fina_docs_reviewer` subagents interact with the Google Places API and the Firebase SQL Connect database (hosted in the core `fina` repository) to automate discovery tasks without paid Gemini API keys.
 
 ---
 
@@ -13,32 +13,21 @@ flowchart TD
     %% ─── SCHEDULE OR MANUAL INVOCATION ───
     Start(["Trigger: Manual /schedule or Direct Prompt"]) --> SelectSubagent{"Which Agent Flow?"}
     
-    SelectSubagent -->|Refresh Listing Maps Finder| InvokeRefreshListingMapsFinder["IDE Invokes fina_refresh_listing_maps_finder Subagent"]
+    SelectSubagent -->|Listing Map Search| InvokeListingMapSearch["IDE Invokes fina_listing_map_search Subagent"]
     SelectSubagent -->|Listing Web Search| InvokeListingWebSearch["IDE Invokes fina_listing_web_search Subagent"]
     SelectSubagent -->|Enrich Listing Socials Finder| InvokeEnrichListingSocialsFinder["IDE Invokes fina_enrich_listing_socials_finder Subagent"]
     SelectSubagent -->|Listing Embedder| InvokeListingEmbedder["IDE Invokes fina_listing_embedder Subagent"]
     SelectSubagent -->|Events Finder| InvokeEventsFinder["IDE Invokes fina_events_finder Subagent"]
     SelectSubagent -->|Docs Reviewer| InvokeDocsReviewer["IDE Invokes fina_docs_reviewer Subagent"]
 
-    %% ════════ 1. PLACES FINDER FLOW (PLACES) ════════
-    InvokeRefreshListingMapsFinder --> ExecMapsFetch["Execute: python3 scripts/agent_maps_fetch.py<br>--city C --category CAT --limit 1 --offset 0"]
-    
-    subgraph agent_maps_fetch["Inside scripts/agent_maps_fetch.py"]
-        CheckCache{"Cache File Exists?"}
-        ReadCache["Load cache file:<br>.antigravity_saves/maps_cache_*.json"]
-        QueryPlaces["Query Google Places API (New) Text Search<br>Deduplicate & Cache All Results"]
-        ReturnDone["Cache populated successfully"]
-    end
-    
-    ExecMapsFetch --> CheckCache
-    CheckCache -->|Yes| ReadCache
-    CheckCache -->|No / --refresh| QueryPlaces
-    ReadCache --> ReturnDone
-    QueryPlaces --> ReturnDone
-    
-    ReturnDone --> ReadSlices["Read cache file in line chunks via view_file"]
-    ReadSlices --> VerifyHeuristic["Subagent evaluates candidate internally<br>(using name & description details)"]
-    
+    %% ════════ 1. MAPS SEARCH FLOW (TASK-BASED) ════════
+    InvokeListingMapSearch --> GenerateMapTasks["Execute: python3 scripts/agent_maps_search_tasks.py<br>--action generate --city C (idempotent)"]
+    GenerateMapTasks --> GetNextMapTask["Execute: python3 scripts/agent_maps_search_tasks.py<br>--action next --city C"]
+    GetNextMapTask --> FetchCityListingsMaps["Execute: python3 scripts/agent_fetch_targets.py --type city-listings<br>--city C > tmp/existing_city_listings.json"]
+    FetchCityListingsMaps --> ExecMapsFetch["Execute: python3 scripts/agent_maps_fetch.py<br>--query QUERY --city C --category CAT"]
+    ExecMapsFetch --> CheckDuplicateMaps["Check duplicate via agent_check_duplicate.py"]
+    CheckDuplicateMaps --> VerifyHeuristic["Subagent evaluates candidate internally<br>(using name & description details)"]
+
     VerifyHeuristic -->|Filipino Affiliated| ExecPushDataMaps["Execute: python3 scripts/agent_graphql_push.py<br>--operation CreateListing"]
     subgraph agent_graphql_push_maps["Inside scripts/agent_graphql_push.py"]
         SyncGeocodeDedupMaps["Sync Geocode & Deduplicate"]
@@ -47,17 +36,18 @@ flowchart TD
     ExecPushDataMaps --> SyncGeocodeDedupMaps
     SyncGeocodeDedupMaps --> GQLMutationMaps
     GQLMutationMaps --> DBTransactionMaps[("PostgreSQL Database")]
-    
+
     DBTransactionMaps --> CheckHasMore
     VerifyHeuristic -->|Not Affiliated| CheckHasMore
-    
-    CheckHasMore{"More Candidates in Cache File?"}
-    CheckHasMore -->|Yes| ReadSlices
-    CheckHasMore -->|No| FinishMaps(["Maps Refresh/Discovery Completed"])
+
+    CheckHasMore{"More Candidates from API?"}
+    CheckHasMore -->|Yes| CheckDuplicateMaps
+    CheckHasMore -->|No| CompleteMapTask["Execute: python3 scripts/agent_maps_search_tasks.py<br>--action complete --task-id ID"]
+    CompleteMapTask --> FinishMaps(["Task Completed — Next run picks up next task"])
 
     %% ════════ 2. LISTING WEB SEARCH FLOW (TASK-BASED) ════════
-    InvokeListingWebSearch --> GenerateTasks["Execute: python3 scripts/agent_search_tasks.py<br>--action generate --city C (idempotent)"]
-    GenerateTasks --> GetNextTask["Execute: python3 scripts/agent_search_tasks.py<br>--action next --city C"]
+    InvokeListingWebSearch --> GenerateTasks["Execute: python3 scripts/agent_web_search_tasks.py<br>--action generate --city C (idempotent)"]
+    GenerateTasks --> GetNextTask["Execute: python3 scripts/agent_web_search_tasks.py<br>--action next --city C"]
     GetNextTask --> FetchCityListings["Execute: python3 scripts/agent_fetch_targets.py --type city-listings<br>--city C > tmp/existing_city_listings.json"]
     FetchCityListings --> NativeWebSearch["Subagent uses Native Web Search<br>(3 rounds: Facebook, Instagram, General Web)<br>using task's formatted_query"]
     NativeWebSearch --> FilterKnown["Filters out existing URLs/Names by<br>inspecting tmp/existing_city_listings.json on disk"]
@@ -76,8 +66,8 @@ flowchart TD
     BrowserVerify -->|Not Affiliated| CheckHasMoreSocial
     
     CheckHasMoreSocial{"Found 10 new listings<br>OR scanned 10 pages?"}
-    CheckHasMoreSocial -->|No| NativeWebSearch
-    CheckHasMoreSocial -->|Yes| CompleteTask["Execute: python3 scripts/agent_search_tasks.py<br>--action complete --task-id ID"]
+    CheckHasMoreSocial -->|Yes| NativeWebSearch
+    CheckHasMoreSocial -->|Yes| CompleteTask["Execute: python3 scripts/agent_web_search_tasks.py<br>--action complete --task-id ID"]
     CompleteTask --> FinishSocial(["Task Completed — Next run picks up next task"])
 
     %% ════════ 3. ENRICH LISTING SOCIALS FINDER FLOW (BACKFILL) ════════
@@ -173,19 +163,17 @@ flowchart TD
 
 ## 🛠️ Essential Components & Mechanics
 
-### 1. The `fina_refresh_listing_maps_finder` Subagent (Places Discovery)
-This subagent automates business research on Google Maps:
-*   **Single Target Tuple Restriction**: Strictly targets a single `<CITY>` and `<CATEGORY>` per execution run to prevent context bloat and ensure high reliability.
-*   **Discovery from Google Maps**: Specifically tuned to locate new candidate places using Google Places Text Search. It begins with a city-wide search and then automatically iterates through the top suburbs specified for that city in `data/top_suburbs_per_city.json` to build a thorough local cache.
+### 1. The `fina_listing_map_search` Subagent (Places Discovery)
+This subagent automates business research on Google Maps using a task-based state machine:
+*   **Task-Based Execution**: Each run is scoped to a single task (1 city × 1 category × 1 search template). Tasks are managed via `scripts/agent_maps_search_tasks.py`, which generates all (category × template) permutations at city-level only by default (`data/listing_map_search_tasks_{city}.json`). Pass `--include-suburbs` to add suburb-level tasks.
 *   **Category Validation**: To ensure alignment with [categories.json](file:///Users/ryan/.gemini/antigravity/scratch/fina-agent/data/categories.json), the subagent reads the canonical category rules at startup.
-*   **Context Optimization (Local Cache Reading)**: To prevent bloating the prompt context, the agent runs `scripts/agent_maps_fetch.py` once with `--limit 1` to query and cache all candidates locally to `.antigravity_saves/maps_cache_{city}_{category}.json`. The agent then reads candidates in small line slices (e.g., 200 lines at a time) using the `view_file` tool on disk directly, bypassing repeated CLI runs and terminal-based JSON outputs.
-*   **Cost Optimization (Local Caching)**: To prevent redundant Places API costs, candidates are loaded instantly from the local cache file. If fresh data is needed, passing `--refresh` forces a live Google Places API Text Search query.
-*   **Offline/Mock Testing**: Bypasses the Places API if `GOOGLE_MAPS_API_KEY` is not set or is `"mock-key"`, returning realistic offline listing stubs for local testing.
+*   **Single Google Places API Call**: Each task triggers a single call to `scripts/agent_maps_fetch.py --query "<formatted_query>" --city C --category CAT --trace-id <CONVERSATION_ID>`, which executes one Google Places (New) Text Search request and returns formatted candidates to stdout.
+*   **Deduplication**: Before evaluating candidates, the agent fetches existing city listings to `tmp/existing_city_listings.json` and checks each candidate via `agent_check_duplicate.py`.
 *   **Omission of Embeddings Flag**: Does NOT use the `--generate-embeddings` flag when pushing listings via the GraphQL client. Listing description vector embeddings are backfilled asynchronously by the dedicated `fina_listing_embedder` agent.
 
 ### 2. The `fina_listing_web_search` Subagent (Community Scanner)
 This subagent actively searches Facebook, Instagram, and TikTok for Filipino listings using a deterministic task-based state machine:
-*   **Task-Based Execution**: Each run is scoped to a single task (1 location × 1 category × 1 search template) with a limit of 10 new listings or 10 search result pages scanned. Tasks are managed via `scripts/agent_search_tasks.py`, which generates all permutations for a city (`data/listing_web_search_tasks_{city}.json`) and provides `next`/`complete` actions for state transitions (PENDING → IN_PROGRESS → COMPLETED). Categories with `"cityOnly": true` in `data/categories.json` (e.g. `GOVERNMENT`) produce only city-level tasks, skipping suburb permutations. By default, generation skips if the file already exists; pass `--force` to regenerate while merging existing task state (status, metrics) into the new file via atomic replacement. Stale `IN_PROGRESS` tasks (exceeding `--stale-timeout-minutes`, default 60) are automatically reclaimed to `PENDING` during `--action next`.
+*   **Task-Based Execution**: Each run is scoped to a single task (1 location × 1 category × 1 search template) with a limit of 10 new listings or 10 search result pages scanned. Tasks are managed via `scripts/agent_web_search_tasks.py`, which generates all permutations for a city (`data/listing_web_search_tasks_{city}.json`) and provides `next`/`complete` actions for state transitions (PENDING → IN_PROGRESS → COMPLETED). Categories with `"cityOnly": true` in `data/categories.json` (e.g. `GOVERNMENT`) produce only city-level tasks, skipping suburb permutations. By default, generation skips if the file already exists; pass `--force` to regenerate while merging existing task state (status, metrics) into the new file via atomic replacement. Stale `IN_PROGRESS` tasks (exceeding `--stale-timeout-minutes`, default 60) are automatically reclaimed to `PENDING` during `--action next`.
 *   **Context Setup (No-Bloat)**: Executes `scripts/agent_fetch_targets.py --type city-listings --city C > tmp/existing_city_listings.json` to write the deduplication context directly to disk. The agent checks if a candidate exists by searching the file directly on disk, avoiding terminal stdout dumps.
 *   **Web Discovery**: Uses the task's pre-formatted search query to run three sequential search rounds (Facebook, Instagram, and General Web). Each task's query is pre-generated from the `searchTemplates` in `data/categories.json` combined with the location (city or suburb from `data/top_suburbs_per_city.json`).
 *   **Browser Verification (No-Bloat)**: The subagent uses the `chrome-devtools` skill to inspect candidate pages, extracting only visible text or target DOM selectors (such as the follower count element or the bio description), rather than loading full raw page HTML into prompt history.
@@ -206,7 +194,7 @@ This subagent audits listing records and fills in missing vector embeddings to s
 *   **Vector Generation**: Constructs a composite text string from listing fields and generates a 768-dimension vector using the local Google GenAI client.
 *   **Rate-Limit Controls**: Sleeps for 0.2s between updates to stay within API thresholds.
 *   **Persistence**: Overwrites/saves vectors in the database using the `UpdateListingData` mutation.
-*   **Run Report Consolidation**: Formats and writes run reports under `logs/` directory.
+*   **Run Report Consolidation**: Outputs a summary report as JSON to stdout, typically redirected to `tmp/fina_listing_embedder_run.json`.
 
 ### 5. The `fina_events_finder` Subagent (Listing's Events Discoverer)
 This subagent directly crawls the social pages of verified businesses to discover upcoming temporal events, checking for new posts since the last scan date.
@@ -231,10 +219,11 @@ This subagent audits repository documentation against actual Python script defin
 To maintain security and ensure all data mutations pass through the authorized GraphQL layer, the subagents rely on local Python helper CLI scripts that connect to the core `fina` Firebase project:
 *   `scripts/agent_fetch_targets.py`: Fetches target source URLs, missing-social listings, business-socials, city-listings (for deduplication context), or social-post-trackers (for checking previous event scraper bookmarks) from the database.
 *   `scripts/agent_graphql_push.py`: Pushes verified JSON objects or updates to the backend using GraphQL operations (including `CreateListing`, `UpdateListingSocialUrls`, `CreateEvent`, and `UpsertSocialPostTracker`). It normalizes platform names, dynamically validates and normalizes categories against [categories.json](file:///Users/ryan/.gemini/antigravity/scratch/fina-agent/data/categories.json) (enforcing case-insensitive uppercase normalization and throwing a fatal exit code 1 if invalid), caches loaded categories in module scope to prevent redundant disk reads, and synchronously handles geocoding and deduplication before creating new listings.
-*   `scripts/agent_maps_fetch.py`: Searches Google Places (New) Text Search with caching and pagination.
+*   `scripts/agent_maps_fetch.py`: Executes a single Google Places (New) Text Search API call for a pre-formatted query and returns formatted candidate places as JSON.
 *   `scripts/agent_generate_embeddings.py`: Queries listings missing vector embeddings, generates 768-dimension vectors, and updates them via the GraphQL push client.
-*   `scripts/agent_check_duplicate.py`: Checks a local JSON file of existing listings for duplicate candidates by name and/or social URL match. Used by `fina_listing_web_search` before pushing new listings.
-*   `scripts/agent_search_tasks.py`: Manages the deterministic task-based state machine for `fina_listing_web_search`, supporting `generate`, `next`, `complete`, and `summary` actions for web search task lifecycle management.
+*   `scripts/agent_check_duplicate.py`: Checks a local JSON file of existing listings for duplicate candidates by name and/or social URL match. Used by `fina_listing_map_search` and `fina_listing_web_search` before pushing new listings.
+*   `scripts/agent_web_search_tasks.py`: Manages the deterministic task-based state machine for `fina_listing_web_search`, supporting `generate`, `next`, `complete`, and `summary` actions for web search task lifecycle management.
+*   `scripts/agent_maps_search_tasks.py`: Manages the deterministic task-based state machine for `fina_listing_map_search`, supporting `generate`, `next`, `complete`, and `summary` actions for maps search task lifecycle management. Generates city-level tasks by default; pass `--include-suburbs` for suburb-level permutations.
 *   `scripts/migrate_embeddings.py`: One-time migration utility for backfilling vector embeddings across all or a specific city.
 
 ### 8. Synchronous Geocoding & Deduplication
@@ -246,4 +235,4 @@ To simplify the architecture and reduce cloud function dependencies, heavy trans
 
 ## 💻 Operational Runbook
 
-For instructions on how to trigger or schedule the `fina_refresh_listing_maps_finder`, `fina_listing_web_search`, `fina_enrich_listing_socials_finder`, `fina_listing_embedder`, `fina_events_finder`, and `fina_docs_reviewer` subagents, refer to the Operational Guide in the main repository `README.md`.
+For instructions on how to trigger or schedule the `fina_listing_map_search`, `fina_listing_web_search`, `fina_enrich_listing_socials_finder`, `fina_listing_embedder`, `fina_events_finder`, and `fina_docs_reviewer` subagents, refer to the Operational Guide in the main repository `README.md`.

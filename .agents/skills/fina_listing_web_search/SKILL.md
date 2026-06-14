@@ -21,13 +21,13 @@ Read the canonical category definitions and rules from `data/categories.json` us
 ### Step 2: Generate Tasks (Idempotent)
 Generate the full task permutation file for the target city. This is idempotent — if the file already exists, it will be skipped. Categories with `"cityOnly": true` in `data/categories.json` (e.g. `GOVERNMENT`) produce only city-level tasks. To regenerate with updated categories/suburbs while preserving existing task state, pass `--force`:
 ```bash
-python3 scripts/agent_search_tasks.py --action generate --city <CITY> --trace-id <CONVERSATION_ID>
+python3 scripts/agent_web_search_tasks.py --action generate --city <CITY> --trace-id <CONVERSATION_ID>
 ```
 
 ### Step 3: Get Next Task
 Retrieve and start the next pending task:
 ```bash
-python3 scripts/agent_search_tasks.py --action next --city <CITY> --trace-id <CONVERSATION_ID>
+python3 scripts/agent_web_search_tasks.py --action next --city <CITY> --trace-id <CONVERSATION_ID>
 ```
 This automatically reclaims any `IN_PROGRESS` tasks that have been stale for more than 60 minutes (configurable via `--stale-timeout-minutes`), resetting them to `PENDING` so they are picked up as the next task.
 
@@ -98,7 +98,7 @@ python3 scripts/agent_graphql_push.py --operation CreateListing --variables @tmp
 ### Step 7: Complete the Task
 After hitting the execution limits (10 new listings or 10 pages scanned) or exhausting search results, mark the task as completed with accumulated metrics:
 ```bash
-python3 scripts/agent_search_tasks.py --action complete --city <CITY> --task-id <TASK_ID> --listings-created <N> --pages-searched <N> --candidates-evaluated <N> --candidates-rejected <N> --candidates-duplicate <N> --trace-id <CONVERSATION_ID>
+python3 scripts/agent_web_search_tasks.py --action complete --city <CITY> --task-id <TASK_ID> --listings-created <N> --pages-searched <N> --candidates-evaluated <N> --candidates-rejected <N> --candidates-duplicate <N> --trace-id <CONVERSATION_ID>
 ```
 
 ### Step 8: Stop Execution
@@ -106,5 +106,5 @@ The run is complete for this task. The next invocation of this agent will automa
 
 To check overall progress at any time:
 ```bash
-python3 scripts/agent_search_tasks.py --action summary --city <CITY> --trace-id <CONVERSATION_ID>
+python3 scripts/agent_web_search_tasks.py --action summary --city <CITY> --trace-id <CONVERSATION_ID>
 ```

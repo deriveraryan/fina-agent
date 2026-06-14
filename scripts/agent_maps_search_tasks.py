@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""CLI agent script to manage the web finder search task state machine.
+"""CLI agent script to manage the maps search task state machine.
 
 Provides actions to generate task permutations, retrieve the next pending task,
 mark tasks as completed with metrics, and view aggregate progress.
@@ -9,7 +9,7 @@ import sys
 import json
 import argparse
 
-# Enable FINA_AGENT_MODE to route logs to stderr, keeping stdout clean for JSON
+# Enable FINA_AGENT_CLI_MODE to route logs to stderr, keeping stdout clean for JSON
 os.environ["FINA_AGENT_CLI_MODE"] = "1"
 
 # Add parent directory to path to allow importing modules
@@ -21,8 +21,13 @@ sys.path.insert(
 )
 
 from features.shared.observability import BackendObservability
-from features.scanning.search_tasks import (
+from features.scanning.map_search_tasks import (
     generate_tasks,
+    MAP_SEARCH_ALLOWED_METRICS,
+    MAP_SEARCH_METRIC_FIELDS,
+    MAP_SEARCH_MUTABLE_FIELDS,
+)
+from features.scanning.task_lifecycle import (
     load_tasks,
     save_tasks,
     get_next_task,
@@ -37,7 +42,7 @@ from features.scanning.search_tasks import (
 def main() -> None:
     """CLI script entrypoint."""
     parser = argparse.ArgumentParser(
-        description="Manage the web finder search task state machine."
+        description="Manage the maps search task state machine."
     )
     parser.add_argument(
         "--action",
@@ -64,7 +69,7 @@ def main() -> None:
         "--tasks-file",
         type=str,
         default=None,
-        help="Path to the search tasks JSON file. Defaults to data/listing_web_search_tasks_{city}.json",
+        help="Path to the search tasks JSON file. Defaults to data/listing_map_search_tasks_{city}.json",
     )
     parser.add_argument(
         "--stale-timeout-minutes",
@@ -78,11 +83,17 @@ def main() -> None:
         default=False,
         help="Force regeneration of tasks, merging existing state into the new file.",
     )
+    parser.add_argument(
+        "--include-suburbs",
+        action="store_true",
+        default=False,
+        help="Include suburb-level tasks in addition to city-level tasks during generation.",
+    )
 
     # Arguments for action="complete"
     parser.add_argument("--task-id", type=str, help="Task ID to complete.")
     parser.add_argument("--listings-created", type=int, default=0, help="Number of new listings created.")
-    parser.add_argument("--pages-searched", type=int, default=0, help="Number of search result pages scanned.")
+    parser.add_argument("--places-fetched", type=int, default=0, help="Number of places fetched from the API.")
     parser.add_argument("--candidates-evaluated", type=int, default=0, help="Number of candidates evaluated.")
     parser.add_argument("--candidates-rejected", type=int, default=0, help="Number of candidates rejected.")
     parser.add_argument("--candidates-duplicate", type=int, default=0, help="Number of duplicate candidates found.")
@@ -94,7 +105,7 @@ def main() -> None:
     if args.tasks_file:
         tasks_path = args.tasks_file
     else:
-        tasks_path = f"data/listing_web_search_tasks_{city_key}.json"
+        tasks_path = f"data/listing_map_search_tasks_{city_key}.json"
 
     try:
         if args.action == "generate":
@@ -115,21 +126,20 @@ def main() -> None:
                 return
 
             BackendObservability.info(
-                f"Generating search tasks for city={args.city}"
-                + (" (force merge)" if args.force else ""),
+                f"Generating map search tasks for city={args.city}"
+                + (" (force merge)" if args.force else "")
+                + (f" (include_suburbs={args.include_suburbs})" if args.include_suburbs else ""),
                 conversation_id=args.trace_id,
             )
             new_tasks = generate_tasks(
                 city=args.city,
                 categories_path=args.categories_file,
                 suburbs_path=args.suburbs_file,
+                include_suburbs=args.include_suburbs,
             )
-            merge_result = merge_existing_state(new_tasks, existing_tasks)
+            merge_result = merge_existing_state(new_tasks, existing_tasks, MAP_SEARCH_MUTABLE_FIELDS)
 
-            # Atomic file replacement via temp file
-            tmp_path = tasks_path + ".tmp"
-            save_tasks(tmp_path, new_tasks)
-            os.replace(tmp_path, tasks_path)
+            save_tasks(tasks_path, new_tasks)
 
             BackendObservability.info(
                 f"Generated {len(new_tasks)} tasks at {tasks_path} "
@@ -197,12 +207,12 @@ def main() -> None:
 
             metrics = {
                 "listings_created": args.listings_created,
-                "pages_searched": args.pages_searched,
+                "places_fetched": args.places_fetched,
                 "candidates_evaluated": args.candidates_evaluated,
                 "candidates_rejected": args.candidates_rejected,
                 "candidates_duplicate": args.candidates_duplicate,
             }
-            complete_task(tasks, args.task_id, metrics)
+            complete_task(tasks, args.task_id, metrics, MAP_SEARCH_ALLOWED_METRICS)
             save_tasks(tasks_path, tasks)
 
             BackendObservability.info(
@@ -222,10 +232,10 @@ def main() -> None:
                     f"No tasks found at {tasks_path}.",
                     conversation_id=args.trace_id,
                 )
-                print(json.dumps(get_progress_summary([], stale_timeout_minutes=args.stale_timeout_minutes)))
+                print(json.dumps(get_progress_summary([], MAP_SEARCH_METRIC_FIELDS, stale_timeout_minutes=args.stale_timeout_minutes)))
                 return
 
-            summary = get_progress_summary(tasks, stale_timeout_minutes=args.stale_timeout_minutes)
+            summary = get_progress_summary(tasks, MAP_SEARCH_METRIC_FIELDS, stale_timeout_minutes=args.stale_timeout_minutes)
             BackendObservability.info(
                 f"Progress summary for {args.city}: {summary}",
                 conversation_id=args.trace_id,
@@ -234,7 +244,7 @@ def main() -> None:
 
     except Exception as e:
         BackendObservability.fatal(
-            f"Failed during search tasks action={args.action}: {e}",
+            f"Failed during map search tasks action={args.action}: {e}",
             exception=e,
             conversation_id=args.trace_id,
         )

@@ -50,7 +50,7 @@ You can trigger these discovery scans manually through the Antigravity Chat UI o
 
 ### 1. The Scraper Agents
 
-* **`fina_refresh_listing_maps_finder`**: Queries Google Places Text Search.
+* **`fina_listing_map_search`**: Queries Google Places Text Search using a task-based state machine (1 city × 1 category × 1 template per run).
 * **`fina_listing_web_search`**: Discovers new Filipino listings on social platforms using a task-based state machine (1 location × 1 category × 1 template per run).
 * **`fina_enrich_listing_socials_finder`**: Enriches existing listings with missing Facebook/Instagram URLs.
 * **`fina_listing_embedder`**: Audits and generates vector description embeddings for listings missing them.
@@ -62,17 +62,11 @@ For a detailed flow diagram of how these agents operate, see the [Native IDE Age
 ### 2. Running Scans via Chat Prompts
 You can trigger a manual scan by asking the Antigravity agent directly in the chat. For large, multi-city scans, we highly recommend prefixing your prompt with the `/goal` slash command so the agent runs continuously in the background without stopping.
 
-#### 💾 Caching & Bypassing Cache (`--refresh`)
-By default, the `fina_refresh_listing_maps_finder` caches Google Places search results under `.antigravity_saves/` to minimize API costs and prevent prompt bloat. To force a live scan that bypasses the local cache, include terms like **"refresh"**, **"bypassing cache"**, or **"live scan"** in your prompt (which instructs the agent to run the underlying fetch script with the `--refresh` flag).
-
 *   *Places Discovery*:
 > [!IMPORTANT]
-    > **Single Category & City Target Restriction**: To prevent prompt context window bloat and ensure high reliability, the `fina_refresh_listing_maps_finder` skill strictly targets a **single category** and a **single city** per execution run. Multi-category or multi-city sweeps must be run in separate, independent agent sessions.
+    > **Task-Based Queue System**: The `fina_listing_map_search` skill targets a **single city** and automatically executes the next pending Google Places search task (category × search template) from the generated task queue. By default, only city-level tasks are generated.
     >
-    > "Use the `fina_refresh_listing_maps_finder` skill to scan Google Places in SYDNEY for RESTAURANT."
-    >
-    > **To force a fresh live scan bypassing the local cache:**
-    > "Use the `fina_refresh_listing_maps_finder` skill to scan Google Places with **refresh** for RESTAURANT in SYDNEY."
+    > "Use the `fina_listing_map_search` skill to search Google Places for new listings in SYDNEY."
 *   *Web/Social Discovery*:
     > **Task-Based Queue System**: The `fina_listing_web_search` skill targets a **single city** and automatically executes the next pending search task (location × category × search template) from the generated task queue.
     >
@@ -94,28 +88,42 @@ By default, the `fina_refresh_listing_maps_finder` caches Google Places search r
 ### 3. Running Scripts via CLI
 You can execute the underlying discovery and database push scripts directly in your shell.
 
-*   **Search Task Manager (Web Finder)**:
+*   **Web Search Task Manager**:
     ```bash
     # Generate all search task permutations for a city (idempotent — skips if file exists)
-    python3 scripts/agent_search_tasks.py --action generate --city SYDNEY --trace-id <CONVERSATION_ID>
+    python3 scripts/agent_web_search_tasks.py --action generate --city SYDNEY --trace-id <CONVERSATION_ID>
 
     # Get the next pending task (atomically transitions to IN_PROGRESS)
-    python3 scripts/agent_search_tasks.py --action next --city SYDNEY --trace-id <CONVERSATION_ID>
+    python3 scripts/agent_web_search_tasks.py --action next --city SYDNEY --trace-id <CONVERSATION_ID>
 
     # Mark a task as completed with metrics
-    python3 scripts/agent_search_tasks.py --action complete --city SYDNEY --task-id sydney__RESTAURANT__0__sydney --listings-created 5 --pages-searched 3 --candidates-evaluated 8 --candidates-rejected 1 --candidates-duplicate 2 --trace-id <CONVERSATION_ID>
+    python3 scripts/agent_web_search_tasks.py --action complete --city SYDNEY --task-id sydney__RESTAURANT__0__sydney --listings-created 5 --pages-searched 3 --candidates-evaluated 8 --candidates-rejected 1 --candidates-duplicate 2 --trace-id <CONVERSATION_ID>
 
     # View aggregate progress
-    python3 scripts/agent_search_tasks.py --action summary --city SYDNEY --trace-id <CONVERSATION_ID>
+    python3 scripts/agent_web_search_tasks.py --action summary --city SYDNEY --trace-id <CONVERSATION_ID>
+    ```
+*   **Maps Search Task Manager**:
+    ```bash
+    # Generate city-level task permutations (idempotent, pass --include-suburbs for suburb tasks)
+    python3 scripts/agent_maps_search_tasks.py --action generate --city SYDNEY --trace-id <CONVERSATION_ID>
+
+    # Get the next pending task (atomically transitions to IN_PROGRESS)
+    python3 scripts/agent_maps_search_tasks.py --action next --city SYDNEY --trace-id <CONVERSATION_ID>
+
+    # Mark a task as completed with metrics
+    python3 scripts/agent_maps_search_tasks.py --action complete --city SYDNEY --task-id sydney__RESTAURANT__0__sydney --listings-created 3 --places-fetched 15 --candidates-evaluated 15 --candidates-rejected 10 --candidates-duplicate 2 --trace-id <CONVERSATION_ID>
+
+    # View aggregate progress
+    python3 scripts/agent_maps_search_tasks.py --action summary --city SYDNEY --trace-id <CONVERSATION_ID>
     ```
 *   **Listing Vector Embedding Generator**:
     ```bash
     # Generate and back-fill description embeddings for listings missing them
     python3 scripts/agent_generate_embeddings.py --city SYDNEY --limit 10 --trace-id <CONVERSATION_ID>
     ```
-*   **Google Places Fetch (with `--refresh` to bypass local cache and query live API)**:
+*   **Google Places Fetch (single query)**:
     ```bash
-    python3 scripts/agent_maps_fetch.py --city SYDNEY --category RESTAURANT --limit 10 --offset 0 --refresh --trace-id <CONVERSATION_ID>
+    python3 scripts/agent_maps_fetch.py --query "Filipino restaurant in Sydney" --city SYDNEY --category RESTAURANT --trace-id <CONVERSATION_ID>
     ```
 *   **Fetch Targets**:
     ```bash
@@ -151,7 +159,7 @@ You can execute the underlying discovery and database push scripts directly in y
 You can schedule the agents to run periodic background scans using the `/schedule` slash command:
 *   *Places Scan Schedule*:
     ```bash
-    /schedule CronExpression="0 12 * * *" Prompt="Use the fina_refresh_listing_maps_finder skill to scan Google Places for restaurants in all cities."
+    /schedule CronExpression="0 12 * * *" Prompt="Use the fina_listing_map_search skill to search Google Places for new listings in SYDNEY."
     ```
 *   *Community Scan Schedule*:
     ```bash

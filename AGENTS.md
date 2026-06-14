@@ -12,7 +12,7 @@ The `fina-agent` repository houses a pipeline of data discovery, verification, a
 flowchart TD
     Start(["Trigger: Manual or Schedule"]) --> AgentSelect{"Choose Subagent"}
     
-    AgentSelect -->|fina_refresh_listing_maps_finder| PlacesFlow["Google Places Discovery"]
+    AgentSelect -->|fina_listing_map_search| PlacesFlow["Google Places Discovery"]
     AgentSelect -->|fina_enrich_listing_socials_finder| SocialsFlow["Missing Socials Enrichment"]
     AgentSelect -->|fina_events_finder| EventsFlow["Upcoming Events Scraper"]
     AgentSelect -->|fina_listing_web_search| CommFlow["Social Community Discovery"]
@@ -34,28 +34,31 @@ flowchart TD
 
 Here is the registry of the 6 specialized Antigravity subagents:
 
-### 1. `fina_refresh_listing_maps_finder`
-*   **Role**: Locates and verifies/refreshes physical businesses (restaurants, cafes, shops, etc.) on Google Maps. Strictly targets a single category and city per run.
-*   **CLI Trigger**: `python3 scripts/agent_maps_fetch.py --city <CITY> --category <CATEGORY> --limit 1 --offset 0 --trace-id <CONVERSATION_ID>`
+### 1. `fina_listing_map_search`
+*   **Role**: Discovers and verifies Filipino businesses on Google Places (New). Each run is scoped to a single task (1 city × 1 category × 1 search template).
+*   **CLI Trigger**: `python3 scripts/agent_maps_search_tasks.py --action next --city <CITY> --trace-id <CONVERSATION_ID>`
 *   **Logic**:
-    1. Queries Google Places (New) Text Search once with category templates to populate the cache.
-    2. Standardizes places and writes the entire candidate set to disk at `.antigravity_saves/maps_cache_{city}_{category}.json`.
-    3. Reads cached results in small line slices using the `view_file` tool to prevent terminal context bloat.
-    4. Evaluates name and description context internally to verify authentic Filipino affiliation.
-    5. Pushes verified listings using the `CreateListing` mutation.
+    1. Generates all task permutations for a city (idempotent) via `scripts/agent_maps_search_tasks.py --action generate --city <CITY>`, producing `data/listing_map_search_tasks_{city}.json` with all (category × template) combinations at city-level only by default. Pass `--include-suburbs` to add suburb permutations. Pass `--force` to regenerate while merging existing task state.
+    2. Retrieves the next pending task via `--action next`, which atomically transitions it to `IN_PROGRESS` and returns the task's pre-formatted search query, category, and location.
+    3. Runs `scripts/agent_fetch_targets.py --type city-listings --city <CITY> --trace-id <CONVERSATION_ID> > tmp/existing_city_listings.json` to write existing city context to a file.
+    4. Calls `scripts/agent_maps_fetch.py --query "<formatted_query>" --city <CITY> --category <CATEGORY> --trace-id <CONVERSATION_ID>` to make a single Google Places (New) Text Search API call.
+    5. Checks for duplicates by running `python3 scripts/agent_check_duplicate.py --file tmp/existing_city_listings.json --name "<NAME>" --url "<URL>"`.
+    6. Evaluates name and description context internally to verify authentic Filipino affiliation.
+    7. Pushes verified listings using the `CreateListing` mutation (without `--generate-embeddings`) with self-correction on validation failure.
+    8. Marks the task as `COMPLETED` with metrics via `--action complete --task-id <ID> --listings-created N --places-fetched N --candidates-evaluated N --candidates-rejected N --candidates-duplicate N --trace-id <CONVERSATION_ID>`.
 
 ### 2. `fina_listing_web_search`
 *   **Role**: Discovers new listing candidates on Facebook, Instagram, TikTok, and web platforms. Each run is scoped to a single task (1 location × 1 category × 1 search template) with a limit of 10 new listings or 10 search result pages.
-*   **CLI Trigger**: `python3 scripts/agent_search_tasks.py --action next --city <CITY> --trace-id <CONVERSATION_ID>`
+*   **CLI Trigger**: `python3 scripts/agent_web_search_tasks.py --action next --city <CITY> --trace-id <CONVERSATION_ID>`
 *   **Logic**:
-    1. Generates all task permutations for a city (idempotent) via `scripts/agent_search_tasks.py --action generate --city <CITY>`, producing `data/listing_web_search_tasks_{city}.json` with all (category × template × location) combinations ordered by category, template index, and city-level first then suburbs from `data/top_suburbs_per_city.json`. Categories with `"cityOnly": true` in `data/categories.json` (e.g. `GOVERNMENT`) produce only city-level tasks, skipping suburb permutations. By default, skips if the file already exists; pass `--force` to regenerate while merging existing task state (status, metrics) into the new file via atomic replacement.
+    1. Generates all task permutations for a city (idempotent) via `scripts/agent_web_search_tasks.py --action generate --city <CITY>`, producing `data/listing_web_search_tasks_{city}.json` with all (category × template × location) combinations ordered by category, template index, and city-level first then suburbs from `data/top_suburbs_per_city.json`. Categories with `"cityOnly": true` in `data/categories.json` (e.g. `GOVERNMENT`) produce only city-level tasks, skipping suburb permutations. By default, skips if the file already exists; pass `--force` to regenerate while merging existing task state (status, metrics) into the new file via atomic replacement.
     2. Retrieves the next pending task via `--action next`, which atomically transitions it to `IN_PROGRESS` and returns the task's pre-formatted search query, category, and location.
     3. Runs `scripts/agent_fetch_targets.py --type city-listings --city <CITY> --trace-id <CONVERSATION_ID> > tmp/existing_city_listings.json` to write existing city context to a file.
     4. Uses native web search with site-specific queries in three sequential rounds (Facebook, Instagram, and General Web) using the task's `formatted_query`.
     5. Checks for duplicates by running `python3 scripts/agent_check_duplicate.py --file tmp/existing_city_listings.json --name "<NAME>" --url "<URL>"`.
     6. Navigates to candidate pages via Chrome DevTools, extracting only visible text/selectors to prevent raw HTML bloat.
     7. Creates verified listings via `agent_graphql_push.py --operation CreateListing` (without `--generate-embeddings`, including `tiktokUrl` and `tiktokFollowers`) with self-correction on validation failure.
-    8. Marks the task as `COMPLETED` with metrics via `--action complete --task-id <ID> --listings-created N --pages-searched N --candidates-evaluated N --candidates-rejected N --candidates-duplicate N`.
+    8. Marks the task as `COMPLETED` with metrics via `--action complete --task-id <ID> --listings-created N --pages-searched N --candidates-evaluated N --candidates-rejected N --candidates-duplicate N --trace-id <CONVERSATION_ID>`.
 
 ### 3. `fina_enrich_listing_socials_finder`
 *   **Role**: Enriches existing database listings with missing Facebook, Instagram, and TikTok URLs. Strictly targets a single city per run.
@@ -74,7 +77,7 @@ Here is the registry of the 6 specialized Antigravity subagents:
     2. Constructs a composite description string for each listing.
     3. Calls the local GenAI embedding function to generate a 768-dimension vector.
     4. Pushes the updated vector to the database via the `UpdateListingData` mutation (sleeping 0.2s between calls to prevent rate limits).
-    5. Outputs a summary report under `logs/`.
+    5. Outputs a summary report as JSON to stdout, typically redirected to `tmp/fina_listing_embedder_run.json`.
 
 ### 5. `fina_events_finder`
 *   **Role**: Crawls social media pages of verified businesses to discover upcoming temporal events. Strictly targets a single city per run.
@@ -124,26 +127,40 @@ pip install -r requirements.txt
   ```
 - **Maps Fetch**:
   ```bash
-  # Run once to populate cache under .antigravity_saves/maps_cache_{city}_{category}.json
-  python3 scripts/agent_maps_fetch.py --city <CITY> --category <CATEGORY> --limit 1 --offset 0 --trace-id <CONVERSATION_ID>
+  # Single Google Places API call using a pre-formatted query
+  python3 scripts/agent_maps_fetch.py --query "<QUERY>" --city <CITY> --category <CATEGORY> --trace-id <CONVERSATION_ID>
   ```
 - **Listing Embeddings Generation**:
   ```bash
   python3 scripts/agent_generate_embeddings.py --city <CITY> --trace-id <CONVERSATION_ID> --limit <LIMIT> > tmp/fina_listing_embedder_run.json
   ```
-- **Search Tasks (Web Finder)**:
+- **Web Search Tasks**:
   ```bash
   # Generate task permutations for a city (idempotent, pass --force to regenerate)
-  python3 scripts/agent_search_tasks.py --action generate --city <CITY> --trace-id <CONVERSATION_ID>
+  python3 scripts/agent_web_search_tasks.py --action generate --city <CITY> --trace-id <CONVERSATION_ID>
 
   # Get next pending task (atomically transitions to IN_PROGRESS)
-  python3 scripts/agent_search_tasks.py --action next --city <CITY> --trace-id <CONVERSATION_ID>
+  python3 scripts/agent_web_search_tasks.py --action next --city <CITY> --trace-id <CONVERSATION_ID>
 
   # Mark task as completed with metrics
-  python3 scripts/agent_search_tasks.py --action complete --city <CITY> --task-id <ID> --listings-created N --pages-searched N --candidates-evaluated N --candidates-rejected N --candidates-duplicate N --trace-id <CONVERSATION_ID>
+  python3 scripts/agent_web_search_tasks.py --action complete --city <CITY> --task-id <ID> --listings-created N --pages-searched N --candidates-evaluated N --candidates-rejected N --candidates-duplicate N --trace-id <CONVERSATION_ID>
 
   # View aggregate progress
-  python3 scripts/agent_search_tasks.py --action summary --city <CITY> --trace-id <CONVERSATION_ID>
+  python3 scripts/agent_web_search_tasks.py --action summary --city <CITY> --trace-id <CONVERSATION_ID>
+  ```
+- **Maps Search Tasks**:
+  ```bash
+  # Generate city-level task permutations (idempotent, pass --force to regenerate, --include-suburbs for suburb tasks)
+  python3 scripts/agent_maps_search_tasks.py --action generate --city <CITY> --trace-id <CONVERSATION_ID>
+
+  # Get next pending task (atomically transitions to IN_PROGRESS)
+  python3 scripts/agent_maps_search_tasks.py --action next --city <CITY> --trace-id <CONVERSATION_ID>
+
+  # Mark task as completed with metrics
+  python3 scripts/agent_maps_search_tasks.py --action complete --city <CITY> --task-id <ID> --listings-created N --places-fetched N --candidates-evaluated N --candidates-rejected N --candidates-duplicate N --trace-id <CONVERSATION_ID>
+
+  # View aggregate progress
+  python3 scripts/agent_maps_search_tasks.py --action summary --city <CITY> --trace-id <CONVERSATION_ID>
   ```
 - **Check Duplicate**:
   ```bash
@@ -184,7 +201,7 @@ Any agent executing tasks in this codebase must strictly adhere to the following
 
 ### 🚨 Rule 1.4: State Decoupling and Caching
 *   **Rule**: Local agent cache must be kept completely decoupled from execution logic.
-*   **Invariant**: Cache files must be stored under `.antigravity_saves/` (e.g., `.antigravity_saves/maps_cache_{city}_{category}.json`) to minimize external API costs. Do not mix temporary caching state with production code structures.
+*   **Invariant**: Local task state files (e.g., `data/listing_map_search_tasks_{city}.json`, `data/listing_web_search_tasks_{city}.json`) must be kept decoupled from production code structures. Do not mix temporary agent state with core application logic.
 
 ### 🚨 Rule 1.5: Test-Driven Development (TDD) Enforcement
 *   **Rule**: You **must** utilize Test-Driven Development (TDD) workflows whenever pragmatic for backend Python helper logic, validation heuristics, and parsing utilities.

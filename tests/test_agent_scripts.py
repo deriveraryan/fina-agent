@@ -166,125 +166,67 @@ class TestAgentScripts(unittest.IsolatedAsyncioTestCase):
         )
 
     @patch("sys.stdout")
-    @patch("os.path.exists")
-    @patch("builtins.open")
-    async def test_maps_fetch_cache_hit(self, mock_open: MagicMock, mock_exists: MagicMock, mock_stdout: MagicMock) -> None:
-        """Tests that agent_maps_fetch.py reads from cache on cache hit."""
+    @patch("httpx.AsyncClient.post")
+    @patch.dict("os.environ", {"GOOGLE_MAPS_API_KEY": "fake-key"})
+    async def test_maps_fetch_single_query(self, mock_post: AsyncMock, mock_stdout: MagicMock) -> None:
+        """Tests that agent_maps_fetch.py executes a single Places API query and returns formatted results."""
         import agent_maps_fetch
 
-        def exists_side_effect(path):
-            if "categories.json" in str(path):
-                return True
-            if "maps_cache_" in str(path):
-                return True
-            return False
-        mock_exists.side_effect = exists_side_effect
-        
-        mock_file = MagicMock()
-        import io
-        def open_side_effect(path, *args, **kwargs):
-            if "categories.json" in str(path):
-                return io.open(path, *args, **kwargs)
-            return mock_file
-        mock_open.side_effect = open_side_effect
+        mock_response = MagicMock()
+        mock_response.status_code = 200
+        mock_response.json.return_value = {
+            "places": [
+                {
+                    "id": "place1",
+                    "displayName": {"text": "Manila Eats"},
+                    "types": ["restaurant", "food"],
+                    "formattedAddress": "123 Pitt St",
+                    "location": {"latitude": -33.8688, "longitude": 151.2093},
+                    "internationalPhoneNumber": "+61 2 9999 1111",
+                    "websiteUri": "https://manilaeats.example.com",
+                    "regularOpeningHours": {"weekdayDescriptions": ["Monday: 9:00 AM \u2013 5:00 PM"]},
+                    "editorialSummary": {"text": "Filipino diner"},
+                    "reviews": [],
+                },
+                {
+                    "id": "place2",
+                    "displayName": {"text": "Pinoy Brew"},
+                    "types": ["cafe"],
+                    "formattedAddress": "45 Pitt St",
+                    "location": {"latitude": -33.8695, "longitude": 151.2085},
+                    "internationalPhoneNumber": "+61 2 9999 2222",
+                    "websiteUri": "https://pinoybrew.example.com",
+                    "regularOpeningHours": {"weekdayDescriptions": ["Monday: 7:00 AM \u2013 4:00 PM"]},
+                    "editorialSummary": {"text": "Specialty ube lattes"},
+                    "reviews": [],
+                },
+            ]
+        }
+        mock_post.return_value = mock_response
 
-        mock_file.__enter__.return_value.read.return_value = json.dumps([
-            {
-                "id": "place1",
-                "name": "Manila Eats",
-                "types": ["restaurant"],
-                "address": "123 Pitt St",
-                "latitude": -33.8688,
-                "longitude": 151.2093,
-                "phone": "+61 2 9999 1111",
-                "website": "https://manilaeats.example.com",
-                "hours": '{"mon": "11:00 AM – 9:00 PM"}',
-                "description": "Filipino diner",
-                "reviews": [
-                    {
-                        "externalSourceId": "places/place1/reviews/0",
-                        "authorName": "John Doe",
-                        "rating": 5.0,
-                        "text": "Great food",
-                        "publishedDate": "2026-06-06T00:00:00Z"
-                    },
-                    {
-                        "externalSourceId": "places/place1/reviews/1",
-                        "authorName": "Jane Smith",
-                        "rating": 4.0,
-                        "text": "Loved the adobo",
-                        "publishedDate": "2026-06-06T00:00:00Z"
-                    }
-                ],
-                "sourceUrl": "https://www.google.com/maps/place/?q=place_id:place1"
-            },
-            {
-                "id": "place2",
-                "name": "Pinoy Brew",
-                "types": ["cafe"],
-                "address": "45 Pitt St",
-                "latitude": -33.8695,
-                "longitude": 151.2085,
-                "phone": "+61 2 9999 2222",
-                "website": "https://pinoybrew.example.com",
-                "hours": '{"mon": "7:00 AM – 4:00 PM"}',
-                "description": "Specialty ube lattes",
-                "reviews": [
-                    {
-                        "externalSourceId": "places/place2/reviews/0",
-                        "authorName": "Alice",
-                        "rating": 5.0,
-                        "text": "Best ube latte",
-                        "publishedDate": "2026-06-06T00:00:00Z"
-                    },
-                    {
-                        "externalSourceId": "places/place2/reviews/1",
-                        "authorName": "Bob",
-                        "rating": 4.5,
-                        "text": "Pandesal was fresh",
-                        "publishedDate": "2026-06-06T00:00:00Z"
-                    }
-                ],
-                "sourceUrl": "https://www.google.com/maps/place/?q=place_id:place2"
-            }
-        ])
+        sys.argv = ["agent_maps_fetch.py", "--query", "Filipino restaurant in Sydney", "--city", "SYDNEY", "--category", "RESTAURANT"]
 
-        sys.argv = ["agent_maps_fetch.py", "--city", "SYDNEY", "--category", "RESTAURANT", "--limit", "1", "--offset", "0"]
-        
         await agent_maps_fetch.main()
 
+        self.assertTrue(mock_post.called)
         written_calls = [call.args[0] for call in mock_stdout.write.call_args_list]
         combined_output = "".join(written_calls)
         parsed_output = json.loads(combined_output)
-        
-        self.assertEqual(len(parsed_output["places"]), 1)
-        self.assertEqual(parsed_output["places"][0]["name"], "Manila Eats")
+
+        self.assertEqual(len(parsed_output["places"]), 2)
         self.assertEqual(parsed_output["total"], 2)
-        self.assertTrue(parsed_output["has_more"])
+        self.assertEqual(parsed_output["places"][0]["name"], "Manila Eats")
+        self.assertEqual(parsed_output["places"][1]["name"], "Pinoy Brew")
 
     @patch("sys.stdout")
-    @patch("os.path.exists")
-    @patch("builtins.open")
     @patch("httpx.AsyncClient.post")
     @patch.dict("os.environ", {"GOOGLE_MAPS_API_KEY": "fake-key"})
-    async def test_maps_fetch_cache_miss_live(self, mock_post: AsyncMock, mock_open: MagicMock, mock_exists: MagicMock, mock_stdout: MagicMock) -> None:
-        """Tests that agent_maps_fetch.py fetches live on cache miss and writes cache."""
+    async def test_maps_fetch_with_business_status(self, mock_post: AsyncMock, mock_stdout: MagicMock) -> None:
+        """Tests that agent_maps_fetch.py correctly parses businessStatus and review fields."""
+        import importlib
         import agent_maps_fetch
+        importlib.reload(agent_maps_fetch)
 
-        def exists_side_effect(path):
-            if "categories.json" in str(path):
-                return True
-            return False
-        mock_exists.side_effect = exists_side_effect
-        
-        mock_file = MagicMock()
-        import io
-        def open_side_effect(path, *args, **kwargs):
-            if "categories.json" in str(path):
-                return io.open(path, *args, **kwargs)
-            return mock_file
-        mock_open.side_effect = open_side_effect
-        
         mock_response = MagicMock()
         mock_response.status_code = 200
         mock_response.json.return_value = {
@@ -298,7 +240,7 @@ class TestAgentScripts(unittest.IsolatedAsyncioTestCase):
                     "location": {"latitude": -33.8, "longitude": 151.2},
                     "internationalPhoneNumber": "+61 2 8888 8888",
                     "websiteUri": "https://live.example.com",
-                    "regularOpeningHours": {"weekdayDescriptions": ["Monday: 9:00 AM – 5:00 PM"]},
+                    "regularOpeningHours": {"weekdayDescriptions": ["Monday: 9:00 AM \u2013 5:00 PM"]},
                     "editorialSummary": {"text": "Live summary"},
                     "reviews": [
                         {
@@ -314,22 +256,19 @@ class TestAgentScripts(unittest.IsolatedAsyncioTestCase):
         }
         mock_post.return_value = mock_response
 
-        sys.argv = ["agent_maps_fetch.py", "--city", "SYDNEY", "--category", "RESTAURANT", "--limit", "10", "--offset", "0"]
-        
+        sys.argv = ["agent_maps_fetch.py", "--query", "Filipino restaurant in Sydney", "--city", "SYDNEY", "--category", "RESTAURANT"]
+
         await agent_maps_fetch.main()
 
         self.assertTrue(mock_post.called)
-        mock_open.assert_called_with(unittest.mock.ANY, "w")
-        
         written_calls = [call.args[0] for call in mock_stdout.write.call_args_list]
         combined_output = "".join(written_calls)
         parsed_output = json.loads(combined_output)
-        
+
         self.assertEqual(len(parsed_output["places"]), 1)
         self.assertEqual(parsed_output["places"][0]["name"], "Live Manila Eats")
         self.assertEqual(parsed_output["places"][0]["status"], "CLOSED_TEMPORARILY")
         self.assertEqual(parsed_output["total"], 1)
-        self.assertFalse(parsed_output["has_more"])
 
     @patch("agent_fetch_targets.execute_graphql_operation", new_callable=AsyncMock)
     @patch("sys.stdout")
@@ -1004,28 +943,20 @@ class TestAgentScripts(unittest.IsolatedAsyncioTestCase):
         stderr_calls = "".join(call.args[0] for call in mock_stderr.write.call_args_list)
         self.assertIn("Validation Error: --listing-id and --platform are required for social-post-tracker", stderr_calls)
 
-    @patch("sys.stdout")
-    @patch("os.path.exists")
-    async def test_maps_fetch_services_success(self, mock_exists: MagicMock, mock_stdout: MagicMock) -> None:
-        """Tests that agent_maps_fetch.py supports SERVICES category and returns mock data offline."""
+    @patch("sys.stderr")
+    async def test_maps_fetch_requires_api_key(self, mock_stderr: MagicMock) -> None:
+        """Tests that agent_maps_fetch.py exits with code 1 when GOOGLE_MAPS_API_KEY is not set."""
         import agent_maps_fetch
 
-        def exists_side_effect(path):
-            if "categories.json" in str(path):
-                return True
-            return False
-        mock_exists.side_effect = exists_side_effect
-        sys.argv = ["agent_maps_fetch.py", "--city", "SYDNEY", "--category", "SERVICES", "--limit", "10", "--offset", "0"]
-        
-        await agent_maps_fetch.main()
+        if "GOOGLE_MAPS_API_KEY" in os.environ:
+            del os.environ["GOOGLE_MAPS_API_KEY"]
 
-        written_calls = [call.args[0] for call in mock_stdout.write.call_args_list]
-        combined_output = "".join(written_calls)
-        parsed_output = json.loads(combined_output)
-        
-        self.assertEqual(parsed_output["total"], 1)
-        self.assertEqual(parsed_output["places"][0]["name"], "Mock Services Business Sydney")
-        self.assertEqual(parsed_output["places"][0]["description"], "A verified Filipino services in Sydney.")
+        sys.argv = ["agent_maps_fetch.py", "--query", "Filipino services in Sydney", "--city", "SYDNEY", "--category", "SERVICES"]
+
+        with self.assertRaises(SystemExit) as context:
+            await agent_maps_fetch.main()
+
+        self.assertEqual(context.exception.code, 1)
 
 
 
