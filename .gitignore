@@ -54,4 +54,5 @@ logs/
 # Temporary files
 tmp/
 .tmp.driveupload
+*.lock
 

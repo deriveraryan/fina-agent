@@ -3,12 +3,17 @@
 Provides generic, type-agnostic functions for loading, saving, and managing
 task state transitions (PENDING → IN_PROGRESS → COMPLETED). Used by both
 the web search and maps search task systems.
+
+Includes file-based locking via fcntl to ensure safe concurrent access
+when multiple agents operate on the same task file simultaneously.
 """
 
+import fcntl
 import json
 import os
+from contextlib import contextmanager
 from datetime import datetime, timedelta, timezone
-from typing import Any, Dict, List, Optional, Sequence, Set
+from typing import Any, Dict, Generator, List, Optional, Sequence, Set, Tuple
 
 
 def load_tasks(tasks_path: str) -> List[Dict[str, Any]]:
@@ -285,3 +290,112 @@ def get_progress_summary(
         summary["stale"] = stale
 
     return summary
+
+
+@contextmanager
+def task_file_lock(tasks_path: str) -> Generator[None, None, None]:
+    """Exclusive file lock for concurrent task file access.
+
+    Uses fcntl.flock() with LOCK_EX to ensure only one process can
+    read-modify-write the task JSON file at a time. The lock is held
+    on a sibling `.lock` file rather than the data file itself to
+    avoid interfering with atomic os.replace() writes.
+
+    Args:
+        tasks_path: Path to the task JSON file. The lock file will be
+            created at ``tasks_path + ".lock"``.
+
+    Yields:
+        None — the caller performs load/mutate/save within the block.
+    """
+    lock_path = tasks_path + ".lock"
+    os.makedirs(os.path.dirname(lock_path) or ".", exist_ok=True)
+    lock_fd = open(lock_path, "w")
+    try:
+        fcntl.flock(lock_fd, fcntl.LOCK_EX)
+        yield
+    finally:
+        try:
+            fcntl.flock(lock_fd, fcntl.LOCK_UN)
+        except OSError:
+            pass
+        lock_fd.close()
+
+
+def locked_next_task(
+    tasks_path: str,
+    stale_timeout_minutes: int = 60,
+) -> Tuple[Optional[Dict[str, Any]], List[str], List[Dict[str, Any]]]:
+    """Atomically claim the next pending task under an exclusive file lock.
+
+    Loads the task file, reclaims stale IN_PROGRESS tasks, picks the first
+    PENDING task, transitions it to IN_PROGRESS, saves, and returns the
+    started task. The entire operation is protected by fcntl.flock() so
+    concurrent agents are guaranteed to receive different tasks.
+
+    Args:
+        tasks_path: Path to the task JSON file.
+        stale_timeout_minutes: Minutes after which an IN_PROGRESS task
+            is considered stale and reclaimed.
+
+    Returns:
+        The started task dictionary (with status=IN_PROGRESS), a list
+        of reclaimed task IDs, and the full task list as a tuple
+        ``(task, reclaimed_ids, tasks)``. Returns ``(None, reclaimed_ids, tasks)``
+        if no pending tasks remain.
+    """
+    with task_file_lock(tasks_path):
+        tasks = load_tasks(tasks_path)
+        if not tasks:
+            return None, [], []
+
+        reclaimed_ids = reclaim_stale_tasks(tasks, stale_timeout_minutes)
+
+        next_t = get_next_task(tasks)
+        if next_t is None:
+            # Save reclaimed state even when no pending tasks remain
+            if reclaimed_ids:
+                save_tasks(tasks_path, tasks)
+            return None, reclaimed_ids, tasks
+
+        task_id = next_t["id"]
+        start_task(tasks, task_id)
+        save_tasks(tasks_path, tasks)
+
+        # Return the task with updated fields
+        for t in tasks:
+            if t["id"] == task_id:
+                return t, reclaimed_ids, tasks
+
+    return None, [], []
+
+
+def locked_complete_task(
+    tasks_path: str,
+    task_id: str,
+    metrics: Dict[str, Any],
+    allowed_metrics: Set[str],
+) -> None:
+    """Atomically complete a task under an exclusive file lock.
+
+    Loads the task file, transitions the specified task to COMPLETED
+    with the given metrics, and saves. The entire operation is protected
+    by fcntl.flock() so concurrent saves do not clobber each other.
+
+    Args:
+        tasks_path: Path to the task JSON file.
+        task_id: The ID of the task to complete.
+        metrics: A dictionary of metric values to merge into the task.
+        allowed_metrics: Set of metric field names valid for this task type.
+
+    Raises:
+        ValueError: If the task file is empty, the task ID is not found,
+            or the task is not IN_PROGRESS.
+    """
+    with task_file_lock(tasks_path):
+        tasks = load_tasks(tasks_path)
+        if not tasks:
+            raise ValueError(f"No tasks found at {tasks_path}")
+
+        complete_task(tasks, task_id, metrics, allowed_metrics)
+        save_tasks(tasks_path, tasks)

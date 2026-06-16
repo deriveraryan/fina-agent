@@ -42,9 +42,9 @@ Read the JSON output to extract the task parameters:
 If the output is `null`, all tasks are completed. Report this to the user and stop.
 
 ### Step 4: Fetch Existing City Listings
-Execute the following to write all existing listing names and social URLs for the target city into a temporary file (prevents context bloat):
+Execute the following to write all existing listing names and social URLs for the target city into a per-agent temporary file (prevents context bloat and avoids file collisions when running in parallel):
 ```bash
-python3 scripts/agent_fetch_targets.py --type city-listings --city <CITY> --trace-id <CONVERSATION_ID> > tmp/existing_city_listings.json
+python3 scripts/agent_fetch_targets.py --type city-listings --city <CITY> --trace-id <CONVERSATION_ID> > tmp/existing_city_listings_<CONVERSATION_ID>.json
 ```
 
 ### Step 5: Execute Maps Fetch
@@ -59,7 +59,7 @@ For each candidate place returned from the Maps fetch:
 
 **a. Duplicate Check:** Run:
 ```bash
-python3 scripts/agent_check_duplicate.py --file tmp/existing_city_listings.json --name "<Candidate Name>" --url "<Candidate Website URL>"
+python3 scripts/agent_check_duplicate.py --file tmp/existing_city_listings_<CONVERSATION_ID>.json --name "<Candidate Name>" --url "<Candidate Website URL>"
 ```
 If `{"duplicate": true}`, skip it and increment the duplicate counter.
 

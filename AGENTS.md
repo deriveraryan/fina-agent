@@ -39,27 +39,27 @@ Here is the registry of the 6 specialized Antigravity subagents:
 *   **CLI Trigger**: `python3 scripts/agent_maps_search_tasks.py --action next --city <CITY> --trace-id <CONVERSATION_ID>`
 *   **Logic**:
     1. Generates all task permutations for a city (idempotent) via `scripts/agent_maps_search_tasks.py --action generate --city <CITY>`, producing `data/listing_map_search_tasks_{city}.json` with all (category × template) combinations at city-level only by default. Pass `--include-suburbs` to add suburb permutations. Pass `--force` to regenerate while merging existing task state.
-    2. Retrieves the next pending task via `--action next`, which atomically transitions it to `IN_PROGRESS` and returns the task's pre-formatted search query, category, and location.
-    3. Runs `scripts/agent_fetch_targets.py --type city-listings --city <CITY> --trace-id <CONVERSATION_ID> > tmp/existing_city_listings.json` to write existing city context to a file.
+    2. Retrieves the next pending task via `--action next`, which uses `fcntl.flock()` to atomically claim the task under an exclusive file lock, preventing concurrent agents from picking the same task. Returns the task's pre-formatted search query, category, and location.
+    3. Runs `scripts/agent_fetch_targets.py --type city-listings --city <CITY> --trace-id <CONVERSATION_ID> > tmp/existing_city_listings_<CONVERSATION_ID>.json` to write existing city context to a per-agent temporary file.
     4. Calls `scripts/agent_maps_fetch.py --query "<formatted_query>" --city <CITY> --category <CATEGORY> --trace-id <CONVERSATION_ID>` to make a single Google Places (New) Text Search API call.
-    5. Checks for duplicates by running `python3 scripts/agent_check_duplicate.py --file tmp/existing_city_listings.json --name "<NAME>" --url "<URL>"`.
+    5. Checks for duplicates by running `python3 scripts/agent_check_duplicate.py --file tmp/existing_city_listings_<CONVERSATION_ID>.json --name "<NAME>" --url "<URL>"`.
     6. Evaluates name and description context internally to verify authentic Filipino affiliation.
     7. Pushes verified listings using the `CreateListing` mutation (without `--generate-embeddings`) with self-correction on validation failure.
-    8. Marks the task as `COMPLETED` with metrics via `--action complete --task-id <ID> --listings-created N --places-fetched N --candidates-evaluated N --candidates-rejected N --candidates-duplicate N --trace-id <CONVERSATION_ID>`.
+    8. Marks the task as `COMPLETED` with metrics via `--action complete --task-id <ID> --listings-created N --places-fetched N --candidates-evaluated N --candidates-rejected N --candidates-duplicate N --trace-id <CONVERSATION_ID>`. Completion also uses `fcntl.flock()` to safely merge metrics without clobbering other agents' state.
 
 ### 2. `fina_listing_web_search`
 *   **Role**: Discovers new listing candidates on Facebook, Instagram, TikTok, and web platforms. Each run is scoped to a single task (1 location × 1 category × 1 search template) with a limit of 10 new listings or 10 search result pages.
 *   **CLI Trigger**: `python3 scripts/agent_web_search_tasks.py --action next --city <CITY> --trace-id <CONVERSATION_ID>`
 *   **Logic**:
     1. Generates all task permutations for a city (idempotent) via `scripts/agent_web_search_tasks.py --action generate --city <CITY>`, producing `data/listing_web_search_tasks_{city}.json` with all (category × template × location) combinations ordered by category, template index, and city-level first then suburbs from `data/top_suburbs_per_city.json`. Categories with `"cityOnly": true` in `data/categories.json` (e.g. `GOVERNMENT`) produce only city-level tasks, skipping suburb permutations. By default, skips if the file already exists; pass `--force` to regenerate while merging existing task state (status, metrics) into the new file via atomic replacement.
-    2. Retrieves the next pending task via `--action next`, which atomically transitions it to `IN_PROGRESS` and returns the task's pre-formatted search query, category, and location.
-    3. Runs `scripts/agent_fetch_targets.py --type city-listings --city <CITY> --trace-id <CONVERSATION_ID> > tmp/existing_city_listings.json` to write existing city context to a file.
+    2. Retrieves the next pending task via `--action next`, which uses `fcntl.flock()` to atomically claim the task under an exclusive file lock, preventing concurrent agents from picking the same task. Returns the task's pre-formatted search query, category, and location.
+    3. Runs `scripts/agent_fetch_targets.py --type city-listings --city <CITY> --trace-id <CONVERSATION_ID> > tmp/existing_city_listings_<CONVERSATION_ID>.json` to write existing city context to a per-agent temporary file.
     4. Uses native web search with site-specific queries in three sequential rounds (Facebook, Instagram, and General Web) using the task's `formatted_query`.
-    5. Checks for duplicates by running `python3 scripts/agent_check_duplicate.py --file tmp/existing_city_listings.json --name "<NAME>" --url "<URL>"`.
+    5. Checks for duplicates by running `python3 scripts/agent_check_duplicate.py --file tmp/existing_city_listings_<CONVERSATION_ID>.json --name "<NAME>" --url "<URL>"`.
     6. Navigates to candidate pages via Chrome DevTools, extracting only visible text/selectors to prevent raw HTML bloat.
     7. Navigates to Google Maps via Chrome DevTools to enrich verified candidates with latitude/longitude (parsed from URL bar), address, opening hours, phone, Place ID, and website — filling only empty fields. Adds a `google-maps` tag when enrichment succeeds. Proceeds to push regardless of Maps enrichment outcome.
     8. Creates verified listings via `agent_graphql_push.py --operation CreateListing` (without `--generate-embeddings`, including `tiktokUrl` and `tiktokFollowers`) with self-correction on validation failure.
-    9. Marks the task as `COMPLETED` with metrics via `--action complete --task-id <ID> --listings-created N --pages-searched N --candidates-evaluated N --candidates-rejected N --candidates-duplicate N --trace-id <CONVERSATION_ID>`.
+    9. Marks the task as `COMPLETED` with metrics via `--action complete --task-id <ID> --listings-created N --pages-searched N --candidates-evaluated N --candidates-rejected N --candidates-duplicate N --trace-id <CONVERSATION_ID>`. Completion also uses `fcntl.flock()` to safely merge metrics without clobbering other agents' state.
 
 ### 3. `fina_enrich_listing_socials_finder`
 *   **Role**: Enriches existing database listings with missing Facebook, Instagram, and TikTok URLs. Strictly targets a single city per run.
@@ -200,9 +200,11 @@ Any agent executing tasks in this codebase must strictly adhere to the following
 *   **Rule**: All business categories, verification rules, and display names must be defined strictly in `data/categories.json`.
 *   **Invariant**: Never hardcode category checks, display names, or verification rules inside Python scripts. Always load and validate categories against `data/categories.json` (e.g., using `load_valid_categories()`). The database schemas and mutations are defined by the main Fina application, and agents must strictly comply with the database schema by matching parameter typing exactly when invoking `execute_graphql_operation`.
 
-### 🚨 Rule 1.4: State Decoupling and Caching
-*   **Rule**: Local agent cache must be kept completely decoupled from execution logic.
-*   **Invariant**: Local task state files (e.g., `data/listing_map_search_tasks_{city}.json`, `data/listing_web_search_tasks_{city}.json`) must be kept decoupled from production code structures. Do not mix temporary agent state with core application logic.
+### 🚨 Rule 1.4: State Decoupling, Caching, and Concurrent Access
+*   **Rule**: Local agent cache must be kept completely decoupled from execution logic. When multiple agents run concurrently, all shared mutable state must be protected.
+*   **File Locking Invariant**: Task state files (e.g., `data/listing_map_search_tasks_{city}.json`, `data/listing_web_search_tasks_{city}.json`) must be accessed through `locked_next_task()` and `locked_complete_task()` from `features/scanning/task_lifecycle.py`, which use `fcntl.flock()` to guarantee exclusive access during read-modify-write sequences.
+*   **Tmp File Isolation Invariant**: All temporary files written to `tmp/` must include the agent's `CONVERSATION_ID` in the filename (e.g., `tmp/existing_city_listings_<CONVERSATION_ID>.json`, `tmp/tiktok_profile_<CONVERSATION_ID>.html`) to prevent file collisions between concurrent agents.
+*   **Known Limitation**: The `CreateListing` deduplication check (`check_duplicate()` in `dedup.py`) uses a TOCTOU (Time-Of-Check-Time-Of-Use) pattern against the database. When concurrent agents discover the same listing simultaneously, both may pass the dedup check before either inserts. The long-term fix is a PostgreSQL unique constraint on `(normalized_name, city)` or `(source_url)` with upsert semantics in the GraphQL mutation layer.
 
 ### 🚨 Rule 1.5: Test-Driven Development (TDD) Enforcement
 *   **Rule**: You **must** utilize Test-Driven Development (TDD) workflows whenever pragmatic for backend Python helper logic, validation heuristics, and parsing utilities.

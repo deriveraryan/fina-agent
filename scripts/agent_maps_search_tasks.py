@@ -30,12 +30,10 @@ from features.scanning.map_search_tasks import (
 from features.scanning.task_lifecycle import (
     load_tasks,
     save_tasks,
-    get_next_task,
-    start_task,
-    complete_task,
     get_progress_summary,
-    reclaim_stale_tasks,
     merge_existing_state,
+    locked_next_task,
+    locked_complete_task,
 )
 
 
@@ -158,8 +156,17 @@ def main() -> None:
             }))
 
         elif args.action == "next":
-            tasks = load_tasks(tasks_path)
-            if not tasks:
+            started_task, reclaimed_ids, _tasks = locked_next_task(
+                tasks_path, args.stale_timeout_minutes
+            )
+
+            for rid in reclaimed_ids:
+                BackendObservability.warning(
+                    f"Reclaimed stale task {rid} (exceeded {args.stale_timeout_minutes}m timeout)",
+                    conversation_id=args.trace_id,
+                )
+
+            if not _tasks:
                 BackendObservability.warning(
                     f"No tasks found at {tasks_path}. Run --action generate first.",
                     conversation_id=args.trace_id,
@@ -167,15 +174,7 @@ def main() -> None:
                 print("null")
                 return
 
-            reclaimed_ids = reclaim_stale_tasks(tasks, args.stale_timeout_minutes)
-            for rid in reclaimed_ids:
-                BackendObservability.warning(
-                    f"Reclaimed stale task {rid} (exceeded {args.stale_timeout_minutes}m timeout)",
-                    conversation_id=args.trace_id,
-                )
-
-            next_task = get_next_task(tasks)
-            if next_task is None:
+            if started_task is None:
                 BackendObservability.info(
                     "All tasks are completed or in progress.",
                     conversation_id=args.trace_id,
@@ -183,27 +182,15 @@ def main() -> None:
                 print("null")
                 return
 
-            task_id = next_task["id"]
-            start_task(tasks, task_id)
-            save_tasks(tasks_path, tasks)
-
             BackendObservability.info(
-                f"Started task {task_id}: {next_task['formatted_query']}",
+                f"Started task {started_task['id']}: {started_task['formatted_query']}",
                 conversation_id=args.trace_id,
             )
-            # Re-read the task after mutation to get updated fields
-            for t in tasks:
-                if t["id"] == task_id:
-                    print(json.dumps(t, ensure_ascii=False))
-                    break
+            print(json.dumps(started_task, ensure_ascii=False))
 
         elif args.action == "complete":
             if not args.task_id:
                 raise ValueError("--task-id is required for the complete action")
-
-            tasks = load_tasks(tasks_path)
-            if not tasks:
-                raise ValueError(f"No tasks found at {tasks_path}")
 
             metrics = {
                 "listings_created": args.listings_created,
@@ -212,8 +199,7 @@ def main() -> None:
                 "candidates_rejected": args.candidates_rejected,
                 "candidates_duplicate": args.candidates_duplicate,
             }
-            complete_task(tasks, args.task_id, metrics, MAP_SEARCH_ALLOWED_METRICS)
-            save_tasks(tasks_path, tasks)
+            locked_complete_task(tasks_path, args.task_id, metrics, MAP_SEARCH_ALLOWED_METRICS)
 
             BackendObservability.info(
                 f"Completed task {args.task_id} with metrics: {metrics}",

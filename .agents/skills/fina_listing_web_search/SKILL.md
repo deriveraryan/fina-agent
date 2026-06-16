@@ -43,9 +43,9 @@ Read the JSON output to extract the task parameters:
 If the output is `null`, all tasks are completed. Report this to the user and stop.
 
 ### Step 4: Fetch Existing City Listings
-Execute the following to write all existing listing names and social URLs for the target city into a temporary file (prevents context bloat):
+Execute the following to write all existing listing names and social URLs for the target city into a per-agent temporary file (prevents context bloat and avoids file collisions when running in parallel):
 ```bash
-python3 scripts/agent_fetch_targets.py --type city-listings --city <CITY> --trace-id <CONVERSATION_ID> > tmp/existing_city_listings.json
+python3 scripts/agent_fetch_targets.py --type city-listings --city <CITY> --trace-id <CONVERSATION_ID> > tmp/existing_city_listings_<CONVERSATION_ID>.json
 ```
 
 ### Step 5: Execute Search Rounds
@@ -62,7 +62,7 @@ For each candidate URL discovered in the search results:
 
 **a. Duplicate Check:** Run:
 ```bash
-python3 scripts/agent_check_duplicate.py --file tmp/existing_city_listings.json --name "<Candidate Name>" --url "<Candidate Social URL>"
+python3 scripts/agent_check_duplicate.py --file tmp/existing_city_listings_<CONVERSATION_ID>.json --name "<Candidate Name>" --url "<Candidate Social URL>"
 ```
 If `{"duplicate": true}`, skip it and increment the duplicate counter.
 If the normalized name matches but the URL is new (`{"duplicate": false}`), continue processing so the backend can merge new social information.
@@ -80,9 +80,9 @@ If the normalized name matches but the URL is new (`{"duplicate": false}`), cont
 - `description`: Descriptive page text.
 - `category`: Must exactly match the task's category.
 - `facebookUrl`, `instagramUrl`, `tiktokUrl`: Direct profile page links.
-- `facebookFollowers`, `instagramFollowers`, `tiktokFollowers`: Convert text to integer (e.g. "1.5K" → 1500, "2.4M" → 2400000). For TikTok, save raw HTML to `tmp/tiktok_profile.html` and parse:
+- `facebookFollowers`, `instagramFollowers`, `tiktokFollowers`: Convert text to integer (e.g. "1.5K" → 1500, "2.4M" → 2400000). For TikTok, save raw HTML to `tmp/tiktok_profile_<CONVERSATION_ID>.html` and parse:
   ```bash
-  python3 -c "import sys; from features.scanning.tiktok_parser import parse_tiktok_followers; print(parse_tiktok_followers(sys.stdin.read()))" < tmp/tiktok_profile.html
+  python3 -c "import sys; from features.scanning.tiktok_parser import parse_tiktok_followers; print(parse_tiktok_followers(sys.stdin.read()))" < tmp/tiktok_profile_<CONVERSATION_ID>.html
   ```
 - `status`: `'OPERATIONAL'` (default), `'CLOSED_PERMANENTLY'`, or `'CLOSED_TEMPORARILY'`.
 
@@ -103,9 +103,9 @@ If the normalized name matches but the URL is new (`{"duplicate": false}`), cont
 
 **f. Address Handling:** If neither the social/web page nor Google Maps provided a physical street address, set address to the city name (e.g. `'Sydney, NSW'`) and use city center coordinates. Add `'online-org'` to the tags.
 
-**g. Push to Database:** Write the JSON payload to `tmp/fina_listing_web_search_payload_<timestamp>.json` and execute:
+**g. Push to Database:** Write the JSON payload to `tmp/fina_listing_web_search_payload_<CONVERSATION_ID>_<timestamp>.json` and execute:
 ```bash
-python3 scripts/agent_graphql_push.py --operation CreateListing --variables @tmp/fina_listing_web_search_payload_<timestamp>.json --trace-id <CONVERSATION_ID>
+python3 scripts/agent_graphql_push.py --operation CreateListing --variables @tmp/fina_listing_web_search_payload_<CONVERSATION_ID>_<timestamp>.json --trace-id <CONVERSATION_ID>
 ```
 - **Self-Correction on Failure**: If the push exits with code 1, read the validation error, fix the payload, and retry. If it still fails, increment the error counter and skip.
 - **On Success**: Extract the database ID from stdout and increment the listings created counter. Clean up the temporary payload file.
