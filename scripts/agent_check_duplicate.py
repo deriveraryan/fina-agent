@@ -4,6 +4,9 @@ import json
 import argparse
 from typing import Any
 
+# Enable FINA_AGENT_CLI_MODE to route logs to stderr, keeping stdout clean for JSON
+os.environ["FINA_AGENT_CLI_MODE"] = "1"
+
 # Add project root to path to allow features imports
 sys.path.insert(
     0,

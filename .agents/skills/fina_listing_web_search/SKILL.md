@@ -1,17 +1,17 @@
 ---
 name: fina_listing_web_search
-description: Specialized agent that searches the web and social platforms for new Filipino listing candidates, verifies them via browser, and pushes verified listings to Firebase SQL Connect.
+description: Specialized agent that searches the web, social platforms, and Google Maps (via browser) for new Filipino listing candidates, verifies them via browser, and pushes verified listings to Firebase SQL Connect.
 ---
 
 # fina_listing_web_search
 
-You are the fina_listing_web_search, a specialized agent responsible for discovering new Filipino listings on web and social platforms (Facebook, Instagram, and TikTok) and adding them to the Fina directory database.
+You are the fina_listing_web_search, a specialized agent responsible for discovering new Filipino listings on web and social platforms (Facebook, Instagram, TikTok, and Google Maps) and adding them to the Fina directory database.
 
 ## Constraints
 - **NO TESTING:** You are a data extraction agent. Ignore any global instructions to run test suites (e.g. `python -m unittest` or `flutter test`). Do NOT execute any tests.
 - **NEVER create a script file on the fly.** If a workflow step or CLI execution fails, STOP immediately and report the cause of the error to the user. Do not attempt to self-heal by writing custom python scripts; the official workflow code must be fixed.
 - **DO NOT use the `--generate-embeddings` flag** when running the GraphQL push script (`agent_graphql_push.py`). Vector description embeddings are generated and backfilled asynchronously by the dedicated `fina_listing_embedder` agent.
-- **EXECUTION LIMITS:** Stop searching when you have either found **10 new listings** (created, not merged updates) OR have scanned **10 search result pages**, whichever comes first. All items on the 10th page must be fully evaluated before stopping.
+- **EXECUTION LIMITS:** Stop searching when you have found **30 new listings** (created, not merged updates). Per-round page limits: 10 pages for Rounds 1-3, unlimited scroll for Round 4. If the 30-listing cap is reached mid-round, skip all remaining rounds. All items on the current page must be fully evaluated before stopping.
 
 ## Your Workflow
 
@@ -49,11 +49,30 @@ python3 scripts/agent_fetch_targets.py --type city-listings --city <CITY> --trac
 ```
 
 ### Step 5: Execute Search Rounds
-Using the task's `formatted_query`, execute the web search in three sequential rounds. Track the total number of pages read across all rounds.
+Using the task's `formatted_query`, execute the web search in four sequential rounds. Stop all rounds immediately if 30 new listings have been created.
 
-- **Round 1 (Facebook)**: `<formatted_query> site:facebook.com`
-- **Round 2 (Instagram)**: `<formatted_query> site:instagram.com`
-- **Round 3 (General Web)**: `<formatted_query> -site:facebook.com -site:instagram.com`
+- **Round 1 (Facebook)**: `<formatted_query> site:facebook.com` — scan up to 10 search result pages.
+- **Round 2 (Instagram)**: `<formatted_query> site:instagram.com` — scan up to 10 search result pages.
+- **Round 3 (General Web)**: `<formatted_query> -site:facebook.com -site:instagram.com` — scan up to 10 search result pages.
+- **Round 4 (Google Maps)**: Navigate via Chrome DevTools to `https://www.google.com/maps/search/<URL-encoded formatted_query>`. Scroll through the full results list until exhausted. For each result:
+  1. Click into the result to open the detail panel.
+  2. Extract: business name, full address, phone, website URL, opening hours (visible text only — do NOT read raw HTML).
+  3. Parse lat/lng from the URL bar (pattern: `@<lat>,<lng>,<zoom>z`) using:
+     ```bash
+     python3 -c "from features.scanning.maps_browser_parser import parse_lat_lng_from_url; print(parse_lat_lng_from_url('<URL>'))"
+     ```
+  4. Parse opening hours text using:
+     ```bash
+     python3 -c "from features.scanning.maps_browser_parser import parse_maps_opening_hours; print(parse_maps_opening_hours('<HOURS_TEXT>'))"
+     ```
+  5. Normalize the address using:
+     ```bash
+     python3 -c "from features.scanning.maps_browser_parser import parse_maps_address; print(parse_maps_address('<RAW_ADDRESS>'))"
+     ```
+  6. Navigate back to the results list.
+  7. Increment the `maps_results_scraped` counter.
+
+Round 4 candidates then proceed through Step 6 (a through g), skipping Step 6e as noted below. For `sourceUrl`, use the final Google Maps URL for the candidate (e.g. `https://www.google.com/maps/place/?q=place_id:<ID>`).
 
 *Important*: When visiting independent websites in Round 3, make sure to look for and extract any official TikTok profile URLs in addition to Facebook or Instagram pages.
 
@@ -62,7 +81,7 @@ For each candidate URL discovered in the search results:
 
 **a. Duplicate Check:** Run:
 ```bash
-python3 scripts/agent_check_duplicate.py --file tmp/existing_city_listings_<CONVERSATION_ID>.json --name "<Candidate Name>" --url "<Candidate Social URL>"
+python3 scripts/agent_check_duplicate.py --file tmp/existing_city_listings_<CONVERSATION_ID>.json --name "<Candidate Name>" --url "<Candidate Social URL>" --trace-id <CONVERSATION_ID>
 ```
 If `{"duplicate": true}`, skip it and increment the duplicate counter.
 If the normalized name matches but the URL is new (`{"duplicate": false}`), continue processing so the backend can merge new social information.
@@ -86,14 +105,22 @@ If the normalized name matches but the URL is new (`{"duplicate": false}`), cont
   ```
 - `status`: `'OPERATIONAL'` (default), `'CLOSED_PERMANENTLY'`, or `'CLOSED_TEMPORARILY'`.
 
-**e. Google Maps Enrichment (Best-Effort):** Attempt to enrich the candidate with structured data from Google Maps via Chrome DevTools:
+**e. Google Maps Enrichment (Best-Effort — Rounds 1-3 candidates only):** Skip this step for candidates discovered in Round 4 (Google Maps) — they already have full structured data (address, lat/lng, phone, hours, website). Always add `google-maps` to the tags for Round 4 candidates and proceed directly to Step 6f.
+
+For candidates from Rounds 1-3, attempt to enrich with structured data from Google Maps via Chrome DevTools:
 
 1. **Navigate**: Use the `chrome-devtools` skill to open `https://www.google.com/maps/search/<URL-encoded candidate name>+<city>`.
 2. **Validate match**: Check that the top result's displayed business name closely matches the candidate name (fuzzy match). If no close match is found, skip enrichment and proceed to step 6f with the data already extracted.
 3. **Extract fields** (fill only if the current value is empty/null):
-   - `latitude` / `longitude`: Parse from the URL bar after the page loads (pattern: `@<lat>,<lng>,<zoom>z`).
+   - `latitude` / `longitude`: Parse from the URL bar after the page loads using:
+     ```bash
+     python3 -c "from features.scanning.maps_browser_parser import parse_lat_lng_from_url; print(parse_lat_lng_from_url('<URL>'))"
+     ```
    - `address`: Extract the full street address from the business info panel.
-   - `operatingHours`: Extract the day-by-day opening hours from the hours section.
+   - `operatingHours`: Extract the day-by-day opening hours from the hours section using:
+     ```bash
+     python3 -c "from features.scanning.maps_browser_parser import parse_maps_opening_hours; print(parse_maps_opening_hours('<HOURS_TEXT>'))"
+     ```
    - `phone`: Extract the phone number from the business info panel.
    - `sourceUrl`: Construct from the Place ID or final Maps URL (e.g. `https://www.google.com/maps/place/?q=place_id:<ID>`).
    - `website`: Extract only if no website was found in prior steps.
@@ -111,9 +138,9 @@ python3 scripts/agent_graphql_push.py --operation CreateListing --variables @tmp
 - **On Success**: Extract the database ID from stdout and increment the listings created counter. Clean up the temporary payload file.
 
 ### Step 7: Complete the Task
-After hitting the execution limits (10 new listings or 10 pages scanned) or exhausting search results, mark the task as completed with accumulated metrics:
+After hitting the execution limits (30 new listings or per-round page caps) or exhausting search results, mark the task as completed with accumulated metrics:
 ```bash
-python3 scripts/agent_web_search_tasks.py --action complete --city <CITY> --task-id <TASK_ID> --listings-created <N> --pages-searched <N> --candidates-evaluated <N> --candidates-rejected <N> --candidates-duplicate <N> --trace-id <CONVERSATION_ID>
+python3 scripts/agent_web_search_tasks.py --action complete --city <CITY> --task-id <TASK_ID> --listings-created <N> --pages-searched <N> --candidates-evaluated <N> --candidates-rejected <N> --candidates-duplicate <N> --maps-results-scraped <N> --trace-id <CONVERSATION_ID>
 ```
 
 ### Step 8: Stop Execution

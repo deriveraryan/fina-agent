@@ -105,7 +105,7 @@ async def execute_graphql_operation(
         "impersonate": {
             "authClaims": {
                 "sub": "local-agent-admin",
-                "email": "deriveraryan@gmail.com"
+                "email": os.getenv("AGENT_IMPERSONATE_EMAIL", "deriveraryan@gmail.com")
             }
         }
     }

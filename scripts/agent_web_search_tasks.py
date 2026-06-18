@@ -89,6 +89,7 @@ def main() -> None:
     parser.add_argument("--candidates-evaluated", type=int, default=0, help="Number of candidates evaluated.")
     parser.add_argument("--candidates-rejected", type=int, default=0, help="Number of candidates rejected.")
     parser.add_argument("--candidates-duplicate", type=int, default=0, help="Number of duplicate candidates found.")
+    parser.add_argument("--maps-results-scraped", type=int, default=0, help="Number of Google Maps browser results scraped in Round 4.")
 
     args = parser.parse_args()
 
@@ -190,6 +191,7 @@ def main() -> None:
                 "candidates_evaluated": args.candidates_evaluated,
                 "candidates_rejected": args.candidates_rejected,
                 "candidates_duplicate": args.candidates_duplicate,
+                "maps_results_scraped": args.maps_results_scraped,
             }
             locked_complete_task(tasks_path, args.task_id, metrics, WEB_SEARCH_ALLOWED_METRICS)
 

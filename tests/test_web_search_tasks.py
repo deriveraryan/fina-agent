@@ -125,7 +125,7 @@ class TestGenerateTasks(unittest.TestCase):
             "template_index", "template", "formatted_query", "status",
             "started_at", "completed_at", "listings_created",
             "pages_searched", "candidates_evaluated",
-            "candidates_rejected", "candidates_duplicate", "errors",
+            "candidates_rejected", "candidates_duplicate", "maps_results_scraped", "errors",
         }
         for task in tasks:
             self.assertEqual(set(task.keys()), required_fields)
@@ -139,6 +139,7 @@ class TestGenerateTasks(unittest.TestCase):
             self.assertEqual(task["candidates_evaluated"], 0)
             self.assertEqual(task["candidates_rejected"], 0)
             self.assertEqual(task["candidates_duplicate"], 0)
+            self.assertEqual(task["maps_results_scraped"], 0)
             self.assertEqual(task["errors"], [])
             self.assertIsNone(task["started_at"])
             self.assertIsNone(task["completed_at"])

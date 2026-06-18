@@ -14,20 +14,20 @@ from typing import Any, Dict, List, Set, Sequence
 WEB_SEARCH_ALLOWED_METRICS: Set[str] = {
     "listings_created", "pages_searched",
     "candidates_evaluated", "candidates_rejected",
-    "candidates_duplicate",
+    "candidates_duplicate", "maps_results_scraped",
 }
 
 WEB_SEARCH_METRIC_FIELDS: Sequence[str] = (
     "listings_created", "pages_searched",
     "candidates_evaluated", "candidates_rejected",
-    "candidates_duplicate",
+    "candidates_duplicate", "maps_results_scraped",
 )
 
 WEB_SEARCH_MUTABLE_FIELDS: Sequence[str] = (
     "status", "started_at", "completed_at",
     "listings_created", "pages_searched",
     "candidates_evaluated", "candidates_rejected",
-    "candidates_duplicate", "errors",
+    "candidates_duplicate", "maps_results_scraped", "errors",
 )
 
 
@@ -170,5 +170,6 @@ def _build_task(
         "candidates_evaluated": 0,
         "candidates_rejected": 0,
         "candidates_duplicate": 0,
+        "maps_results_scraped": 0,
         "errors": [],
     }

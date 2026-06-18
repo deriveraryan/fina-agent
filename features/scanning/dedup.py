@@ -75,6 +75,8 @@ def deduplicate_batch(listings: list[dict[str, Any]]) -> list[dict[str, Any]]:
             deduped[key] = listing
             
     return list(deduped.values())
+
+
 async def check_duplicate(
     name: str,
     city: str,

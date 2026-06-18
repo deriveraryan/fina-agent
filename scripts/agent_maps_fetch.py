@@ -24,20 +24,12 @@ sys.path.insert(
 )
 
 from features.shared.observability import BackendObservability
+from features.scanning.maps_browser_parser import DAYS_MAP
 
 
 
 def _parse_opening_hours(weekday_descriptions: List[str]) -> Optional[str]:
     """Parses standard Google weekday descriptions array to structured operatingHours JSON string."""
-    days_map = {
-        "monday": "mon",
-        "tuesday": "tue",
-        "wednesday": "wed",
-        "thursday": "thu",
-        "friday": "fri",
-        "saturday": "sat",
-        "sunday": "sun",
-    }
     result = {}
     for desc in weekday_descriptions:
         if ":" not in desc:
@@ -46,7 +38,7 @@ def _parse_opening_hours(weekday_descriptions: List[str]) -> Optional[str]:
         day = parts[0].strip().lower()
         hours = parts[1].strip()
 
-        target_day = days_map.get(day)
+        target_day = DAYS_MAP.get(day)
         if target_day:
             result[target_day] = hours
 

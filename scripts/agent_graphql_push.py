@@ -1,6 +1,7 @@
 import os
 import sys
 import json
+import hashlib
 import argparse
 import asyncio
 
@@ -136,7 +137,6 @@ async def process_single_item(operation: str, item_dict: dict, trace_id: str, ge
             if isinstance(r, dict):
                 reviews_to_push.append(r)
             elif isinstance(r, str):
-                import hashlib
                 h = hashlib.md5(r.encode()).hexdigest()
                 reviews_to_push.append({
                     "externalSourceId": f"hash_{h}",

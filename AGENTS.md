@@ -42,24 +42,24 @@ Here is the registry of the 6 specialized Antigravity subagents:
     2. Retrieves the next pending task via `--action next`, which uses `fcntl.flock()` to atomically claim the task under an exclusive file lock, preventing concurrent agents from picking the same task. Returns the task's pre-formatted search query, category, and location.
     3. Runs `scripts/agent_fetch_targets.py --type city-listings --city <CITY> --trace-id <CONVERSATION_ID> > tmp/existing_city_listings_<CONVERSATION_ID>.json` to write existing city context to a per-agent temporary file.
     4. Calls `scripts/agent_maps_fetch.py --query "<formatted_query>" --city <CITY> --category <CATEGORY> --trace-id <CONVERSATION_ID>` to make a single Google Places (New) Text Search API call.
-    5. Checks for duplicates by running `python3 scripts/agent_check_duplicate.py --file tmp/existing_city_listings_<CONVERSATION_ID>.json --name "<NAME>" --url "<URL>"`.
+    5. Checks for duplicates by running `python3 scripts/agent_check_duplicate.py --file tmp/existing_city_listings_<CONVERSATION_ID>.json --name "<NAME>" --url "<URL>" --trace-id <CONVERSATION_ID>`.
     6. Evaluates name and description context internally to verify authentic Filipino affiliation.
     7. Pushes verified listings using the `CreateListing` mutation (without `--generate-embeddings`) with self-correction on validation failure.
     8. Marks the task as `COMPLETED` with metrics via `--action complete --task-id <ID> --listings-created N --places-fetched N --candidates-evaluated N --candidates-rejected N --candidates-duplicate N --trace-id <CONVERSATION_ID>`. Completion also uses `fcntl.flock()` to safely merge metrics without clobbering other agents' state.
 
 ### 2. `fina_listing_web_search`
-*   **Role**: Discovers new listing candidates on Facebook, Instagram, TikTok, and web platforms. Each run is scoped to a single task (1 location × 1 category × 1 search template) with a limit of 10 new listings or 10 search result pages.
+*   **Role**: Discovers new listing candidates on Facebook, Instagram, TikTok, web platforms, and Google Maps (via browser). Each run is scoped to a single task (1 location × 1 category × 1 search template) with a limit of 30 new listings. Per-round page limits: 10 pages for social/web rounds, unlimited scroll for Maps.
 *   **CLI Trigger**: `python3 scripts/agent_web_search_tasks.py --action next --city <CITY> --trace-id <CONVERSATION_ID>`
 *   **Logic**:
     1. Generates all task permutations for a city (idempotent) via `scripts/agent_web_search_tasks.py --action generate --city <CITY>`, producing `data/listing_web_search_tasks_{city}.json` with all (category × template × location) combinations ordered by category, template index, and city-level first then suburbs from `data/top_suburbs_per_city.json`. Categories with `"cityOnly": true` in `data/categories.json` (e.g. `GOVERNMENT`) produce only city-level tasks, skipping suburb permutations. By default, skips if the file already exists; pass `--force` to regenerate while merging existing task state (status, metrics) into the new file via atomic replacement.
     2. Retrieves the next pending task via `--action next`, which uses `fcntl.flock()` to atomically claim the task under an exclusive file lock, preventing concurrent agents from picking the same task. Returns the task's pre-formatted search query, category, and location.
     3. Runs `scripts/agent_fetch_targets.py --type city-listings --city <CITY> --trace-id <CONVERSATION_ID> > tmp/existing_city_listings_<CONVERSATION_ID>.json` to write existing city context to a per-agent temporary file.
-    4. Uses native web search with site-specific queries in three sequential rounds (Facebook, Instagram, and General Web) using the task's `formatted_query`.
-    5. Checks for duplicates by running `python3 scripts/agent_check_duplicate.py --file tmp/existing_city_listings_<CONVERSATION_ID>.json --name "<NAME>" --url "<URL>"`.
+    4. Uses native web search with site-specific queries in four sequential rounds (Facebook, Instagram, General Web, and Google Maps browser) using the task's `formatted_query`. Rounds 1-3 scan up to 10 search result pages each. Round 4 navigates to Google Maps via Chrome DevTools (`https://www.google.com/maps/search/<query>`) and scrolls through the full results list, clicking into each result to extract business name, address, lat/lng (parsed from URL via `maps_browser_parser.parse_lat_lng_from_url()`), phone, website, and opening hours (parsed via `maps_browser_parser.parse_maps_opening_hours()`). Candidates from Round 4 skip the Step 6e Maps enrichment (already Maps-sourced) and receive the `google-maps` tag.
+    5. Checks for duplicates by running `python3 scripts/agent_check_duplicate.py --file tmp/existing_city_listings_<CONVERSATION_ID>.json --name "<NAME>" --url "<URL>" --trace-id <CONVERSATION_ID>`.
     6. Navigates to candidate pages via Chrome DevTools, extracting only visible text/selectors to prevent raw HTML bloat.
-    7. Navigates to Google Maps via Chrome DevTools to enrich verified candidates with latitude/longitude (parsed from URL bar), address, opening hours, phone, Place ID, and website — filling only empty fields. Adds a `google-maps` tag when enrichment succeeds. Proceeds to push regardless of Maps enrichment outcome.
+    7. For Rounds 1-3 candidates, navigates to Google Maps via Chrome DevTools to enrich verified candidates with latitude/longitude (parsed from URL bar), address, opening hours, phone, Place ID, and website — filling only empty fields. Adds a `google-maps` tag when enrichment succeeds. Proceeds to push regardless of Maps enrichment outcome.
     8. Creates verified listings via `agent_graphql_push.py --operation CreateListing` (without `--generate-embeddings`, including `tiktokUrl` and `tiktokFollowers`) with self-correction on validation failure.
-    9. Marks the task as `COMPLETED` with metrics via `--action complete --task-id <ID> --listings-created N --pages-searched N --candidates-evaluated N --candidates-rejected N --candidates-duplicate N --trace-id <CONVERSATION_ID>`. Completion also uses `fcntl.flock()` to safely merge metrics without clobbering other agents' state.
+    9. Marks the task as `COMPLETED` with metrics via `--action complete --task-id <ID> --listings-created N --pages-searched N --candidates-evaluated N --candidates-rejected N --candidates-duplicate N --maps-results-scraped N --trace-id <CONVERSATION_ID>`. Completion also uses `fcntl.flock()` to safely merge metrics without clobbering other agents' state.
 
 ### 3. `fina_enrich_listing_socials_finder`
 *   **Role**: Enriches existing database listings with missing Facebook, Instagram, and TikTok URLs. Strictly targets a single city per run.
@@ -144,7 +144,7 @@ pip install -r requirements.txt
   python3 scripts/agent_web_search_tasks.py --action next --city <CITY> --trace-id <CONVERSATION_ID>
 
   # Mark task as completed with metrics
-  python3 scripts/agent_web_search_tasks.py --action complete --city <CITY> --task-id <ID> --listings-created N --pages-searched N --candidates-evaluated N --candidates-rejected N --candidates-duplicate N --trace-id <CONVERSATION_ID>
+  python3 scripts/agent_web_search_tasks.py --action complete --city <CITY> --task-id <ID> --listings-created N --pages-searched N --candidates-evaluated N --candidates-rejected N --candidates-duplicate N --maps-results-scraped N --trace-id <CONVERSATION_ID>
 
   # View aggregate progress
   python3 scripts/agent_web_search_tasks.py --action summary --city <CITY> --trace-id <CONVERSATION_ID>
