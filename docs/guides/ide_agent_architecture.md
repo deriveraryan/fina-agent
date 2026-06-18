@@ -49,7 +49,7 @@ flowchart TD
     InvokeListingWebSearch --> GenerateTasks["Execute: python3 scripts/agent_web_search_tasks.py<br>--action generate --city C (idempotent)"]
     GenerateTasks --> GetNextTask["Execute: python3 scripts/agent_web_search_tasks.py<br>--action next --city C"]
     GetNextTask --> FetchCityListings["Execute: python3 scripts/agent_fetch_targets.py --type city-listings<br>--city C > tmp/existing_city_listings.json"]
-    FetchCityListings --> NativeWebSearch["Subagent uses Native Web Search<br>(3 rounds: Facebook, Instagram, General Web)<br>using task's formatted_query"]
+    FetchCityListings --> NativeWebSearch["Subagent uses Native Web Search<br>(4 rounds: Facebook, Instagram, General Web, Google Maps)<br>using task's formatted_query"]
     NativeWebSearch --> FilterKnown["Filters out existing URLs/Names by<br>inspecting tmp/existing_city_listings.json on disk"]
     
     FilterKnown --> BrowserVerify["For each NEW candidate URL:<br>Subagent uses chrome-devtools to inspect page<br>(visible text/selectors only)"]
@@ -65,7 +65,7 @@ flowchart TD
     DBTransactionListing --> CheckHasMoreSocial
     BrowserVerify -->|Not Affiliated| CheckHasMoreSocial
     
-    CheckHasMoreSocial{"Found 10 new listings<br>OR scanned 10 pages?"}
+    CheckHasMoreSocial{"Found 30 new listings<br>OR finished all rounds?"}
     CheckHasMoreSocial -->|Yes| NativeWebSearch
     CheckHasMoreSocial -->|Yes| CompleteTask["Execute: python3 scripts/agent_web_search_tasks.py<br>--action complete --task-id ID"]
     CompleteTask --> FinishSocial(["Task Completed — Next run picks up next task"])
@@ -172,10 +172,10 @@ This subagent automates business research on Google Maps using a task-based stat
 *   **Omission of Embeddings Flag**: Does NOT use the `--generate-embeddings` flag when pushing listings via the GraphQL client. Listing description vector embeddings are backfilled asynchronously by the dedicated `fina_listing_embedder` agent.
 
 ### 2. The `fina_listing_web_search` Subagent (Community Scanner)
-This subagent actively searches Facebook, Instagram, and TikTok for Filipino listings using a deterministic task-based state machine:
-*   **Task-Based Execution**: Each run is scoped to a single task (1 location × 1 category × 1 search template) with a limit of 10 new listings or 10 search result pages scanned. Tasks are managed via `scripts/agent_web_search_tasks.py`, which generates all permutations for a city (`data/listing_web_search_tasks_{city}.json`) and provides `next`/`complete` actions for state transitions (PENDING → IN_PROGRESS → COMPLETED). Categories with `"cityOnly": true` in `data/categories.json` (e.g. `GOVERNMENT`) produce only city-level tasks, skipping suburb permutations. By default, generation skips if the file already exists; pass `--force` to regenerate while merging existing task state (status, metrics) into the new file via atomic replacement. Stale `IN_PROGRESS` tasks (exceeding `--stale-timeout-minutes`, default 60) are automatically reclaimed to `PENDING` during `--action next`.
+This subagent actively searches Facebook, Instagram, TikTok, general web platforms, and Google Maps for Filipino listings using a deterministic task-based state machine:
+*   **Task-Based Execution**: Each run is scoped to a single task (1 location × 1 category × 1 search template) with a limit of 30 new listings. Tasks are managed via `scripts/agent_web_search_tasks.py`, which generates all permutations for a city (`data/listing_web_search_tasks_{city}.json`) and provides `next`/`complete` actions for state transitions (PENDING → IN_PROGRESS → COMPLETED). Categories with `"cityOnly": true` in `data/categories.json` (e.g. `GOVERNMENT`) produce only city-level tasks, skipping suburb permutations. By default, generation skips if the file already exists; pass `--force` to regenerate while merging existing task state (status, metrics) into the new file via atomic replacement. Stale `IN_PROGRESS` tasks (exceeding `--stale-timeout-minutes`, default 60) are automatically reclaimed to `PENDING` during `--action next`.
 *   **Context Setup (No-Bloat)**: Executes `scripts/agent_fetch_targets.py --type city-listings --city C > tmp/existing_city_listings.json` to write the deduplication context directly to disk. The agent checks if a candidate exists by searching the file directly on disk, avoiding terminal stdout dumps.
-*   **Web Discovery**: Uses the task's pre-formatted search query to run three sequential search rounds (Facebook, Instagram, and General Web). Each task's query is pre-generated from the `searchTemplates` in `data/categories.json` combined with the location (city or suburb from `data/top_suburbs_per_city.json`).
+*   **Web Discovery**: Uses the task's pre-formatted search query to run four sequential search rounds (Facebook, Instagram, General Web, and Google Maps browser). Each task's query is pre-generated from the `searchTemplates` in `data/categories.json` combined with the location (city or suburb from `data/top_suburbs_per_city.json`).
 *   **Browser Verification (No-Bloat)**: The subagent uses the `chrome-devtools` skill to inspect candidate pages, extracting only visible text or target DOM selectors (such as the follower count element or the bio description), rather than loading full raw page HTML into prompt history.
 *   **Category Standardization**: The subagent is instructed to view [categories.json](file:///Users/ryan/.gemini/antigravity/scratch/fina-agent/data/categories.json) to ensure extracted categories map precisely to canonical definitions before pushing.
 *   **Google Maps Enrichment**: Navigates to Google Maps via Chrome DevTools to enrich verified candidates with latitude/longitude (parsed from URL bar), address, opening hours, phone, Place ID, and website — filling only empty fields. Adds a `google-maps` tag when enrichment succeeds. Proceeds to push regardless of Maps enrichment outcome.

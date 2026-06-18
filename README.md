@@ -97,7 +97,7 @@ You can execute the underlying discovery and database push scripts directly in y
     python3 scripts/agent_web_search_tasks.py --action next --city SYDNEY --trace-id <CONVERSATION_ID>
 
     # Mark a task as completed with metrics
-    python3 scripts/agent_web_search_tasks.py --action complete --city SYDNEY --task-id sydney__RESTAURANT__0__sydney --listings-created 5 --pages-searched 3 --candidates-evaluated 8 --candidates-rejected 1 --candidates-duplicate 2 --trace-id <CONVERSATION_ID>
+    python3 scripts/agent_web_search_tasks.py --action complete --city SYDNEY --task-id sydney__RESTAURANT__0__sydney --listings-created 5 --pages-searched 3 --candidates-evaluated 8 --candidates-rejected 1 --candidates-duplicate 2 --maps-results-scraped 15 --trace-id <CONVERSATION_ID>
 
     # View aggregate progress
     python3 scripts/agent_web_search_tasks.py --action summary --city SYDNEY --trace-id <CONVERSATION_ID>
