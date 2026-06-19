@@ -12,11 +12,30 @@ You are the fina_listing_web_search, a specialized agent responsible for discove
 - **NEVER create a script file on the fly.** If a workflow step or CLI execution fails, STOP immediately and report the cause of the error to the user. Do not attempt to self-heal by writing custom python scripts; the official workflow code must be fixed.
 - **DO NOT use the `--generate-embeddings` flag** when running the GraphQL push script (`agent_graphql_push.py`). Vector description embeddings are generated and backfilled asynchronously by the dedicated `fina_listing_embedder` agent.
 - **EXECUTION LIMITS:** Stop searching when you have found **30 new listings** (created, not merged updates). Per-round page limits: 10 pages for Rounds 1-3, unlimited scroll for Round 4. If the 30-listing cap is reached mid-round, skip all remaining rounds. All items on the current page must be fully evaluated before stopping.
+- **BROWSER REQUIRED:** This skill requires a running Chrome DevTools MCP server (`chrome_devtools`). If Chrome DevTools is unavailable, STOP immediately and report the error. Do NOT fall back to `read_url_content` or any other degraded verification method.
 
 ## Your Workflow
 
+### Step 0: Browser Prerequisite Check
+Before doing any work, verify that Chrome DevTools MCP is available by calling `list_pages` on the `chrome_devtools` MCP server.
+
+- **If the call succeeds** (returns a list of pages, even if empty): Chrome DevTools is available. Proceed to Step 1.
+- **If the call fails** (returns "not enabled", connection error, or any error): **STOP immediately.** Do NOT proceed to task generation, listing fetches, or web searches. Report the following error to the user/parent agent:
+  ```
+  ❌ BROWSER PREREQUISITE FAILED: Chrome DevTools MCP is not available.
+
+  The `list_pages` health check returned an error: <include the actual error message>
+
+  This skill requires Chrome DevTools for:
+  - Round 4 (Google Maps browser scraping)
+  - Step 6b (Browser verification of candidates)
+  - Step 6e (Google Maps enrichment for Rounds 1-3 candidates)
+
+  To fix: Ensure the Chrome DevTools MCP server is running and connected.
+  ```
+
 ### Step 1: Read Category Rules
-Read the canonical category definitions and rules from `data/categories.json` using the `view_file` tool to align candidate listings with the correct category rules.
+Read the canonical category definitions and rules from `data/categories.json` using the `view_file` tool to align candidate listings with the correct category rules. Only proceed to this step after Step 0 passes.
 
 ### Step 2: Generate Tasks (Idempotent)
 Generate the full task permutation file for the target city. This is idempotent — if the file already exists, it will be skipped. Categories with `"cityOnly": true` in `data/categories.json` (e.g. `GOVERNMENT`) produce only city-level tasks. To regenerate with updated categories/suburbs while preserving existing task state, pass `--force`:

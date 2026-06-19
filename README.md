@@ -42,6 +42,45 @@ GOOGLE_MAPS_API_KEY="YOUR_GOOGLE_MAPS_API_KEY"
 GCP_PROJECT="fina-au"
 ```
 
+### 3. Chrome DevTools MCP Configuration
+The `fina_listing_web_search` and `fina_enrich_listing_socials_finder` skills require a running Chrome DevTools MCP server (`chrome_devtools`). To configure the server, add it to the `"mcpServers"` object in either:
+- **Global Config**: `~/.gemini/config/mcp_config.json`
+- **Workspace Config**: `.gemini/antigravity/mcp_config.json`
+
+Choose one of the following setups:
+
+#### Option A: Auto-Launch Mode (Recommended)
+The MCP server automatically launches and manages its own headless Google Chrome instance via Puppeteer. No manual Chrome setup is needed:
+```json
+"chrome_devtools": {
+  "command": "npx",
+  "args": [
+    "-y",
+    "chrome-devtools-mcp@latest"
+  ]
+}
+```
+
+#### Option B: Active Browser Mode (Connect to Local Session)
+To let the agent inspect or interact with your active, logged-in Google Chrome window:
+1. Launch Google Chrome with remote debugging:
+   ```bash
+   /Applications/Google\ Chrome.app/Contents/MacOS/Google\ Chrome --remote-debugging-port=9222
+   ```
+2. Navigate to `chrome://inspect/#remote-debugging` in Chrome and verify **"Discover network targets"** is checked.
+3. Configure the MCP server to connect to port 9222:
+   ```json
+   "chrome_devtools": {
+     "command": "npx",
+     "args": [
+       "-y",
+       "chrome-devtools-mcp@latest",
+       "--browserUrl",
+       "http://127.0.0.1:9222"
+     ]
+   }
+   ```
+
 ---
 
 ## 🚀 Run & Use Guide
