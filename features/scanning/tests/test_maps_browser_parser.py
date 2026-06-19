@@ -53,6 +53,14 @@ class TestParseLatLngFromUrl(unittest.TestCase):
         self.assertAlmostEqual(result[0], -33.8688, places=4)
         self.assertAlmostEqual(result[1], 151.2093, places=4)
 
+    def test_url_with_3d_4d_data_parameter(self) -> None:
+        """Should parse exact place coordinates from !3d and !4d parameters in URL."""
+        url = "https://www.google.com/maps/place/Casa+Filipina+Bakeshop+%26+Restaurant/@-33.9988874,150.5621008,11z/data=!4m11!1m3!2m2!1sFilipino+restaurant+near+Hoxton+Park,+SYDNEY!6e5!3m6!1s0x6b12eb9ce74e7bab:0x935797944b5a9659!8m2!3d-33.9988874!4d150.8669714"
+        result = parse_lat_lng_from_url(url)
+        self.assertIsNotNone(result)
+        self.assertAlmostEqual(result[0], -33.9988874, places=6)
+        self.assertAlmostEqual(result[1], 150.8669714, places=6)
+
     def test_no_match_returns_none(self) -> None:
         self.assertIsNone(parse_lat_lng_from_url("https://www.google.com/maps"))
         self.assertIsNone(parse_lat_lng_from_url("https://www.google.com"))
@@ -168,6 +176,12 @@ class TestParseMapsAddress(unittest.TestCase):
         self.assertEqual(
             parse_maps_address("123 George St, Sydney NSW 2000, Australia"),
             "123 George St, Sydney NSW 2000, Australia",
+        )
+
+    def test_strips_unicode_icons(self) -> None:
+        self.assertEqual(
+            parse_maps_address("54 Oxford Rd, Ingleburn NSW 2565"),
+            "54 Oxford Rd, Ingleburn NSW 2565",
         )
 
     def test_strips_whitespace(self) -> None:

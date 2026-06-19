@@ -34,12 +34,11 @@ DAYS_MAP = {
 def parse_lat_lng_from_url(url: Optional[str]) -> Optional[Tuple[float, float]]:
     """Extract latitude and longitude from a Google Maps URL.
 
-    Parses the @lat,lng,zoomz pattern commonly found in Google Maps
-    place and search URLs after navigation.
+    Parses the @lat,lng,zoomz pattern or the !3dlat!4dlng data pattern
+    commonly found in Google Maps place and search URLs after navigation.
 
     Args:
-        url: A Google Maps URL string (e.g.,
-            "https://www.google.com/maps/place/Test/@-33.8688,151.2093,17z").
+        url: A Google Maps URL string.
 
     Returns:
         A (latitude, longitude) tuple of floats, or None if the pattern
@@ -48,6 +47,15 @@ def parse_lat_lng_from_url(url: Optional[str]) -> Optional[Tuple[float, float]]:
     if not url:
         return None
 
+    # First try parsing actual place coordinates from data parameter if present
+    match_data = re.search(r"!3d(-?\d+\.?\d*)!4d(-?\d+\.?\d*)", url)
+    if match_data:
+        try:
+            return (float(match_data.group(1)), float(match_data.group(2)))
+        except (ValueError, TypeError):
+            pass
+
+    # Fallback to the map viewport center coordinates
     match = _LAT_LNG_PATTERN.search(url)
     if not match:
         return None
@@ -110,6 +118,7 @@ def parse_maps_address(raw_address: Optional[str]) -> str:
 
     Strips leading/trailing whitespace, replaces newlines with comma
     separators, and collapses multiple internal spaces into single spaces.
+    Also strips Google Maps private use area icon characters.
 
     Args:
         raw_address: Raw address text from the Maps business info panel.
@@ -121,8 +130,11 @@ def parse_maps_address(raw_address: Optional[str]) -> str:
     if not raw_address:
         return ""
 
+    # Strip Google Maps icon characters (Private Use Area)
+    cleaned = re.sub(r"[\ue000-\uf8ff]", "", raw_address)
+
     # Replace newlines with comma-space for multi-line addresses
-    cleaned = raw_address.replace("\n", ", ")
+    cleaned = cleaned.replace("\n", ", ")
 
     # Collapse multiple spaces into single space
     cleaned = re.sub(r"\s+", " ", cleaned)
