@@ -70,7 +70,17 @@ source ~/.zshrc
 
 ---
 
-### Step 6: Install Google Cloud SDK
+### Step 6: Install Node.js (for Chrome DevTools MCP)
+
+Node.js (which includes `npm` and `npx`) is required to run the Chrome DevTools MCP server (`chrome_devtools`), which is used by the search and enrichment subagents.
+
+```bash
+brew install node
+```
+
+---
+
+### Step 7: Install Google Cloud SDK
 
 Required to set up credentials for connecting to the database.
 
@@ -87,7 +97,7 @@ source ~/.zshrc
 
 ---
 
-### Step 7: Install GitHub CLI & Authenticate
+### Step 8: Install GitHub CLI & Authenticate
 
 ```bash
 brew install gh
@@ -105,7 +115,7 @@ git config --global user.email "your-email@example.com"
 
 ## Phase 3 — Google Antigravity 2.0
 
-### Step 8: Install the Antigravity CLI (`agy`)
+### Step 9: Install the Antigravity CLI (`agy`)
 
 ```bash
 curl -fsSL https://antigravity.google/cli/install.sh | bash
@@ -117,7 +127,7 @@ echo 'export PATH="$HOME/.local/bin:$PATH"' >> ~/.zshrc
 source ~/.zshrc
 ```
 
-### Step 9: Authenticate Antigravity
+### Step 10: Authenticate Antigravity
 
 Run `agy` to trigger Google account OAuth via browser:
 ```bash
@@ -129,7 +139,7 @@ Authenticate and then exit with `/exit` or `Ctrl+C`.
 
 ## Phase 4 — Repository Setup & Configuration
 
-### Step 10: Clone the Repository
+### Step 11: Clone the Repository
 
 ```bash
 mkdir -p ~/src && cd ~/src
@@ -138,7 +148,7 @@ gh repo clone deriveraryan/fina-agent
 
 ---
 
-### Step 11: Set Up Python Virtual Environment & Playwright
+### Step 12: Set Up Python Virtual Environment & Playwright
 
 ```bash
 cd ~/src/fina-agent
@@ -161,7 +171,7 @@ crawl4ai-doctor
 
 ---
 
-### Step 12: Authenticate Google Cloud (ADC)
+### Step 13: Authenticate Google Cloud (ADC)
 
 This grants the local Python scripts OAuth2 credentials to call the Fina PostgreSQL GraphQL endpoints:
 
@@ -173,7 +183,7 @@ gcloud auth application-default login
 
 ---
 
-### Step 13: Create Environment Configuration
+### Step 14: Create Environment Configuration
 
 ```bash
 cd ~/src/fina-agent
@@ -205,7 +215,7 @@ SMTP_PASSWORD=<your-app-password>
 
 ## Phase 5 — Initialize Workspace & Verify
 
-### Step 14: Launch Antigravity TUI
+### Step 15: Launch Antigravity TUI
 
 Initialize the workspace and inspect loaded skills:
 ```bash
@@ -220,7 +230,7 @@ Verify that the `fina-agent` skills and configs are loaded successfully. Exit wi
 
 ---
 
-### Step 15: Run Offline Unit Tests
+### Step 16: Run Offline Unit Tests
 
 Validate that the setup is functional by running the test suite:
 
