@@ -57,7 +57,8 @@ Read the JSON output to extract the task parameters:
 - `location_type`: Either `"city"` or `"suburb"`.
 - `category`: The canonical category (e.g. `RESTAURANT`).
 - `template`: The raw search template string.
-- `formatted_query`: The pre-formatted search query to use.
+- `formatted_query`: The pre-formatted search query to use (Rounds 1-3).
+- `maps_formatted_query`: The pre-formatted Maps query for Round 4. For suburb-level tasks, swaps `"in"` → `"near"` to widen the geographic search radius. For city-level tasks, identical to `formatted_query`.
 
 If the output is `null`, all tasks are completed. Report this to the user and stop.
 
@@ -68,12 +69,12 @@ python3 scripts/agent_fetch_targets.py --type city-listings --city <CITY> --trac
 ```
 
 ### Step 5: Execute Search Rounds
-Using the task's `formatted_query`, execute the web search in four sequential rounds. Stop all rounds immediately if 30 new listings have been created.
+Execute the web search in four sequential rounds. Rounds 1-3 use `formatted_query`; Round 4 uses `maps_formatted_query`. Stop all rounds immediately if 30 new listings have been created.
 
 - **Round 1 (Facebook)**: `<formatted_query> site:facebook.com` — scan up to 10 search result pages.
 - **Round 2 (Instagram)**: `<formatted_query> site:instagram.com` — scan up to 10 search result pages.
 - **Round 3 (General Web)**: `<formatted_query> -site:facebook.com -site:instagram.com` — scan up to 10 search result pages.
-- **Round 4 (Google Maps)**: Navigate via Chrome DevTools to `https://www.google.com/maps/search/<URL-encoded formatted_query>`. Scroll through the full results list until exhausted. For each result:
+- **Round 4 (Google Maps)**: Navigate via Chrome DevTools to `https://www.google.com/maps/search/<URL-encoded maps_formatted_query>`. Scroll through the full results list until exhausted. For each result:
   1. Click into the result to open the detail panel.
   2. Extract: business name, full address, phone, website URL, opening hours (visible text only — do NOT read raw HTML).
   3. Parse lat/lng from the URL bar (pattern: `@<lat>,<lng>,<zoom>z`) using:

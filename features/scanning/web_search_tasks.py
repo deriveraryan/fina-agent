@@ -130,6 +130,11 @@ def _build_task(
     replaced by the city name. For suburb tasks, the query is formatted as
     the raw template text (without {city} substitution) + ' in {suburb}, {city}'.
 
+    A separate ``maps_formatted_query`` field is generated for Google Maps
+    Round 4 browser scraping. For suburb-level tasks, it swaps ``' in '``
+    with ``' near '`` to widen the geographic search radius. For city-level
+    tasks, it is identical to ``formatted_query``.
+
     Args:
         city_key: Lowercased city identifier for the task ID.
         city_display: Display-cased city name.
@@ -140,18 +145,22 @@ def _build_task(
         location_type: Either "city" or "suburb".
 
     Returns:
-        A task dictionary with all tracking fields initialized.
+        A task dictionary with all tracking fields initialized, including
+        ``maps_formatted_query`` for Round 4 Maps browser queries.
     """
     location_id = location.lower().strip().replace(" ", "_")
     task_id = f"{city_key}__{category}__{template_index}__{location_id}"
 
     if location_type == "city":
         formatted_query = template.replace("{city}", city_display)
+        maps_formatted_query = formatted_query
     else:
         # Extract the descriptive part before "{city}" to build suburb query
         # e.g. "Filipino restaurant in {city}" → "Filipino restaurant in Parramatta, Sydney"
         base_query = template.replace(" in {city}", "").replace("{city}", "").strip()
         formatted_query = f"{base_query} in {location}, {city_display}"
+        # Swap "in" → "near" for Google Maps Round 4 to widen the search radius
+        maps_formatted_query = f"{base_query} near {location}, {city_display}"
 
     return {
         "id": task_id,
@@ -162,6 +171,7 @@ def _build_task(
         "template_index": template_index,
         "template": template,
         "formatted_query": formatted_query,
+        "maps_formatted_query": maps_formatted_query,
         "status": "PENDING",
         "started_at": None,
         "completed_at": None,

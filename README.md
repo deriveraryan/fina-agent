@@ -143,7 +143,7 @@ You can execute the underlying discovery and database push scripts directly in y
     ```
 *   **Maps Search Task Manager**:
     ```bash
-    # Generate city-level task permutations (idempotent, pass --include-suburbs for suburb tasks)
+    # Generate city-level task permutations (idempotent, pass --force to regenerate, pass --include-suburbs for suburb tasks)
     python3 scripts/agent_maps_search_tasks.py --action generate --city SYDNEY --trace-id <CONVERSATION_ID>
 
     # Get the next pending task (atomically transitions to IN_PROGRESS)
@@ -159,6 +159,14 @@ You can execute the underlying discovery and database push scripts directly in y
     ```bash
     # Generate and back-fill description embeddings for listings missing them
     python3 scripts/agent_generate_embeddings.py --city SYDNEY --limit 10 --trace-id <CONVERSATION_ID>
+    ```
+*   **Migrate Template Descriptions** (one-time migration utility):
+    ```bash
+    python3 scripts/migrate_template_descriptions.py --trace-id <CONVERSATION_ID>
+    ```
+*   **Backup and Reset** (database reset utility):
+    ```bash
+    python3 scripts/agent_backup_and_reset.py --trace-id <CONVERSATION_ID>
     ```
 *   **Google Places Fetch (single query)**:
     ```bash

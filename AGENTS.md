@@ -54,7 +54,7 @@ Here is the registry of the 6 specialized Antigravity subagents:
     1. Generates all task permutations for a city (idempotent) via `scripts/agent_web_search_tasks.py --action generate --city <CITY>`, producing `data/listing_web_search_tasks_{city}.json` with all (category × template × location) combinations ordered by category, template index, and city-level first then suburbs from `data/top_suburbs_per_city.json`. Categories with `"cityOnly": true` in `data/categories.json` (e.g. `GOVERNMENT`) produce only city-level tasks, skipping suburb permutations. By default, skips if the file already exists; pass `--force` to regenerate while merging existing task state (status, metrics) into the new file via atomic replacement.
     2. Retrieves the next pending task via `--action next`, which uses `fcntl.flock()` to atomically claim the task under an exclusive file lock, preventing concurrent agents from picking the same task. Returns the task's pre-formatted search query, category, and location.
     3. Runs `scripts/agent_fetch_targets.py --type city-listings --city <CITY> --trace-id <CONVERSATION_ID> > tmp/existing_city_listings_<CONVERSATION_ID>.json` to write existing city context to a per-agent temporary file.
-    4. Uses native web search with site-specific queries in four sequential rounds (Facebook, Instagram, General Web, and Google Maps browser) using the task's `formatted_query`. Rounds 1-3 scan up to 10 search result pages each. Round 4 navigates to Google Maps via Chrome DevTools (`https://www.google.com/maps/search/<query>`) and scrolls through the full results list, clicking into each result to extract business name, address, lat/lng (parsed from URL via `maps_browser_parser.parse_lat_lng_from_url()`), phone, website, and opening hours (parsed via `maps_browser_parser.parse_maps_opening_hours()`). Candidates from Round 4 skip the Step 6e Maps enrichment (already Maps-sourced) and receive the `google-maps` tag.
+    4. Uses native web search with site-specific queries in four sequential rounds (Facebook, Instagram, General Web, and Google Maps browser). Rounds 1-3 use the task's `formatted_query` and scan up to 10 search result pages each. Round 4 uses the task's `maps_formatted_query` (which swaps `"in"` → `"near"` for suburb-level tasks to widen the geographic search radius) and navigates to Google Maps via Chrome DevTools (`https://www.google.com/maps/search/<query>`) and scrolls through the full results list, clicking into each result to extract business name, address, lat/lng (parsed from URL via `maps_browser_parser.parse_lat_lng_from_url()`), phone, website, and opening hours (parsed via `maps_browser_parser.parse_maps_opening_hours()`). Candidates from Round 4 skip the Step 6e Maps enrichment (already Maps-sourced) and receive the `google-maps` tag.
     5. Checks for duplicates by running `python3 scripts/agent_check_duplicate.py --file tmp/existing_city_listings_<CONVERSATION_ID>.json --name "<NAME>" --url "<URL>" --trace-id <CONVERSATION_ID>`.
     6. Navigates to candidate pages via Chrome DevTools, extracting only visible text/selectors to prevent raw HTML bloat.
     7. For Rounds 1-3 candidates, navigates to Google Maps via Chrome DevTools to enrich verified candidates with latitude/longitude (parsed from URL bar), address, opening hours, phone, Place ID, and website — filling only empty fields. Adds a `google-maps` tag when enrichment succeeds. Proceeds to push regardless of Maps enrichment outcome.
@@ -151,7 +151,7 @@ pip install -r requirements.txt
   ```
 - **Maps Search Tasks**:
   ```bash
-  # Generate city-level task permutations (idempotent, pass --force to regenerate, --include-suburbs for suburb tasks)
+  # Generate city-level task permutations (idempotent, pass --force to regenerate, pass --include-suburbs for suburb tasks)
   python3 scripts/agent_maps_search_tasks.py --action generate --city <CITY> --trace-id <CONVERSATION_ID>
 
   # Get next pending task (atomically transitions to IN_PROGRESS)
@@ -179,6 +179,14 @@ pip install -r requirements.txt
 - **Migrate Embeddings** (one-time migration utility):
   ```bash
   python3 scripts/migrate_embeddings.py --city <CITY> --trace-id <CONVERSATION_ID>
+  ```
+- **Migrate Template Descriptions** (one-time migration utility):
+  ```bash
+  python3 scripts/migrate_template_descriptions.py --trace-id <CONVERSATION_ID>
+  ```
+- **Backup & Reset** (database reset utility):
+  ```bash
+  python3 scripts/agent_backup_and_reset.py --trace-id <CONVERSATION_ID>
   ```
 
 ---

@@ -226,6 +226,8 @@ To maintain security and ensure all data mutations pass through the authorized G
 *   `scripts/agent_web_search_tasks.py`: Manages the deterministic task-based state machine for `fina_listing_web_search`, supporting `generate`, `next`, `complete`, and `summary` actions for web search task lifecycle management.
 *   `scripts/agent_maps_search_tasks.py`: Manages the deterministic task-based state machine for `fina_listing_map_search`, supporting `generate`, `next`, `complete`, and `summary` actions for maps search task lifecycle management. Generates city-level tasks by default; pass `--include-suburbs` for suburb-level permutations.
 *   `scripts/migrate_embeddings.py`: One-time migration utility for backfilling vector embeddings across all or a specific city.
+*   `scripts/migrate_template_descriptions.py`: One-time migration utility to clear legacy template fallback descriptions from existing listings.
+*   `scripts/agent_backup_and_reset.py`: Backs up Listing, Review, and Event data to local JSON files, then clears the database tables for a clean reset.
 
 ### 8. Synchronous Geocoding & Deduplication
 To simplify the architecture and reduce cloud function dependencies, heavy transactional logic is handled synchronously by `agent_graphql_push.py` before inserting data into the database:
