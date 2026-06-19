@@ -10,8 +10,8 @@
     "examples": ["Manila Sunset Diner", "Filipino BBQ Grill", "Adobo Food Truck"],
     "searchTemplates": [
       "Filipino restaurant in {city}",
-      "Filipino food market in {city}",
-      "Filipino food truck in {city}"
+      "Filipino food truck in {city}",
+      "Filipino food stall in {city}"
     ]
   },
   "CAFE": {
@@ -24,7 +24,9 @@
     ],
     "examples": ["Pandesal & Co.", "Pinoy Brew Cafe", "Ube Desserts Parlor"],
     "searchTemplates": [
-      "Filipino cafe in {city}"
+      "Filipino cafe in {city}",
+      "Filipino bakery in {city}",
+      "Panaderia in {city}"
     ]
   },
   "SHOP": {
@@ -38,7 +40,8 @@
     "searchTemplates": [
       "Filipino grocery in {city}",
       "Filipino shop in {city}",
-      "Filipino bakery in {city}",
+      "Filipino convenience store in {city}",
+      "Sari-sari store in {city}",
       "Filipino butcher in {city}",
       "Filipino fish market in {city}"
     ]
@@ -103,13 +106,22 @@
     "searchTemplates": [
       "Filipino services in {city}",
       "Filipino business in {city}",
+      "Filipino accountant in {city}",
+      "Filipino lawyer in {city}",
+      "Filipino solicitor in {city}",
+      "Filipino mortgage broker in {city}",
       "Filipino recruitment in {city}",
       "Filipino migration agent in {city}",
+      "Filipino visa agent in {city}",
+      "Filipino freight in {city}",
       "Filipino logistics in {city}",
+      "Balikbayan box in {city}",
+      "Filipino real estate agent in {city}",
+      "Filipino mechanic in {city}",
+      "Filipino dentist in {city}",
+      "Filipino doctor in {city}",
       "Filipino hair salon in {city}",
       "Filipino cleaning service in {city}",
-      "Filipino accountant in {city}",
-      "Filipino freight in {city}",
       "Filipino catering in {city}",
       "Filipino event planner in {city}"
     ]
