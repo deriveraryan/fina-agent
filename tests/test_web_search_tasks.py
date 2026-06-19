@@ -126,6 +126,7 @@ class TestGenerateTasks(unittest.TestCase):
             "started_at", "completed_at", "listings_created",
             "pages_searched", "candidates_evaluated",
             "candidates_rejected", "candidates_duplicate", "maps_results_scraped", "errors",
+            "maps_formatted_query",
         }
         for task in tasks:
             self.assertEqual(set(task.keys()), required_fields)

@@ -13,14 +13,14 @@ flowchart TD
     Start(["Trigger: Manual or Schedule"]) --> AgentSelect{"Choose Subagent"}
     
     AgentSelect -->|fina_listing_map_search| PlacesFlow["Google Places Discovery"]
-    AgentSelect -->|fina_enrich_listing_socials_finder| SocialsFlow["Missing Socials Enrichment"]
+    AgentSelect -->|fina_listing_enrichment| EnrichFlow["Listing Enrichment Pipeline"]
     AgentSelect -->|fina_events_finder| EventsFlow["Upcoming Events Scraper"]
     AgentSelect -->|fina_listing_web_search| CommFlow["Social Community Discovery"]
     AgentSelect -->|fina_listing_embedder| EmbedFlow["Vector Embedding Backfill"]
     AgentSelect -->|fina_docs_reviewer| DocsFlow["Documentation Audit"]
 
     %% Shared logic
-    PlacesFlow & SocialsFlow & EventsFlow & CommFlow & EmbedFlow --> PythonCLI["Execute Python CLI Scripts"]
+    PlacesFlow & EnrichFlow & EventsFlow & CommFlow & EmbedFlow --> PythonCLI["Execute Python CLI Scripts"]
     PythonCLI --> Verification{"Authenticity Heuristic / Web Verification"}
     Verification -->|Verified| GQLPush["Execute agent_graphql_push.py / agent_generate_embeddings.py"]
     GQLPush --> PostgreSQL[(PostgreSQL Database)]
@@ -61,14 +61,17 @@ Here is the registry of the 6 specialized Antigravity subagents:
     8. Creates verified listings via `agent_graphql_push.py --operation CreateListing` (without `--generate-embeddings`, including `tiktokUrl` and `tiktokFollowers`) with self-correction on validation failure.
     9. Marks the task as `COMPLETED` with metrics via `--action complete --task-id <ID> --listings-created N --pages-searched N --candidates-evaluated N --candidates-rejected N --candidates-duplicate N --maps-results-scraped N --trace-id <CONVERSATION_ID>`. Completion also uses `fcntl.flock()` to safely merge metrics without clobbering other agents' state.
 
-### 3. `fina_enrich_listing_socials_finder`
-*   **Role**: Enriches existing database listings with missing Facebook, Instagram, and TikTok URLs. Strictly targets a single city per run.
-*   **CLI Trigger**: `python3 scripts/agent_fetch_targets.py --type missing-social --city <CITY> --trace-id <CONVERSATION_ID> > tmp/missing_socials_targets.json`
+### 3. `fina_listing_enrichment`
+*   **Role**: Enriches every existing listing in the database by extracting reviews, synthesising AuE descriptions, and filling missing social URLs. Uses a task-per-listing state machine for resumability and concurrency. Strictly targets a single city per run.
+*   **CLI Trigger**: `python3 scripts/agent_enrichment_tasks.py --action next --city <CITY> --trace-id <CONVERSATION_ID>`
 *   **Logic**:
-    1. Fetches seed listings missing social links for the specified city and writes them directly to a file to prevent context bloat.
-    2. Searches the web using LLM-driven site filters (including `site:tiktok.com` queries).
-    3. Verifies that matches correspond to the business details using Chrome DevTools (selectors/visible text only). For TikTok, extracts the HTML and parses follower count via the python parsing command.
-    4. Enriches listings using the `UpdateListingSocialUrls` mutation (including `tiktokUrl` and `tiktokFollowers`) with validation self-correction on failure.
+    1. Generates one enrichment task per listing (idempotent) via `scripts/agent_enrichment_tasks.py --action generate --city <CITY>`, producing `data/listing_enrichment_tasks_{city}.json` by fetching all listings from the database via `ListAdminListings`. Pass `--force` to regenerate while merging existing task state.
+    2. Retrieves the next pending task via `--action next`, which uses `fcntl.flock()` to atomically claim the task under an exclusive file lock. Returns the listing's identity, current description, source URL, and existing social URLs.
+    3. Extracts reviews in three sequential rounds: (a) Google Maps browser via Chrome DevTools — navigates to the listing's Maps page and extracts up to 10 visible reviews, operating hours (parsed via `parse_maps_opening_hours()`), and social links; (b) Social media — visits existing Facebook/Instagram/TikTok pages to extract testimonials and capture missing social URLs + follower counts; (c) Web search — searches for `"<name>" <city> reviews` across up to 5 pages.
+    4. Pushes extracted reviews to the database individually via `CreateReview` mutation (idempotent via `externalSourceId` uniqueness constraint).
+    5. Synthesises a new 150-250 word description in Australian English (AuE) combining extracted reviews with the listing's existing description. The agent writes the description internally following an embedded style guide (friendly, professional tone; plain language accessible to non-native speakers).
+    6. Pushes the enriched data via `UpdateListingData` mutation — includes the new description, operating hours (always overwritten to keep current), and any newly-discovered social URLs/follower counts (only filling previously-null fields).
+    7. Marks the task as `COMPLETED` with metrics via `--action complete --task-id <ID> --listings-enriched N --reviews-extracted N --reviews-pushed N --socials-enriched N --descriptions-rewritten N --maps-visits N --trace-id <CONVERSATION_ID>`. Completion uses `fcntl.flock()` to safely merge metrics.
 
 ### 4. `fina_listing_embedder`
 *   **Role**: Generates and updates description vector embeddings for listings missing them. Strictly targets a single city per run.
@@ -162,6 +165,20 @@ pip install -r requirements.txt
 
   # View aggregate progress
   python3 scripts/agent_maps_search_tasks.py --action summary --city <CITY> --trace-id <CONVERSATION_ID>
+  ```
+- **Enrichment Tasks**:
+  ```bash
+  # Generate per-listing enrichment tasks for a city (idempotent, pass --force to regenerate)
+  python3 scripts/agent_enrichment_tasks.py --action generate --city <CITY> --trace-id <CONVERSATION_ID>
+
+  # Get next pending enrichment task (atomically transitions to IN_PROGRESS)
+  python3 scripts/agent_enrichment_tasks.py --action next --city <CITY> --trace-id <CONVERSATION_ID>
+
+  # Mark enrichment task as completed with metrics
+  python3 scripts/agent_enrichment_tasks.py --action complete --city <CITY> --task-id <ID> --listings-enriched N --reviews-extracted N --reviews-pushed N --socials-enriched N --descriptions-rewritten N --maps-visits N --trace-id <CONVERSATION_ID>
+
+  # View aggregate enrichment progress
+  python3 scripts/agent_enrichment_tasks.py --action summary --city <CITY> --trace-id <CONVERSATION_ID>
   ```
 - **Check Duplicate**:
   ```bash
