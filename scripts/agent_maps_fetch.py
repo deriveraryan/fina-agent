@@ -97,7 +97,7 @@ def format_place(place: Dict[str, Any], city: str, category: str) -> Dict[str, A
         "instagramUrl": ig_url,
         "tiktokUrl": tt_url,
         "hours": operating_hours_json,
-        "description": editorial or f"A verified Filipino {category.lower()} in {city.title()}.",
+        "description": editorial or None,
         "sourceUrl": f"https://www.google.com/maps/place/?q=place_id:{place_id}",
         "status": status
     }

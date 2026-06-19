@@ -76,17 +76,8 @@ async def main() -> None:
             }
         )
         listings = result.get("data", {}).get("listings", [])
-        output_listings = []
-        for l in listings:
-            output_listings.append({
-                "id": l.get("id"),
-                "name": l.get("name"),
-                "facebookUrl": l.get("facebookUrl"),
-                "instagramUrl": l.get("instagramUrl"),
-                "tiktokUrl": l.get("tiktokUrl")
-            })
         BackendObservability.info(f"Retrieved {len(listings)} listings for {args.city} deduplication context.", conversation_id=args.trace_id)
-        sys.stdout.write(json.dumps(output_listings))
+        sys.stdout.write(json.dumps(listings))
     elif args.type == "social-post-tracker":
         if not args.listing_id or not args.platform:
             BackendObservability.fatal("Validation Error: --listing-id and --platform are required for social-post-tracker", conversation_id=args.trace_id)

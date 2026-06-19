@@ -310,7 +310,8 @@ class TestAgentScripts(unittest.IsolatedAsyncioTestCase):
                     "name": "Manila Eats",
                     "facebookUrl": "https://facebook.com/manilaeats",
                     "instagramUrl": "https://instagram.com/manilaeats",
-                    "tiktokUrl": "https://tiktok.com/@manilaeats"
+                    "tiktokUrl": "https://tiktok.com/@manilaeats",
+                    "otherField": "unused"
                 }
             ])
         )
@@ -383,6 +384,7 @@ class TestAgentScripts(unittest.IsolatedAsyncioTestCase):
             operation_name="UpdateListingData",
             variables={
                 "id": "existing-123",
+                "description": "Filipino diner",
                 "categories": ["RESTAURANT", "CAFE"],
                 "phone": None,
                 "website": None,
@@ -396,7 +398,10 @@ class TestAgentScripts(unittest.IsolatedAsyncioTestCase):
                 "status": "CLOSED_TEMPORARILY",
                 "facebookFollowers": None,
                 "instagramFollowers": None,
-                "tiktokFollowers": None
+                "tiktokFollowers": None,
+                "address": None,
+                "latitude": None,
+                "longitude": None,
             },
         )
         
@@ -862,8 +867,8 @@ class TestAgentScripts(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(merged["instagramFollowers"], 200)
         self.assertEqual(merged["tiktokFollowers"], 350)
 
-    def test_merge_listing_data_unions_categories(self) -> None:
-        """Tests that merge_listing_data unions existing categories with incoming categories."""
+    def test_merge_listing_data_overwrites_categories(self) -> None:
+        """Tests that merge_listing_data overwrites existing categories with incoming categories."""
         from features.scanning.dedup import merge_listing_data
 
         existing = {
@@ -876,7 +881,7 @@ class TestAgentScripts(unittest.IsolatedAsyncioTestCase):
         }
 
         merged = merge_listing_data(existing, new_data)
-        self.assertEqual(sorted(merged["categories"]), sorted(["RESTAURANT", "CAFE"]))
+        self.assertEqual(merged["categories"], ["CAFE"])
 
 
     @patch("agent_fetch_targets.execute_graphql_operation", new_callable=AsyncMock)

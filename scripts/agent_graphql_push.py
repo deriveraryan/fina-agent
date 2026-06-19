@@ -190,6 +190,7 @@ async def process_single_item(operation: str, item_dict: dict, trace_id: str, ge
                         operation_name="UpdateListingData",
                         variables={
                             "id": existing["id"],
+                            "description": merged.get("description"),
                             "categories": merged.get("categories"),
                             "phone": merged.get("phone"),
                             "website": merged.get("website"),
@@ -204,6 +205,9 @@ async def process_single_item(operation: str, item_dict: dict, trace_id: str, ge
                             "facebookFollowers": merged.get("facebookFollowers"),
                             "instagramFollowers": merged.get("instagramFollowers"),
                             "tiktokFollowers": merged.get("tiktokFollowers"),
+                            "address": merged.get("address"),
+                            "latitude": merged.get("latitude"),
+                            "longitude": merged.get("longitude"),
                         },
                     )
                     BackendObservability.info(f"Successfully updated duplicate listing ID={existing['id']} data/status.", conversation_id=trace_id)

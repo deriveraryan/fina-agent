@@ -1,6 +1,7 @@
 """Deduplication and name normalization engine for Fina directory listings.
 """
 
+import json
 import re
 from typing import Any
 from features.shared.observability import BackendObservability
@@ -42,8 +43,7 @@ def merge_listing_data(
 
         if key == "categories":
             if value:
-                existing_cats = existing.get("categories") or []
-                merged[key] = list(set(existing_cats + value))
+                merged[key] = value
         elif key in ("facebookFollowers", "instagramFollowers", "tiktokFollowers"):
             if value is not None:
                 merged[key] = value
@@ -75,6 +75,89 @@ def deduplicate_batch(listings: list[dict[str, Any]]) -> list[dict[str, Any]]:
             deduped[key] = listing
             
     return list(deduped.values())
+
+
+def _clean_phone(phone: str) -> str:
+    """Strips all non-digit characters for phone number comparison."""
+    return re.sub(r"\D", "", phone)
+
+
+def detect_merge_updates(
+    candidate_fields: dict[str, Any],
+    existing_listing: dict[str, Any],
+    normalize_url_fn: Any = None,
+) -> bool:
+    """Detects whether a candidate has new or updated fields compared to an existing listing.
+
+    Compares candidate field values against the existing listing, applying
+    type-aware normalization for URLs, phone numbers, and JSON operating hours.
+
+    Args:
+        candidate_fields: Dict of field names to candidate values.
+        existing_listing: Dict representing the existing database listing.
+        normalize_url_fn: Optional callable to normalize URL strings for comparison.
+
+    Returns:
+        True if the candidate contains at least one field with new or different data.
+    """
+    url_fields = ("facebookUrl", "instagramUrl", "tiktokUrl", "website")
+
+    for field, cand_val in candidate_fields.items():
+        if cand_val in (None, "", []):
+            continue
+
+        exist_val = existing_listing.get(field)
+
+        # Existing field is empty — candidate has new data
+        if exist_val is None or exist_val == "" or exist_val == []:
+            return True
+
+        if field in url_fields:
+            norm_cand = normalize_url_fn(cand_val) if normalize_url_fn else cand_val.strip().rstrip("/")
+            norm_exist = normalize_url_fn(exist_val) if normalize_url_fn else exist_val.strip().rstrip("/")
+            if norm_cand != norm_exist:
+                return True
+        elif field == "phone":
+            if _clean_phone(cand_val) != _clean_phone(exist_val):
+                return True
+        elif field == "operatingHours":
+            try:
+                cand_h = json.loads(cand_val) if isinstance(cand_val, str) else cand_val
+                exist_h = json.loads(exist_val) if isinstance(exist_val, str) else exist_val
+                if cand_h != exist_h:
+                    return True
+            except Exception:
+                if cand_val != exist_val:
+                    return True
+        elif field == "categories":
+            try:
+                if set(cand_val) != set(exist_val):
+                    return True
+            except TypeError:
+                if cand_val != exist_val:
+                    return True
+        elif field == "address":
+            if cand_val.strip().lower() != exist_val.strip().lower():
+                return True
+        elif field in ("latitude", "longitude"):
+            try:
+                if abs(float(cand_val) - float(exist_val)) > 1e-6:
+                    return True
+            except (ValueError, TypeError):
+                if cand_val != exist_val:
+                    return True
+        elif field in ("facebookFollowers", "instagramFollowers", "tiktokFollowers"):
+            try:
+                if int(cand_val) != int(exist_val):
+                    return True
+            except (ValueError, TypeError):
+                if cand_val != exist_val:
+                    return True
+        else:
+            if cand_val != exist_val:
+                return True
+
+    return False
 
 
 async def check_duplicate(

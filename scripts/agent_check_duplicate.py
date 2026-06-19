@@ -15,7 +15,7 @@ sys.path.insert(
     ),
 )
 
-from features.scanning.dedup import normalize_name
+from features.scanning.dedup import normalize_name, detect_merge_updates
 from features.shared.observability import BackendObservability
 from features.scanning.url_normalization import (
     normalize_facebook_url,
@@ -46,6 +46,20 @@ def check_duplicate_in_cache(
     candidate_name: str | None = None,
     candidate_url: str | None = None,
     trace_id: str | None = None,
+    website: str | None = None,
+    phone: str | None = None,
+    hours: str | None = None,
+    description: str | None = None,
+    facebook_url: str | None = None,
+    instagram_url: str | None = None,
+    tiktok_url: str | None = None,
+    categories: list[str] | None = None,
+    address: str | None = None,
+    latitude: float | None = None,
+    longitude: float | None = None,
+    facebook_followers: int | None = None,
+    instagram_followers: int | None = None,
+    tiktok_followers: int | None = None,
 ) -> dict[str, Any]:
     """Checks if a candidate is a duplicate within a local JSON listings file."""
     if not os.path.exists(file_path):
@@ -74,34 +88,78 @@ def check_duplicate_in_cache(
         listing_tt = normalize_candidate_url(listing.get("tiktokUrl") or "")
         listing_urls = {u for u in (listing_fb, listing_ig, listing_tt) if u}
 
+        is_duplicate = False
+        dup_type = ""
+
         # 1. URL Match Check
         if norm_cand_url and norm_cand_url in listing_urls:
-            BackendObservability.info(
-                f"Local duplicate found via URL match: '{listing.get('name')}' (ID: {listing.get('id')})",
-                conversation_id=trace_id
-            )
-            return {"duplicate": True, "type": "url", "match": listing}
+            is_duplicate = True
+            dup_type = "url"
 
         # 2. Name Match Check
         listing_name = normalize_name(listing.get("name") or "")
-        if norm_cand_name and norm_cand_name == listing_name:
+        if not is_duplicate and norm_cand_name and norm_cand_name == listing_name:
             if not norm_cand_url:
+                is_duplicate = True
+                dup_type = "name"
+            else:
+                if norm_cand_url in listing_urls:
+                    is_duplicate = True
+                    dup_type = "name_and_url"
+
+        if is_duplicate:
+            # Candidate matches an existing listing. Check if it has new/updated fields.
+            candidate_fields = {
+                "website": website,
+                "phone": phone,
+                "operatingHours": hours,
+                "description": description,
+                "facebookUrl": facebook_url,
+                "instagramUrl": instagram_url,
+                "tiktokUrl": tiktok_url,
+                "categories": categories,
+                "address": address,
+                "latitude": latitude,
+                "longitude": longitude,
+                "facebookFollowers": facebook_followers,
+                "instagramFollowers": instagram_followers,
+                "tiktokFollowers": tiktok_followers,
+            }
+            
+            # Map candidate_url to the appropriate platform if not already specified
+            if candidate_url:
+                url_lower = candidate_url.lower()
+                if "facebook.com" in url_lower or "fb.com" in url_lower:
+                    if not candidate_fields["facebookUrl"]:
+                        candidate_fields["facebookUrl"] = candidate_url
+                elif "instagram.com" in url_lower or "instagr.am" in url_lower:
+                    if not candidate_fields["instagramUrl"]:
+                        candidate_fields["instagramUrl"] = candidate_url
+                elif "tiktok.com" in url_lower:
+                    if not candidate_fields["tiktokUrl"]:
+                        candidate_fields["tiktokUrl"] = candidate_url
+                else:
+                    if not candidate_fields["website"]:
+                        candidate_fields["website"] = candidate_url
+
+            has_updates = detect_merge_updates(
+                candidate_fields,
+                listing,
+                normalize_url_fn=normalize_candidate_url,
+            )
+
+            if has_updates:
                 BackendObservability.info(
-                    f"Local duplicate found via name match (no URL): '{listing.get('name')}' (ID: {listing.get('id')})",
+                    f"Local duplicate found, but candidate has new or updated info for '{listing.get('name')}' (ID: {listing.get('id')}). Pushing for merge.",
                     conversation_id=trace_id
                 )
-                # Same name, and candidate has no URL -> duplicate
-                return {"duplicate": True, "type": "name", "match": listing}
-            else:
-                # Same name, and candidate has a URL.
-                # If this URL is already linked to the existing listing, it's a duplicate.
-                # Otherwise, it's a new source (e.g. adding Instagram to a listing that has Facebook), so NOT a duplicate.
-                if norm_cand_url in listing_urls:
-                    BackendObservability.info(
-                        f"Local duplicate found via name and URL match: '{listing.get('name')}' (ID: {listing.get('id')})",
-                        conversation_id=trace_id
-                    )
-                    return {"duplicate": True, "type": "name_and_url", "match": listing}
+                return {"duplicate": False, "should_merge": True, "match": listing}
+
+            BackendObservability.info(
+                f"Local duplicate found via {dup_type} match: '{listing.get('name')}' (ID: {listing.get('id')}) with no new info.",
+                conversation_id=trace_id
+            )
+            return {"duplicate": True, "type": dup_type, "match": listing}
 
     BackendObservability.info(
         "No local duplicate found in cache.",
@@ -115,14 +173,44 @@ def main() -> None:
     parser.add_argument("--file", required=True, help="Path to local listings JSON file.")
     parser.add_argument("--name", help="Business name to check.")
     parser.add_argument("--url", help="Social media URL to check.")
+    parser.add_argument("--website", help="Website URL to check.")
+    parser.add_argument("--phone", help="Phone number to check.")
+    parser.add_argument("--hours", help="Operating hours to check.")
+    parser.add_argument("--description", help="Description text to check.")
+    parser.add_argument("--facebook-url", help="Facebook URL to check.")
+    parser.add_argument("--instagram-url", help="Instagram URL to check.")
+    parser.add_argument("--tiktok-url", help="Tiktok URL to check.")
+    parser.add_argument("--categories", help="Comma-separated categories to check.")
+    parser.add_argument("--address", help="Address to check.")
+    parser.add_argument("--latitude", type=float, help="Latitude to check.")
+    parser.add_argument("--longitude", type=float, help="Longitude to check.")
+    parser.add_argument("--facebook-followers", type=int, help="Facebook followers count to check.")
+    parser.add_argument("--instagram-followers", type=int, help="Instagram followers count to check.")
+    parser.add_argument("--tiktok-followers", type=int, help="Tiktok followers count to check.")
     parser.add_argument("--trace-id", help="Trace correlation ID.")
     args = parser.parse_args()
+
+    cats = [c.strip() for c in args.categories.split(",")] if args.categories else None
 
     result = check_duplicate_in_cache(
         file_path=args.file,
         candidate_name=args.name,
         candidate_url=args.url,
         trace_id=args.trace_id,
+        website=args.website,
+        phone=args.phone,
+        hours=args.hours,
+        description=args.description,
+        facebook_url=args.facebook_url,
+        instagram_url=args.instagram_url,
+        tiktok_url=args.tiktok_url,
+        categories=cats,
+        address=args.address,
+        latitude=args.latitude,
+        longitude=args.longitude,
+        facebook_followers=args.facebook_followers,
+        instagram_followers=args.instagram_followers,
+        tiktok_followers=args.tiktok_followers,
     )
 
     sys.stdout.write(json.dumps(result))
