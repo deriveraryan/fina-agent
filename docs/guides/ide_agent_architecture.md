@@ -111,7 +111,7 @@ The following agents exist as skills/scripts but are not yet production-ready:
 | `fina_listing_embedder` | Vector embedding backfill for semantic search | `scripts/agent_generate_embeddings.py` |
 | `fina_docs_reviewer` | Documentation audit against codebase | Controlled at agent level |
 
-### 3. Database Integration Scripts
+### 4. Database Integration Scripts
 To maintain security and ensure all data mutations pass through the authorized GraphQL layer, the subagents rely on local Python helper CLI scripts that connect to the core `fina` Firebase project:
 *   `scripts/agent_fetch_targets.py`: Fetches target source URLs, missing-social listings, business-socials, city-listings (for deduplication context), or social-post-trackers from the database.
 *   `scripts/agent_graphql_push.py`: Pushes verified JSON objects or updates to the backend using GraphQL operations (including `CreateListing`, `UpdateListingData`, `UpdateListingSocialUrls`, `CreateReview`, `CreateEvent`, and `UpsertSocialPostTracker`). It normalizes platform names, dynamically validates and normalizes categories against [categories.json](file:///Users/ryan/.gemini/antigravity/scratch/fina-agent/data/categories.json), caches loaded categories in module scope, and synchronously handles geocoding and deduplication before creating new listings.
@@ -120,7 +120,7 @@ To maintain security and ensure all data mutations pass through the authorized G
 *   `scripts/agent_enrichment_tasks.py`: Manages the task-based state machine for `fina_listing_enrichment` (`generate`, `next`, `complete`, `summary`).
 *   `scripts/agent_events_tasks.py`: Manages the task-based state machine for `fina_events_listing` (`generate`, `next`, `complete`, `summary`). Only generates tasks for listings with social URLs.
 
-### 4. Synchronous Geocoding & Deduplication
+### 5. Synchronous Geocoding & Deduplication
 To simplify the architecture and reduce cloud function dependencies, heavy transactional logic is handled synchronously by `agent_graphql_push.py` before inserting data into the database:
 *   **Geocoding**: Uses the Google Maps Geocoding API to resolve coordinates if missing prior to insertion.
 *   **Deduplication**: Resolves matches using name normalization, `pgvector` semantic embedding similarity, and Jaccard word-overlap coefficient (>0.7). If a duplicate is found, it merges missing fields via `UpdateListingData` and `UpdateListingStatus` mutations instead of creating a new duplicate record.

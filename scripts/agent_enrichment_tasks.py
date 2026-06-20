@@ -38,38 +38,7 @@ from features.scanning.task_lifecycle import (
 )
 
 
-async def fetch_city_listings(city: str, trace_id: str | None = None) -> list[dict]:
-    """Fetch all listings for a city from the database via ListAdminListings.
-
-    Retrieves both VERIFIED and UNVERIFIED listings to ensure comprehensive
-    enrichment coverage.
-
-    Args:
-        city: Target city name (e.g. "Sydney").
-        trace_id: Trace correlation ID for observability.
-
-    Returns:
-        A list of listing dictionaries.
-    """
-    BackendObservability.trace(
-        f"Fetching all listings for city={city} via ListAdminListings",
-        conversation_id=trace_id,
-    )
-    from features.shared.graphql_client import execute_graphql_operation
-    result = await execute_graphql_operation(
-        operation_name="ListAdminListings",
-        variables={
-            "city": city,
-            "limit": 1000,
-            "verificationStatuses": ["VERIFIED", "UNVERIFIED"],
-        },
-    )
-    listings = result.get("data", {}).get("listings", [])
-    BackendObservability.info(
-        f"Retrieved {len(listings)} listings for {city}.",
-        conversation_id=trace_id,
-    )
-    return listings
+from features.scanning.fetch_listings import fetch_city_listings
 
 
 async def async_generate(args: argparse.Namespace, tasks_path: str) -> None:
