@@ -236,6 +236,167 @@ To simplify the architecture and reduce cloud function dependencies, heavy trans
 
 ---
 
+## 🧠 Shared Agent Memory
+
+### Overview
+
+The Fina agent pipeline uses a shared, self-evolving memory system that enables agents to learn from their executions and share operational knowledge across sessions. This addresses the fundamental limitation of stateless agent invocations: without persistent memory, agents repeat the same mistakes, rediscover the same patterns, and waste tokens re-learning platform behaviours.
+
+The memory is stored in a single markdown file — [`data/fina_agent_memory.md`](file:///Users/ryan/.gemini/antigravity/scratch/fina-agent/data/fina_agent_memory.md) — that agents read at session start and conditionally update at session end.
+
+### Design Philosophy
+
+The framework is built on five core principles, each drawn from research into leading agent memory architectures:
+
+| Principle | Origin | Implementation |
+|---|---|---|
+| **Bounded curation** | [Hermes](https://arxiv.org/abs/2310.00710) (~800 token active memory) | 150-line hard budget forces agents to prioritise quality over quantity |
+| **Post-execution reflection** | [OpenClaw](https://arxiv.org/abs/2401.13178) (dreaming pipeline) | Structured retrospective step after every task completion |
+| **Self-managing memory** | [MemGPT/Letta](https://arxiv.org/abs/2310.08560) (agents edit their own memory) | Agents read, merge, prune, and write back the memory file autonomously |
+| **Quality-gated learning** | [Reflexion](https://arxiv.org/abs/2303.11366) (execute → reflect → crystallise) | Explicit "did I learn anything new?" gate prevents noise accumulation |
+| **Semantic taxonomy** | [CoALA](https://arxiv.org/abs/2309.02427) (memory type classification) | Five named sections map to distinct knowledge domains |
+
+**What was deliberately not adopted:**
+- **OpenClaw's daily log rotation** — Fina agents run as single-task sessions, not daemons
+- **MemGPT's multi-tier storage** — Overkill for a single markdown file with 150-line budget
+- **Hermes' skill crystallisation** — Agent skills are manually curated SKILL.md files, not auto-generated
+- **Vector-indexed episodic memory** — The 150-line cap makes full-text reading cheaper than semantic retrieval
+
+### Architecture
+
+```mermaid
+flowchart LR
+    subgraph SessionStart["Session Start"]
+        ReadMem["Step 0.7: Read Memory<br>view_file data/fina_agent_memory.md"]
+    end
+
+    subgraph TaskExecution["Task Execution"]
+        Execute["Steps 1-7: Core Workflow<br>(discovery, enrichment, etc.)"]
+    end
+
+    subgraph SessionEnd["Session End"]
+        Retro{"Step 7.5: Retrospective<br>Did I learn anything new?"}
+        Retro -->|Yes| Merge["Read → Merge → Prune → Write"]
+        Retro -->|No| Skip["Skip update entirely"]
+    end
+
+    ReadMem --> Execute --> Retro
+    Merge --> MemFile["data/fina_agent_memory.md"]
+    MemFile -.->|Next session| ReadMem
+```
+
+The memory protocol integrates into the agent lifecycle as two lightweight steps that bookend the core workflow:
+
+1. **Read Phase (Step 0.7)** — After environment setup but before task execution, the agent reads the memory file and internalises relevant insights for the upcoming task.
+2. **Retrospective Phase (Step 7.5)** — After task completion but before stopping, the agent evaluates whether the execution surfaced genuinely new operational knowledge.
+
+### File Schema
+
+The memory file has a fixed five-section structure, each serving a distinct knowledge domain:
+
+```markdown
+# Fina Agent Memory
+
+> Self-evolving shared memory for Fina discovery and enrichment agents.
+> Maximum budget: **150 lines**.
+> Supersession rule: new insights replace contradictory old entries.
+> Format: concise bullet points (one line per insight). No prose paragraphs.
+
+## Platform & Browser Insights
+<!-- Anti-bot patterns, UI changes, rate limits, login walls -->
+
+## Discovery Patterns
+<!-- Search techniques, template effectiveness, duplicate trends -->
+
+## Enrichment Patterns
+<!-- Review extraction, hours parsing, social media quirks -->
+
+## City Intelligence
+<!-- Suburb saturation, high-yield categories, city-specific observations -->
+
+## Known Pitfalls
+<!-- Validation errors, payload patterns, failure recovery -->
+```
+
+**Section responsibilities:**
+
+| Section | Written by | Example entries |
+|---|---|---|
+| Platform & Browser Insights | Both agents | "Facebook requires login to view follower counts as of 2026-06" |
+| Discovery Patterns | `fina_listing_web_search` | "RESTAURANT category in Sydney CBD yields >80% duplicates — consider skipping" |
+| Enrichment Patterns | `fina_listing_enrichment` | "Google Maps reviews section now uses `div[data-review-id]` selector" |
+| City Intelligence | Both agents | "Melbourne: Dandenong and Footscray are highest-density Filipino suburbs" |
+| Known Pitfalls | Both agents | "`CreateListing` rejects `openingHours` with trailing whitespace in day names" |
+
+### Budget Management
+
+The memory file enforces a **150-line hard cap** (including headers, section headings, and blockquote rules). This constraint is deliberate:
+
+- **Forces curation**: Agents must evaluate what's truly worth retaining versus what's transient noise.
+- **Prevents context bloat**: At ~150 lines, the entire file fits comfortably within a single `view_file` call, keeping the read phase cheap.
+- **Drives supersession**: When new insights contradict existing entries, agents replace the old entry rather than appending both.
+
+**Pruning heuristics** (applied by agents when the file approaches the budget):
+
+1. **Staleness**: Remove entries about platform behaviours that have since changed (superseded).
+2. **Redundancy**: Merge entries that describe the same insight from different angles.
+3. **Specificity**: Prefer specific, actionable entries over vague observations.
+4. **Frequency**: Entries that apply to every execution are more valuable than edge cases.
+
+### Entry Format
+
+All entries must follow these formatting rules:
+
+- **One bullet point per insight** — keeps entries atomic and individually pruneable.
+- **No prose paragraphs** — agents write concise, scannable entries.
+- **Include dates when relevant** — for time-sensitive platform behaviours (e.g., "as of 2026-06").
+- **Include scope when relevant** — for city/category-specific patterns (e.g., "Sydney RESTAURANT").
+
+### Concurrency Model
+
+The current implementation uses a **last-writer-wins** strategy:
+
+- Multiple concurrent agents may read the memory file simultaneously (no conflict).
+- If two agents both decide to write at the same time, the last write overwrites the first.
+- This is acceptable because:
+  1. The quality gate means most executions skip the write entirely.
+  2. When writes do occur, they're typically to different sections.
+  3. Git history preserves any overwritten content for manual recovery.
+  4. The cost of `fcntl` locking for a rarely-written markdown file exceeds the benefit.
+
+**Known limitation**: In a theoretical worst case, two concurrent agents could both surface valuable insights, and the second writer could overwrite the first's contribution. The mitigation is that agents run as single-task sessions and the retrospective happens at session end, making true write contention rare.
+
+### Participating Agents
+
+The memory protocol is currently implemented for two agents:
+
+| Agent | Read Step | Retro Step | Typical insights |
+|---|---|---|---|
+| `fina_listing_web_search` | Step 0.7 | Step 7.5 | Search template effectiveness, platform rate limits, suburb saturation |
+| `fina_listing_enrichment` | Step 0.7 | Step 7.5 | Maps UI selectors, review extraction techniques, hours parsing edge cases |
+
+Other agents (`fina_listing_map_search`, `fina_events_finder`, `fina_listing_embedder`) do not currently participate but can be onboarded by adding the same Step 0.7/7.5 pattern to their SKILL.md files.
+
+### Governing Rule
+
+The memory protocol is enforced by **Rule 1.15: Shared Agent Memory Protocol** in [AGENTS.md](file:///Users/ryan/.gemini/antigravity/scratch/fina-agent/AGENTS.md), which establishes the read/retro lifecycle, budget invariant, supersession rule, and content invariant as architectural constraints.
+
+### Version History & Recovery
+
+The memory file is Git-tracked (it lives in `data/`), providing automatic version history. If an agent's write is destructive or incorrect:
+
+```bash
+# View memory file evolution
+git log --oneline data/fina_agent_memory.md
+
+# Recover a previous version
+git show HEAD~1:data/fina_agent_memory.md
+```
+
+This makes Git the de-facto "episodic memory" layer — the live file is working memory, and Git history is long-term recall.
+
+---
+
 ## 💻 Operational Runbook
 
-For instructions on how to trigger or schedule the `fina_listing_map_search`, `fina_listing_web_search`, `fina_enrich_listing_socials_finder`, `fina_listing_embedder`, `fina_events_finder`, and `fina_docs_reviewer` subagents, refer to the Operational Guide in the main repository `README.md`.
+For instructions on how to trigger or schedule the `fina_listing_map_search`, `fina_listing_web_search`, `fina_listing_enrichment`, `fina_listing_embedder`, `fina_events_finder`, and `fina_docs_reviewer` subagents, refer to the Operational Guide in the main repository `README.md`.

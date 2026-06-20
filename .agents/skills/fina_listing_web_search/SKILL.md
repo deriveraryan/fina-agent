@@ -42,6 +42,9 @@ source .venv/bin/activate
 ```
 All `python3` commands in subsequent steps assume the venv is active. If you see `ModuleNotFoundError`, this step was skipped.
 
+### Step 0.7: Read Shared Memory
+Read the shared agent memory file `data/fina_agent_memory.md` using the `view_file` tool. Internalise any relevant insights (platform behaviours, discovery patterns, city intelligence, known pitfalls) that may influence how you evaluate candidates, navigate browser pages, or handle edge cases during this task.
+
 ### Step 1: Read Category Rules
 Read the canonical category definitions and rules from `data/categories.json` using the `view_file` tool to align candidate listings with the correct category rules. Only proceed to this step after Step 0 passes.
 
@@ -177,6 +180,27 @@ After hitting the execution limits (30 new listings or per-round page caps), tri
 ```bash
 python3 scripts/agent_web_search_tasks.py --action complete --city <CITY> --task-id <TASK_ID> --listings-created <N> --pages-searched <N> --candidates-evaluated <N> --candidates-rejected <N> --candidates-duplicate <N> --candidates-merged <N> --maps-results-scraped <N> --trace-id <CONVERSATION_ID>
 ```
+
+### Step 7.5: Retrospective (Shared Memory Update)
+Run a structured learning review of this execution. Ask yourself:
+
+> _"Did this run surface any new platform behaviour, search technique, city-specific pattern, or failure mode not already captured in `data/fina_agent_memory.md`?"_
+
+Examples of insights worth capturing:
+- A platform started blocking or rate-limiting a specific query pattern.
+- A particular search template consistently yields high duplicate rates for a category.
+- A suburb is fully saturated for a category (all results are duplicates).
+- A Google Maps UI change affected data extraction (e.g., hours selector moved).
+- A validation error pattern that required payload adjustment.
+
+**If yes** (new insight exists):
+1. Read the current `data/fina_agent_memory.md` using `view_file`.
+2. Merge the new insight into the appropriate section (Platform & Browser Insights, Discovery Patterns, City Intelligence, or Known Pitfalls).
+3. If the insight contradicts an existing entry, **replace** the old entry (supersession rule).
+4. Count the total lines. If the file exceeds **150 lines**, trim the lowest-value entries to fit within budget.
+5. Write the updated file back using the `write_to_file` tool with `Overwrite: true`.
+
+**If no** (nothing new was learned): Skip this step entirely. Do not write to the file.
 
 ### Step 8: Stop
 **🚨 SINGLE TASK PER SESSION:** After completing a task, you **MUST STOP**. Do NOT claim the next task. Each agent session processes exactly **one task** to ensure accuracy and precision. Report the task completion metrics and stop.

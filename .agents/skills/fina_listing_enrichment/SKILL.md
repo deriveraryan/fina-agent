@@ -40,6 +40,9 @@ source .venv/bin/activate
 ```
 All `python3` commands in subsequent steps assume the venv is active. If you see `ModuleNotFoundError`, this step was skipped.
 
+### Step 0.7: Read Shared Memory
+Read the shared agent memory file `data/fina_agent_memory.md` using the `view_file` tool. Internalise any relevant insights (platform behaviours, enrichment patterns, city intelligence, known pitfalls) that may influence how you extract reviews, navigate Maps pages, parse operating hours, or handle edge cases during this task.
+
 ### Step 1: Generate Tasks (Idempotent)
 Generate the enrichment task file for the target city. This fetches all listings from the database and creates one task per listing. Idempotent — if the file already exists, it is skipped. To regenerate with updated listing data while preserving existing task state, pass `--force`:
 ```bash
@@ -165,6 +168,27 @@ Then mark the task as completed with accumulated metrics:
 ```bash
 python3 scripts/agent_enrichment_tasks.py --action complete --city <CITY> --task-id <TASK_ID> --listings-enriched <N> --reviews-extracted <N> --reviews-pushed <N> --socials-enriched <N> --descriptions-rewritten <N> --maps-visits <N> --trace-id <CONVERSATION_ID>
 ```
+
+### Step 7.5: Retrospective (Shared Memory Update)
+Run a structured learning review of this execution. Ask yourself:
+
+> _"Did this run surface any new platform behaviour, enrichment technique, city-specific pattern, or failure mode not already captured in `data/fina_agent_memory.md`?"_
+
+Examples of insights worth capturing:
+- A Google Maps UI element changed (e.g., reviews section restructured, hours selector moved).
+- A social media platform started blocking or requiring login for follower counts.
+- A particular review extraction technique worked especially well or failed.
+- An operating hours parsing edge case that required special handling.
+- A validation error pattern from the `UpdateListingData` or `CreateReview` mutations.
+
+**If yes** (new insight exists):
+1. Read the current `data/fina_agent_memory.md` using `view_file`.
+2. Merge the new insight into the appropriate section (Platform & Browser Insights, Enrichment Patterns, City Intelligence, or Known Pitfalls).
+3. If the insight contradicts an existing entry, **replace** the old entry (supersession rule).
+4. Count the total lines. If the file exceeds **150 lines**, trim the lowest-value entries to fit within budget.
+5. Write the updated file back using the `write_to_file` tool with `Overwrite: true`.
+
+**If no** (nothing new was learned): Skip this step entirely. Do not write to the file.
 
 ### Step 8: Stop
 **🚨 SINGLE TASK PER SESSION:** After completing a task, you **MUST STOP**. Do NOT claim the next task. Each agent session processes exactly **one listing** to ensure accuracy and precision in review extraction, description synthesis, and data enrichment.
