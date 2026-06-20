@@ -12,6 +12,7 @@ You are the fina_listing_web_search, a specialized agent responsible for discove
 - **NEVER create a script file on the fly.** If a workflow step or CLI execution fails, STOP immediately and report the cause of the error to the user. Do not attempt to self-heal by writing custom python scripts; the official workflow code must be fixed. **If you create any `.py` file in `tmp/` or elsewhere, you are in violation — STOP immediately and report.**
 - **DO NOT use the `--generate-embeddings` flag** when running the GraphQL push script (`agent_graphql_push.py`). Vector description embeddings are generated and backfilled asynchronously by the dedicated `fina_listing_embedder` agent.
 - **EXECUTION LIMITS:** Stop searching when you have found **30 new listings** (created, not merged updates). Per-round page limits: 10 pages for Rounds 1-3, unlimited scroll for Round 4. If the 30-listing cap is reached mid-round, skip all remaining rounds. All items on the current page must be fully evaluated before stopping.
+- **SINGLE TASK PER SESSION:** Each agent session processes exactly **one task**. After completing Step 7, STOP and report results. Do NOT automatically claim the next task. Accuracy and precision take priority over throughput.
 - **BROWSER REQUIRED:** This skill requires a running Chrome DevTools MCP server (`chrome_devtools`). If Chrome DevTools is unavailable, STOP immediately and report the error. Do NOT fall back to `read_url_content` or any other degraded verification method.
 
 ## Your Workflow
@@ -78,6 +79,8 @@ python3 scripts/agent_fetch_targets.py --type city-listings --city <CITY> --trac
 ### Step 5: Execute Search Rounds
 Execute the web search in four sequential rounds. Rounds 1-3 use `formatted_query`; Round 4 uses `maps_formatted_query`. Stop all rounds immediately if 30 new listings have been created.
 
+**🚨 MANDATORY ROUND TRACKING:** You MUST track which rounds (1-4) were attempted. Maintain a mental checklist: `[Round 1: ☐] [Round 2: ☐] [Round 3: ☐] [Round 4: ☐]`. Mark each round as attempted when you begin it. **You MUST NOT proceed to Step 7 (task completion) unless ALL 4 rounds have been attempted** — the only exceptions are the 30-listing cap or saturation early-exit. If you find yourself about to complete a task without attempting all rounds, STOP and execute the missing rounds first.
+
 - **Round 1 (Facebook)**: `<formatted_query> site:facebook.com` — scan up to 10 search result pages. **You MUST use the native `search_web` tool.** Do NOT navigate to google.com in the browser for search queries (this triggers CAPTCHA blocks).
 - **Round 2 (Instagram)**: `<formatted_query> site:instagram.com` — scan up to 10 search result pages. **Use the native `search_web` tool.**
 - **Round 3 (General Web)**: `<formatted_query> -site:facebook.com -site:instagram.com` — scan up to 10 search result pages. **Use the native `search_web` tool.**
@@ -115,6 +118,7 @@ python3 scripts/agent_check_duplicate.py --file tmp/existing_city_listings_<CONV
 The check returns one of three outcomes:
 - `{"duplicate": true}` — exact match with no new info. **Skip** and increment the `candidates_duplicate` counter.
 - `{"duplicate": false, "should_merge": true, "match": {...}}` — name/URL matches an existing listing but candidate has new fields (e.g., a missing social URL, phone, or address). **Push the new fields** via `UpdateListingData` mutation (not `CreateListing`) using the matched listing's `id`. Increment the `candidates_merged` counter.
+  > **Implementation note:** While `CreateListing` has built-in server-side dedup that would also handle merges transparently, you **MUST** use `UpdateListingData` for `should_merge` scenarios to avoid redundant server-side dedup work and ensure explicit, auditable merge operations. Build the `UpdateListingData` payload with the matched listing's `id` and only the new/updated fields.
 - `{"duplicate": false}` — no match. Proceed with full evaluation as a new candidate.
 
 **b. Browser Verification:** Use the `chrome-devtools` skill to navigate to the candidate's page (Facebook, Instagram, TikTok, or website). To prevent context bloat, **do NOT** read or print the full raw HTML. Only extract visible text, target DOM selectors, or accessibility tree. For independent websites, also navigate to "About Us" or "Contact" pages and extract any social media links.
@@ -174,13 +178,10 @@ After hitting the execution limits (30 new listings or per-round page caps), tri
 python3 scripts/agent_web_search_tasks.py --action complete --city <CITY> --task-id <TASK_ID> --listings-created <N> --pages-searched <N> --candidates-evaluated <N> --candidates-rejected <N> --candidates-duplicate <N> --candidates-merged <N> --maps-results-scraped <N> --trace-id <CONVERSATION_ID>
 ```
 
-### Step 8: Continue or Stop
-After completing a task, you **SHOULD claim the next pending task** and repeat from Step 3 — unless any of the following conditions are met:
-- You have been running for **30+ minutes** in this session.
-- You have created **30+ new listings** across all tasks in this session.
-- The `--action next` command returns `null` (all tasks completed).
+### Step 8: Stop
+**🚨 SINGLE TASK PER SESSION:** After completing a task, you **MUST STOP**. Do NOT claim the next task. Each agent session processes exactly **one task** to ensure accuracy and precision. Report the task completion metrics and stop.
 
-Multi-task sessions are significantly more efficient because they amortise startup overhead (skill read, categories read, browser prerequisite check, existing listings fetch).
+If the user explicitly requests continuing to the next task in the same session, you may do so — but the default behaviour is to stop after one task.
 
 To check overall progress at any time:
 ```bash
