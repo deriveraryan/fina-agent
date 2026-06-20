@@ -1,27 +1,28 @@
-# Fina Agent — Data Extraction Scraper Pipeline
+# Fina Agent — Data Discovery & Enrichment Pipeline
 
-This repository houses the data discovery, verification, enrichment, and scraping agents for the Fina platform (the Filipino-Australian community directory). It consists of specialized Antigravity IDE subagents that scrape data from Google Maps (New) and social media (Facebook/Instagram), verify authenticity, and push results securely via a GraphQL client directly into the live Fina Postgres database.
+This repository houses the data discovery, verification, and enrichment agents for **Fina** (the Filipino-Australian community directory). Specialized [Antigravity IDE](https://blog.google/technology/google-labs/project-mariner-antigravity/) subagents execute lightweight Python scripts locally, parse data, verify authenticity, and push results securely through a GraphQL layer into the live Fina PostgreSQL database.
 
 ---
 
 ## 🏛️ Repository Overview
 
-This project is decoupled from the main Fina application backend. It runs lightweight Python scripts locally inside the Antigravity IDE:
-* **Google Maps Scraper**: Scrapes candidate businesses matching category & city.
-* **Web & Social Searcher**: Discovers new Filipino listing candidates on Facebook, Instagram, TikTok, and general web platforms using a task-based state machine.
-* **Social Enricher**: Enriches existing listings with missing Facebook, Instagram, and TikTok URLs.
-* **Browser Event Crawler**: Crawls business pages to harvest upcoming temporal events.
-* **Listing Embedder**: Generates and backfills vector description embeddings for semantic search.
-* **Documentation Reviewer**: Audits repository documentation for alignment with the codebase.
+This project is decoupled from the main Fina application backend. It runs lightweight Python scripts locally inside the Antigravity IDE, with two production-ready agents:
+
+| Agent | Purpose |
+|---|---|
+| **`fina_listing_web_search`** | Discovers new Filipino listing candidates on Facebook, Instagram, TikTok, general web platforms, and Google Maps (via browser) using a task-based state machine |
+| **`fina_listing_enrichment`** | Enriches existing listings by extracting reviews, synthesising descriptions, updating operating hours, and filling missing social URLs |
+
+Both agents participate in a [shared memory protocol](#-shared-agent-memory) that enables cross-session learning.
+
+> [!NOTE]
+> Additional agents (`fina_listing_map_search`, `fina_listing_embedder`, `fina_events_finder`, `fina_docs_reviewer`) exist as skills/scripts but are **not yet production-ready**. Their supporting CLI scripts are available in `scripts/` for future activation. See the [Architecture Guide](docs/guides/ide_agent_architecture.md) for details.
 
 ---
 
 ## ⚙️ Required Setup & Configuration
 
-To run the agents, you must set up a local virtual environment and configure the environment variables.
-
 ### 1. Local Python Environment
-Create a virtual environment and install the required dependencies:
 ```bash
 python3 -m venv .venv
 source .venv/bin/activate
@@ -29,28 +30,25 @@ pip install -r requirements.txt
 ```
 
 ### 2. Environment Variables (`.env`)
-Create a `.env` file in the root of the `fina-agent` repository:
+Create a `.env` file in the repository root:
 ```bash
-# Required by the local agents and Cloud Functions to run browser-use/crawl4ai and perform listing extraction.
+# Required for the agents to perform listing extraction
 GEMINI_API_KEY="YOUR_ACTUAL_GEMINI_API_KEY"
 
-# Optional. Used by the push script to geocode scraped addresses. 
-# Falls back to city centers if omitted.
+# Used by the push script to geocode scraped addresses (falls back to city centers if omitted)
 GOOGLE_MAPS_API_KEY="YOUR_GOOGLE_MAPS_API_KEY"
 
-# Firebase Cloud Configs (points to your Fina Backend instance)
+# Firebase Cloud Config (points to your Fina Backend instance)
 GCP_PROJECT="fina-au"
 ```
 
 ### 3. Chrome DevTools MCP Configuration
-The `fina_listing_web_search` and `fina_enrich_listing_socials_finder` skills require a running Chrome DevTools MCP server (`chrome_devtools`). To configure the server, add it to the `"mcpServers"` object in either:
+Both production agents require a running Chrome DevTools MCP server (`chrome_devtools`). Add it to the `"mcpServers"` object in either:
 - **Global Config**: `~/.gemini/config/mcp_config.json`
 - **Workspace Config**: `.gemini/antigravity/mcp_config.json`
 
-Choose one of the following setups:
-
 #### Option A: Auto-Launch Mode (Recommended)
-The MCP server automatically launches and manages its own headless Google Chrome instance via Puppeteer. No manual Chrome setup is needed:
+The MCP server automatically launches and manages its own headless Chrome instance:
 ```json
 "chrome_devtools": {
   "command": "npx",
@@ -62,13 +60,12 @@ The MCP server automatically launches and manages its own headless Google Chrome
 ```
 
 #### Option B: Active Browser Mode (Connect to Local Session)
-To let the agent inspect or interact with your active, logged-in Google Chrome window:
-1. Launch Google Chrome with remote debugging:
+To let the agent interact with your active, logged-in Chrome window:
+1. Launch Chrome with remote debugging:
    ```bash
    /Applications/Google\ Chrome.app/Contents/MacOS/Google\ Chrome --remote-debugging-port=9222
    ```
-2. Navigate to `chrome://inspect/#remote-debugging` in Chrome and verify **"Discover network targets"** is checked.
-3. Configure the MCP server to connect to port 9222:
+2. Configure the MCP server to connect to port 9222:
    ```json
    "chrome_devtools": {
      "command": "npx",
@@ -85,151 +82,109 @@ To let the agent inspect or interact with your active, logged-in Google Chrome w
 
 ## 🚀 Run & Use Guide
 
-You can trigger these discovery scans manually through the Antigravity Chat UI or run the underlying scripts directly in your shell.
+### 1. Running via Chat Prompts
 
-### 1. The Scraper Agents
+Trigger agents directly in the Antigravity Chat UI. For long-running scans, prefix with the `/goal` slash command so the agent runs continuously.
 
-* **`fina_listing_map_search`**: Queries Google Places Text Search using a task-based state machine (1 city × 1 category × 1 template per run).
-* **`fina_listing_web_search`**: Discovers new Filipino listings on social platforms using a task-based state machine (1 location × 1 category × 1 template per run).
-* **`fina_enrich_listing_socials_finder`**: Enriches existing listings with missing Facebook/Instagram URLs.
-* **`fina_listing_embedder`**: Audits and generates vector description embeddings for listings missing them.
-* **`fina_events_finder`**: Crawls business social media pages to harvest upcoming events.
-* **`fina_docs_reviewer`**: Audits repository documentation files for any gaps or discrepancies against the current codebase.
+**Web Search Discovery:**
+> **Task-Based Queue System**: The `fina_listing_web_search` skill targets a **single city** and executes the next pending search task (location × category × search template) from the generated task queue.
+>
+> "Use the `fina_listing_web_search` skill to search the web for new listings in SYDNEY."
 
-For a detailed flow diagram of how these agents operate, see the [Native IDE Agent Architecture Guide](docs/guides/ide_agent_architecture.md).
+**Listing Enrichment:**
+> **Task-Based Queue System**: The `fina_listing_enrichment` skill targets a **single city** and processes the next pending listing for enrichment.
+>
+> "Use the `fina_listing_enrichment` skill to enrich listings in SYDNEY."
 
-### 2. Running Scans via Chat Prompts
-You can trigger a manual scan by asking the Antigravity agent directly in the chat. For large, multi-city scans, we highly recommend prefixing your prompt with the `/goal` slash command so the agent runs continuously in the background without stopping.
+### 2. Running Scripts via CLI
 
-*   *Places Discovery*:
+#### Web Search Task Manager
+```bash
+# Generate all search task permutations for a city (idempotent — skips if file exists, pass --force to regenerate)
+python3 scripts/agent_web_search_tasks.py --action generate --city SYDNEY --trace-id <CONVERSATION_ID>
+
+# Get the next pending task (atomically transitions to IN_PROGRESS)
+python3 scripts/agent_web_search_tasks.py --action next --city SYDNEY --trace-id <CONVERSATION_ID>
+
+# Mark a task as completed with metrics
+python3 scripts/agent_web_search_tasks.py --action complete --city SYDNEY --task-id sydney__RESTAURANT__0__sydney \
+  --listings-created 5 --pages-searched 3 --candidates-evaluated 8 --candidates-rejected 1 \
+  --candidates-duplicate 2 --candidates-merged 1 --maps-results-scraped 15 --trace-id <CONVERSATION_ID>
+
+# View aggregate progress
+python3 scripts/agent_web_search_tasks.py --action summary --city SYDNEY --trace-id <CONVERSATION_ID>
+```
+
+#### Enrichment Task Manager
+```bash
+# Generate per-listing enrichment tasks for a city (idempotent, pass --force to regenerate)
+python3 scripts/agent_enrichment_tasks.py --action generate --city SYDNEY --trace-id <CONVERSATION_ID>
+
+# Get the next pending enrichment task (atomically transitions to IN_PROGRESS)
+python3 scripts/agent_enrichment_tasks.py --action next --city SYDNEY --trace-id <CONVERSATION_ID>
+
+# Mark enrichment task as completed with metrics
+python3 scripts/agent_enrichment_tasks.py --action complete --city SYDNEY --task-id <ID> \
+  --listings-enriched 1 --reviews-extracted 8 --reviews-pushed 8 --socials-enriched 2 \
+  --descriptions-rewritten 1 --maps-visits 1 --trace-id <CONVERSATION_ID>
+
+# View aggregate enrichment progress
+python3 scripts/agent_enrichment_tasks.py --action summary --city SYDNEY --trace-id <CONVERSATION_ID>
+```
+
+#### Shared Utilities
+```bash
+# Fetch existing city listings for deduplication context
+python3 scripts/agent_fetch_targets.py --type city-listings --city SYDNEY --trace-id <CONVERSATION_ID> > tmp/existing_city_listings.json
+
+# Check for duplicate listings
+python3 scripts/agent_check_duplicate.py --file tmp/existing_city_listings.json --name "<NAME>" --url "<URL>" --trace-id <CONVERSATION_ID>
+
+# Push data via GraphQL (single payload)
+python3 scripts/agent_graphql_push.py --operation <CreateListing|UpdateListingData|CreateReview> --variables @tmp/payload.json --trace-id <CONVERSATION_ID>
+```
+
 > [!IMPORTANT]
-    > **Task-Based Queue System**: The `fina_listing_map_search` skill targets a **single city** and automatically executes the next pending Google Places search task (category × search template) from the generated task queue. By default, only city-level tasks are generated.
-    >
-    > "Use the `fina_listing_map_search` skill to search Google Places for new listings in SYDNEY."
-*   *Web/Social Discovery*:
-    > **Task-Based Queue System**: The `fina_listing_web_search` skill targets a **single city** and automatically executes the next pending search task (location × category × search template) from the generated task queue.
-    >
-    > "Use the `fina_listing_web_search` skill to search the web for new listings in SYDNEY."
-*   *Missing Socials Finder*:
-    > "Use the `fina_enrich_listing_socials_finder` skill to back-fill missing social URLs in SYDNEY."
-*   *Listing Embedder*:
-    > "Use the `fina_listing_embedder` skill to generate missing description vector embeddings in SYDNEY."
-    >
-    > **To process only a limited number of listings:**
-    > "Use the `fina_listing_embedder` skill to generate vector embeddings in SYDNEY with a limit of 10."
-*   *Events Finder*:
-    > **Single City Target Restriction**: To prevent prompt context window bloat and ensure high reliability, the `fina_events_finder` skill strictly targets a **single city** per execution run. Multi-city sweeps must be run in separate, independent agent sessions.
-    >
-    > "Use the `fina_events_finder` skill to discover events in MELBOURNE."
-*   *Documentation Reviewer*:
-    > "Use the `fina_docs_reviewer` skill to review the repository documentation for any gaps."
+> **Category Validation & Normalization**: The push script validates `category` and `categories` values against [categories.json](data/categories.json). Case-insensitive normalization (to uppercase) is applied automatically. Invalid categories trigger a fatal error (exit code 1).
 
-### 3. Running Scripts via CLI
-You can execute the underlying discovery and database push scripts directly in your shell.
+### 3. Scheduling Automatic Scans
 
-*   **Web Search Task Manager**:
-    ```bash
-    # Generate all search task permutations for a city (idempotent — skips if file exists)
-    python3 scripts/agent_web_search_tasks.py --action generate --city SYDNEY --trace-id <CONVERSATION_ID>
+Schedule agents to run periodic background scans using the `/schedule` slash command:
+```bash
+# Web search discovery — daily at midnight
+/schedule CronExpression="0 0 * * *" Prompt="Use the fina_listing_web_search skill to search the web for new listings in SYDNEY."
 
-    # Get the next pending task (atomically transitions to IN_PROGRESS)
-    python3 scripts/agent_web_search_tasks.py --action next --city SYDNEY --trace-id <CONVERSATION_ID>
+# Listing enrichment — daily at 6am
+/schedule CronExpression="0 6 * * *" Prompt="Use the fina_listing_enrichment skill to enrich listings in SYDNEY."
+```
+*(Note: The Antigravity IDE window must remain active for scheduled agents to execute.)*
 
-    # Mark a task as completed with metrics
-    python3 scripts/agent_web_search_tasks.py --action complete --city SYDNEY --task-id sydney__RESTAURANT__0__sydney --listings-created 5 --pages-searched 3 --candidates-evaluated 8 --candidates-rejected 1 --candidates-duplicate 2 --maps-results-scraped 15 --trace-id <CONVERSATION_ID>
+---
 
-    # View aggregate progress
-    python3 scripts/agent_web_search_tasks.py --action summary --city SYDNEY --trace-id <CONVERSATION_ID>
-    ```
-*   **Maps Search Task Manager**:
-    ```bash
-    # Generate city-level task permutations (idempotent, pass --force to regenerate, pass --include-suburbs for suburb tasks)
-    python3 scripts/agent_maps_search_tasks.py --action generate --city SYDNEY --trace-id <CONVERSATION_ID>
+## 🧠 Shared Agent Memory
 
-    # Get the next pending task (atomically transitions to IN_PROGRESS)
-    python3 scripts/agent_maps_search_tasks.py --action next --city SYDNEY --trace-id <CONVERSATION_ID>
+Both production agents participate in a shared, self-evolving memory protocol via [`data/fina_agent_memory.md`](data/fina_agent_memory.md). This enables agents to learn from their executions and share operational knowledge across sessions.
 
-    # Mark a task as completed with metrics
-    python3 scripts/agent_maps_search_tasks.py --action complete --city SYDNEY --task-id sydney__RESTAURANT__0__sydney --listings-created 3 --places-fetched 15 --candidates-evaluated 15 --candidates-rejected 10 --candidates-duplicate 2 --trace-id <CONVERSATION_ID>
+**How it works:**
+1. **Read Phase** — At session start, the agent reads the memory file and internalises relevant insights.
+2. **Retrospective Phase** — After task completion, the agent evaluates whether the execution surfaced new operational knowledge. If yes, it merges the insight into the memory file within a **200-line budget**. If no, it skips the update entirely.
 
-    # View aggregate progress
-    python3 scripts/agent_maps_search_tasks.py --action summary --city SYDNEY --trace-id <CONVERSATION_ID>
-    ```
-*   **Listing Vector Embedding Generator**:
-    ```bash
-    # Generate and back-fill description embeddings for listings missing them
-    python3 scripts/agent_generate_embeddings.py --city SYDNEY --limit 10 --trace-id <CONVERSATION_ID>
-    ```
-*   **Migrate Template Descriptions** (one-time migration utility):
-    ```bash
-    python3 scripts/migrate_template_descriptions.py --trace-id <CONVERSATION_ID>
-    ```
-*   **Backup and Reset** (database reset utility):
-    ```bash
-    python3 scripts/agent_backup_and_reset.py --trace-id <CONVERSATION_ID>
-    ```
-*   **Google Places Fetch (single query)**:
-    ```bash
-    python3 scripts/agent_maps_fetch.py --query "Filipino restaurant in Sydney" --city SYDNEY --category RESTAURANT --trace-id <CONVERSATION_ID>
-    ```
-*   **Fetch Targets**:
-    ```bash
-    # Retrieve listings missing social URLs for a city
-    python3 scripts/agent_fetch_targets.py --type missing-social --city SYDNEY --trace-id <CONVERSATION_ID> > tmp/missing_socials_targets.json
-
-    # Retrieve business social URLs for a city (used by events finder)
-    python3 scripts/agent_fetch_targets.py --type business-socials --city SYDNEY --trace-id <CONVERSATION_ID> > tmp/business_socials_targets.json
-
-    # Retrieve all city listings for deduplication context (used by web finder)
-    python3 scripts/agent_fetch_targets.py --type city-listings --city SYDNEY --trace-id <CONVERSATION_ID> > tmp/existing_city_listings.json
-
-    # Retrieve scan bookmark for a listing on a platform (used by events finder)
-    python3 scripts/agent_fetch_targets.py --type social-post-tracker --listing-id <LISTING_UUID> --platform facebook --trace-id <CONVERSATION_ID>
-    ```
-*   **Check Duplicate**:
-    ```bash
-    python3 scripts/agent_check_duplicate.py --file tmp/existing_city_listings.json --name "<NAME>" --url "<URL>" --trace-id <CONVERSATION_ID>
-    ```
-*   **GraphQL Database Push**:
-    ```bash
-    # Push/Upsert a social post tracker entry
-    python3 scripts/agent_graphql_push.py --operation UpsertSocialPostTracker --variables '{"listingId": "listing-uuid", "platform": "FACEBOOK", "lastPostDate": "2026-06-09T00:00:00Z"}' --trace-id <CONVERSATION_ID>
-
-    # Create listing or event (e.g. from variables file)
-    python3 scripts/agent_graphql_push.py --operation CreateListing --variables @tmp/payload.json --trace-id <CONVERSATION_ID>
-    ```
-    
-    > [!IMPORTANT]
-    > **Category Validation & Normalization**: The database push script strictly validates `category` and `categories` values against the canonical definitions in [categories.json](file:///Users/ryan/.gemini/antigravity/scratch/fina-agent/data/categories.json) (e.g., `RESTAURANT`, `CAFE`, etc.). Case-insensitive normalization (to uppercase) is automatically applied. Invalid categories will trigger a validation error and terminate script execution (exiting with code 1).
-
-### 4. Scheduling Automatic Scans
-You can schedule the agents to run periodic background scans using the `/schedule` slash command:
-*   *Places Scan Schedule*:
-    ```bash
-    /schedule CronExpression="0 12 * * *" Prompt="Use the fina_listing_map_search skill to search Google Places for new listings in SYDNEY."
-    ```
-*   *Community Scan Schedule*:
-    ```bash
-    /schedule CronExpression="0 0 * * *" Prompt="Use the fina_listing_web_search skill to scan for events and listings across all cities."
-    ```
-*   *Listing Embedding Generator Schedule*:
-    ```bash
-    /schedule CronExpression="0 18 * * *" Prompt="Use the fina_listing_embedder skill to generate missing description vector embeddings in SYDNEY."
-    ```
-*   *Documentation Review Schedule*:
-    ```bash
-    /schedule CronExpression="0 0 * * 0" Prompt="Use the fina_docs_reviewer skill to audit documentation for gaps."
-    ```
-*(Note: The Antigravity IDE window must remain active for scheduled subagents to execute).*
+The memory file is not a changelog — it contains only distilled, reusable operational knowledge (platform behaviours, search patterns, city intelligence, known pitfalls). See the [Architecture Guide](docs/guides/ide_agent_architecture.md#-shared-agent-memory) for the full design rationale.
 
 ---
 
 ## 🧪 Run Unit Tests
 
-This project practices Test-Driven Development (TDD). The test suite runs entirely offline with mocked APIs to ensure fast, deterministic feedback.
-
-Execute the test runner from the root directory:
+This project practices Test-Driven Development (TDD). The test suite runs entirely offline with mocked APIs:
 ```bash
 source .venv/bin/activate
 python3 -m unittest discover tests
 ```
+
+---
+
+## 📖 Further Reading
+
+* **Architecture Guide**: [docs/guides/ide_agent_architecture.md](docs/guides/ide_agent_architecture.md) — Detailed agent flows, mermaid diagrams, database integration, and memory framework design.
+* **Agent Rules**: [AGENTS.md](AGENTS.md) — Architectural constraints, coding standards, and invariants for all agents.
+* **Categories**: [data/categories.json](data/categories.json) — Canonical business category definitions and search templates.
