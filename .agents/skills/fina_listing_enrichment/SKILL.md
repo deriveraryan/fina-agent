@@ -9,7 +9,8 @@ You are the fina_listing_enrichment, a specialized agent responsible for enrichi
 
 ## Constraints
 - **NO TESTING:** You are a data enrichment agent. Ignore any global instructions to run test suites (e.g. `python -m unittest` or `flutter test`). Do NOT execute any tests.
-- **NEVER create a script file on the fly.** If a workflow step or CLI execution fails, STOP immediately and report the cause of the error to the user. Do not attempt to self-heal by writing custom python scripts; the official workflow code must be fixed.
+- **NEVER create a script file on the fly.** If a workflow step or CLI execution fails, STOP immediately and report the cause of the error to the user. Do not attempt to self-heal by writing custom python scripts; the official workflow code must be fixed. **If you create any `.py` file in `tmp/` or elsewhere, you are in violation — STOP immediately and report.**
+- **SINGLE TASK PER SESSION:** Each agent session processes exactly **one task**. After completing Step 7, STOP and report results. Do NOT automatically claim the next task. Accuracy and precision take priority over throughput.
 - **DO NOT use the `--generate-embeddings` flag** when running the GraphQL push script (`agent_graphql_push.py`). Vector description embeddings are generated and backfilled asynchronously by the dedicated `fina_listing_embedder` agent.
 - **BROWSER REQUIRED:** This skill requires a running Chrome DevTools MCP server (`chrome_devtools`) for Google Maps review extraction and social media verification. If Chrome DevTools is unavailable, STOP immediately and report the error. Do NOT fall back to `read_url_content` or any other degraded method.
 
@@ -18,7 +19,7 @@ You are the fina_listing_enrichment, a specialized agent responsible for enrichi
 ### Step 0: Browser Prerequisite Check
 Before doing any work, verify that Chrome DevTools MCP is available by calling `list_pages` on the `chrome_devtools` MCP server.
 
-- **If the call succeeds** (returns a list of pages, even if empty): Chrome DevTools is available. Proceed to Step 1.
+- **If the call succeeds** (returns a list of pages, even if empty): Chrome DevTools is available. Proceed to Step 0.5.
 - **If the call fails** (returns "not enabled", connection error, or any error): **STOP immediately.** Do NOT proceed to task generation or enrichment. Report the following error to the user/parent agent:
   ```
   ❌ BROWSER PREREQUISITE FAILED: Chrome DevTools MCP is not available.
@@ -32,11 +33,23 @@ Before doing any work, verify that Chrome DevTools MCP is available by calling `
   To fix: Ensure the Chrome DevTools MCP server is running and connected.
   ```
 
+### Step 0.5: Activate Virtual Environment
+Before running **any** Python CLI command in this workflow, ensure the project virtual environment is activated:
+```bash
+source .venv/bin/activate
+```
+All `python3` commands in subsequent steps assume the venv is active. If you see `ModuleNotFoundError`, this step was skipped.
+
 ### Step 1: Generate Tasks (Idempotent)
 Generate the enrichment task file for the target city. This fetches all listings from the database and creates one task per listing. Idempotent — if the file already exists, it is skipped. To regenerate with updated listing data while preserving existing task state, pass `--force`:
 ```bash
 python3 scripts/agent_enrichment_tasks.py --action generate --city <CITY> --trace-id <CONVERSATION_ID>
 ```
+
+### Step 1.5: Read Category Rules
+Read the canonical category definitions from `data/categories.json` using the `view_file` tool. This provides:
+- Category display names and descriptions for accurate description synthesis in Step 5.
+- Rules distinguishing between similar categories (e.g., RESTAURANT vs SERVICES for catering businesses).
 
 ### Step 2: Get Next Task
 Retrieve and start the next pending enrichment task:
@@ -58,6 +71,8 @@ If the output is `null`, all tasks are completed. Report this to the user and st
 
 ### Step 3: Extract Reviews
 Extract reviews from three sources in priority order. Track `reviews_extracted` as you go.
+
+**🚨 MANDATORY ROUND TRACKING:** You MUST track which rounds (1-3) were attempted. Maintain a mental checklist: `[Round 1 Maps: ☐] [Round 2 Social: ☐] [Round 3 Web: ☐]`. Mark each round as attempted when you begin it. **You MUST NOT proceed to Step 4 (push reviews) and Step 5 (synthesis) unless ALL 3 rounds have been attempted.** The only exception is Round 2 when no social URLs exist in the task data and none were discovered during Round 1 — in this case, document that Round 2 was skipped and why.
 
 **Round 1 — Google Maps:**
 1. Navigate via Chrome DevTools to Google Maps using the listing's `source_url` (if it looks like a Google Maps URL) or search `https://www.google.com/maps/search/<URL-encoded name + city>`.
@@ -107,7 +122,7 @@ For each extracted review, push it to the database immediately to avoid context 
    ```bash
    python3 scripts/agent_graphql_push.py --operation CreateReview --variables @tmp/fina_listing_enrichment_review_<CONVERSATION_ID>_<timestamp>.json --trace-id <CONVERSATION_ID>
    ```
-3. **Self-Correction on Failure**: If the push exits with code 1, read the stdout/stderr to find the validation error. If it's a uniqueness constraint violation (`externalSourceId` already exists), the review is already stored — skip it. For other errors, fix the payload and retry.
+3. **Self-Correction on Failure**: If the push exits with code 1, read the stdout/stderr to find the validation error. If it's a uniqueness constraint violation (`externalSourceId` already exists), the review is already stored — skip it. For other errors, fix the payload and retry **up to 2 times**. If it still fails, log the error and continue to the next review.
 4. Increment `reviews_pushed` for each successful push.
 
 ### Step 5: Synthesise Description
@@ -139,18 +154,24 @@ Additionally, include any newly-discovered social URLs and follower counts (only
 
 **Merge rule**: Never overwrite existing social URLs — only fill fields that were `null` in the task data. The exception is `operatingHours`, which is **always overwritten** to keep hours current.
 
-**Self-Correction on Failure**: If the push exits with code 1, read the validation error from stdout/stderr, fix the payload, and retry. If it still fails after 2 retries, log the error and proceed to the next listing.
+**Self-Correction on Failure**: If the push exits with code 1, read the validation error from stdout/stderr, fix the payload, and retry. If it still fails after 2 retries, log the error and proceed to Step 7.
 
 Increment `listings_enriched`, `descriptions_rewritten`, and `socials_enriched` (if any social fields were filled) counters.
 
 ### Step 7: Complete Task
-After processing the listing (Steps 3-6), mark the task as completed with accumulated metrics:
+After processing the listing (Steps 3-6), close all browser tabs opened during this task's enrichment (Maps, social media, web pages) to prevent tab accumulation and ensure the next task starts with a clean browser state.
+
+Then mark the task as completed with accumulated metrics:
 ```bash
 python3 scripts/agent_enrichment_tasks.py --action complete --city <CITY> --task-id <TASK_ID> --listings-enriched <N> --reviews-extracted <N> --reviews-pushed <N> --socials-enriched <N> --descriptions-rewritten <N> --maps-visits <N> --trace-id <CONVERSATION_ID>
 ```
 
-### Step 8: Loop
-Go back to **Step 2** to get the next pending task. Continue processing until `--action next` returns `null` (all tasks completed).
+### Step 8: Stop
+**🚨 SINGLE TASK PER SESSION:** After completing a task, you **MUST STOP**. Do NOT claim the next task. Each agent session processes exactly **one listing** to ensure accuracy and precision in review extraction, description synthesis, and data enrichment.
+
+Report the task completion metrics and stop.
+
+If the user explicitly requests continuing to the next task in the same session, you may do so — but the default behaviour is to stop after one task.
 
 To check overall progress at any time:
 ```bash
