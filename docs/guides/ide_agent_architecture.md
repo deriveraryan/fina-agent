@@ -1,12 +1,12 @@
 # Fina Native IDE Agent Architecture & Runbook
 
-This reference document provides a comprehensive overview of the design, logic, and operational execution flow of the Fina Native IDE Agent pipeline. It details how the production agents (`fina_listing_web_search` and `fina_listing_enrichment`) interact with Google Maps, social platforms, and the Firebase SQL Connect database (hosted in the core `fina` repository) to automate discovery and enrichment tasks.
+This reference document provides a comprehensive overview of the design, logic, and operational execution flow of the Fina Native IDE Agent pipeline. It details how the production agents (`fina_listing_web_search`, `fina_listing_enrichment`, and `fina_events_listing`) interact with Google Maps, social platforms, and the Firebase SQL Connect database (hosted in the core `fina` repository) to automate discovery, enrichment, and event extraction tasks.
 
 ---
 
 ## 📌 Orchestration Flow
 
-Below is the high-level execution sequence of the native IDE agent workflow. The architecture leverages the Antigravity IDE's native subagents for data discovery, verification, and enrichment.
+Below is the high-level execution sequence of the native IDE agent workflow. The architecture leverages the Antigravity IDE's native subagents for data discovery, verification, enrichment, and event extraction.
 
 ```mermaid
 flowchart TD
@@ -55,6 +55,20 @@ flowchart TD
     DBTransactionEnrich --> CompleteEnrichTask["Execute: python3 scripts/agent_enrichment_tasks.py<br>--action complete --task-id ID"]
     CompleteEnrichTask --> RetroE["Post-Execution Retrospective<br>(Update fina_agent_memory.md if new insights)"]
     RetroE --> FinishEnrich(["Task Completed — Agent Stops"])
+
+    %% ════════ 3. EVENTS LISTING FLOW ════════
+    SelectSubagent -->|Events Listing| InvokeEventsListing["IDE Invokes fina_events_listing Subagent"]
+    InvokeEventsListing --> ReadMemoryEV["Read data/fina_agent_memory.md"]
+    ReadMemoryEV --> GenerateEventsTasks["Execute: python3 scripts/agent_events_tasks.py<br>--action generate --city C (idempotent)"]
+    GenerateEventsTasks --> GetNextEventsTask["Execute: python3 scripts/agent_events_tasks.py<br>--action next --city C"]
+    GetNextEventsTask --> ScanSocials["For each social URL (Facebook, Instagram, TikTok):<br>Fetch bookmark, navigate via Chrome DevTools,<br>scan up to 10 posts, extract events"]
+    ScanSocials --> PushEvents["Execute: python3 scripts/agent_graphql_push.py<br>--operation CreateEvent (per event)"]
+    PushEvents --> PushFollowers["Execute: python3 scripts/agent_graphql_push.py<br>--operation UpdateListingSocialUrls"]
+    PushFollowers --> PushBookmark["Execute: python3 scripts/agent_graphql_push.py<br>--operation UpsertSocialPostTracker"]
+    PushBookmark --> DBTransactionEvents[("PostgreSQL Database")]
+    DBTransactionEvents --> CompleteEventsTask["Execute: python3 scripts/agent_events_tasks.py<br>--action complete --task-id ID"]
+    CompleteEventsTask --> RetroEV["Post-Execution Retrospective<br>(Update fina_agent_memory.md if new insights)"]
+    RetroEV --> FinishEvents(["Task Completed — Agent Stops"])
 ```
 
 ---
@@ -79,6 +93,14 @@ This subagent enriches existing listings by extracting reviews, synthesising des
 *   **Description Synthesis**: Generates a 150-250 word description in Australian English (AuE) combining extracted reviews with the listing's existing description.
 *   **Data Push**: Reviews pushed individually via `CreateReview` (idempotent via `externalSourceId`). Enriched data pushed via `UpdateListingData` — description, operating hours (always overwritten), social URLs/follower counts (only filling previously-null fields).
 
+### 3. The `fina_events_listing` Subagent (Events Discoverer)
+This subagent crawls social media pages of verified businesses to discover temporal upcoming events:
+*   **Task-Based Execution**: Each run is scoped to a single listing (all its social URLs). Tasks are managed via `scripts/agent_events_tasks.py`, which generates one task per listing with social URLs (`data/listing_events_tasks_{city}.json`) and provides `next`/`complete` actions for state transitions. Pass `--force` to regenerate while merging existing task state.
+*   **Bookmark-Based Incremental Scanning**: Fetches the last scan bookmark via `agent_fetch_targets.py --type social-post-tracker` and scans only posts newer than the bookmark. Scans up to 10 posts per social page. Pinned posts are evaluated but don't trigger early termination.
+*   **Event Classification Heuristics**: Strict filters: temporal validation (future dates only), missing date exclusion, content filtering (excludes daily menus, promos, sales, recaps). Only distinct future community events with name, description, and date are extracted.
+*   **Australian Timezone-Aware Date Parsing**: Resolves relative post timestamps using current local time and Australian timezone offsets (AEST/AEDT/ACST/AWST), converting all dates to UTC ISO 8601.
+*   **Data Push**: Events via `CreateEvent` (with `--generate-embeddings`), follower counts via `UpdateListingSocialUrls`, scan bookmarks via `UpsertSocialPostTracker`.
+
 ### Planned Agents (Not Yet Released)
 
 The following agents exist as skills/scripts but are not yet production-ready:
@@ -87,7 +109,6 @@ The following agents exist as skills/scripts but are not yet production-ready:
 |---|---|---|
 | `fina_listing_map_search` | Google Places API discovery via task-based state machine | `scripts/agent_maps_search_tasks.py`, `scripts/agent_maps_fetch.py` |
 | `fina_listing_embedder` | Vector embedding backfill for semantic search | `scripts/agent_generate_embeddings.py` |
-| `fina_events_finder` | Social media event scraping from verified businesses | `scripts/agent_fetch_targets.py --type business-socials` |
 | `fina_docs_reviewer` | Documentation audit against codebase | Controlled at agent level |
 
 ### 3. Database Integration Scripts
@@ -97,6 +118,7 @@ To maintain security and ensure all data mutations pass through the authorized G
 *   `scripts/agent_check_duplicate.py`: Checks a local JSON file of existing listings for duplicate candidates by name and/or social URL match.
 *   `scripts/agent_web_search_tasks.py`: Manages the task-based state machine for `fina_listing_web_search` (`generate`, `next`, `complete`, `summary`).
 *   `scripts/agent_enrichment_tasks.py`: Manages the task-based state machine for `fina_listing_enrichment` (`generate`, `next`, `complete`, `summary`).
+*   `scripts/agent_events_tasks.py`: Manages the task-based state machine for `fina_events_listing` (`generate`, `next`, `complete`, `summary`). Only generates tasks for listings with social URLs.
 
 ### 4. Synchronous Geocoding & Deduplication
 To simplify the architecture and reduce cloud function dependencies, heavy transactional logic is handled synchronously by `agent_graphql_push.py` before inserting data into the database:
@@ -237,14 +259,15 @@ The current implementation uses a **last-writer-wins** strategy:
 
 ### Participating Agents
 
-The memory protocol is currently implemented for the 2 production-ready agents:
+The memory protocol is currently implemented for the 3 production-ready agents:
 
 | Agent | Read Step | Retro Step | Typical insights |
 |---|---|---|---|
 | `fina_listing_web_search` | Step 0.7 | Step 7.5 | Search template effectiveness, platform rate limits, suburb saturation |
 | `fina_listing_enrichment` | Step 0.7 | Step 7.5 | Maps UI selectors, review extraction techniques, hours parsing edge cases |
+| `fina_events_listing` | Step 0.7 | Step 5.5 | Date parsing quirks, event classification patterns, platform post format changes |
 
-Planned agents (`fina_listing_map_search`, `fina_events_finder`, `fina_listing_embedder`) are not yet released but can be onboarded by adding the same Step 0.7/7.5 pattern to their SKILL.md files.
+Planned agents (`fina_listing_map_search`, `fina_listing_embedder`) are not yet released but can be onboarded by adding the same Step 0.7/retro pattern to their SKILL.md files.
 
 ### Governing Rule
 
@@ -268,5 +291,5 @@ This makes Git the de-facto "episodic memory" layer — the live file is working
 
 ## 💻 Operational Runbook
 
-For instructions on how to trigger or schedule the `fina_listing_web_search` and `fina_listing_enrichment` agents, refer to the Operational Guide in the main repository `README.md`.
+For instructions on how to trigger or schedule the `fina_listing_web_search`, `fina_listing_enrichment`, and `fina_events_listing` agents, refer to the Operational Guide in the main repository `README.md`.
 

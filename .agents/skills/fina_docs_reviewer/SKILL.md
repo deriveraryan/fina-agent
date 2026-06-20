@@ -13,11 +13,12 @@ You are the `fina_docs_reviewer`, a specialized agent responsible for auditing d
 
 ## Production Agent Scope
 
-Only the following 2 agents are currently production-ready:
+Only the following 3 agents are currently production-ready:
 1. `fina_listing_web_search` — Web & social platform discovery
 2. `fina_listing_enrichment` — Listing enrichment pipeline
+3. `fina_events_listing` — Social media events discovery
 
-All other `fina_*` agents (`fina_listing_map_search`, `fina_listing_embedder`, `fina_events_finder`) are **planned but not yet released**. Documentation should reflect this — these agents should appear under a "Planned Agents" section, not as active production agents.
+All other `fina_*` agents (`fina_listing_map_search`, `fina_listing_embedder`) are **planned but not yet released**. Documentation should reflect this — these agents should appear under a "Planned Agents" section, not as active production agents.
 
 ## Your Workflow
 
@@ -26,7 +27,7 @@ Follow these steps exactly:
    - Identify its arguments (using `argparse` definitions or help outputs).
    - Verify that CLI usage examples in `README.md` and `docs/` exactly match these arguments.
 2. Verify that the agent roles and workflows described in `AGENTS.md` and `docs/guides/ide_agent_architecture.md` are aligned:
-   - Ensure only the 2 production agents (`fina_listing_web_search`, `fina_listing_enrichment`) are listed as active in registries and architecture diagrams.
+   - Ensure only the 3 production agents (`fina_listing_web_search`, `fina_listing_enrichment`, `fina_events_listing`) are listed as active in registries and architecture diagrams.
    - Ensure planned agents are documented separately and not presented as production-ready.
    - Check if any documented CLI triggers refer to scripts that do not exist.
 3. Verify the shared agent memory protocol:

@@ -15,6 +15,9 @@
 ## Enrichment Patterns
 <!-- Techniques and observations from the listing enrichment workflow -->
 
+## Events Patterns
+<!-- Event discovery insights: date parsing quirks, platform event formats, classification edge cases -->
+
 ## City Intelligence
 <!-- City-specific operational knowledge (e.g., suburb coverage saturation, high-yield categories) -->
 

@@ -1,16 +1,16 @@
-# Fina Events Finder Report — {CITY}
+# Fina Events Listing Report — {CITY}
 
 <!--
   TEMPLATE: Follow this structure exactly when writing the final report.
   Replace all {PLACEHOLDER} values with actual data.
-  Filename: logs/{YYYYMMDD}/fina_events_finder_report_{CITY}_{YYYYMMDD}_{HHMM}.md
+  Filename: logs/{YYYYMMDD}/fina_events_listing_report_{CITY}_{YYYYMMDD}_{HHMM}.md
 -->
 
 ## Run Metadata
 
 | Field | Value |
 | :--- | :--- |
-| **Agent** | fina_events_finder |
+| **Agent** | fina_events_listing |
 | **Target City** | {CITY} |
 | **Execution Date** | {YYYY-MM-DD HH:MM AEST} |
 | **Trace ID** | `{TRACE_ID}` |
@@ -19,9 +19,10 @@
 
 | Metric | Count |
 | :--- | :--- |
-| **Total Social URLs Evaluated** | {N} |
+| **Social URLs Scanned** | {N} |
 | **Events Discovered & Pushed** | {N} |
-| **URLs with No Events Found** | {N} |
+| **Follower Counts Updated** | {N} |
+| **Bookmarks Updated** | {N} |
 | **Errors Encountered** | {N} |
 
 ## Discovered Events

@@ -6,17 +6,18 @@ This repository houses the data discovery, verification, and enrichment agents f
 
 ## 🏛️ Repository Overview
 
-This project is decoupled from the main Fina application backend. It runs lightweight Python scripts locally inside the Antigravity IDE, with two production-ready agents:
+This project is decoupled from the main Fina application backend. It runs lightweight Python scripts locally inside the Antigravity IDE, with three production-ready agents:
 
 | Agent | Purpose |
 |---|---|
 | **`fina_listing_web_search`** | Discovers new Filipino listing candidates on Facebook, Instagram, TikTok, general web platforms, and Google Maps (via browser) using a task-based state machine |
 | **`fina_listing_enrichment`** | Enriches existing listings by extracting reviews, synthesising descriptions, updating operating hours, and filling missing social URLs |
+| **`fina_events_listing`** | Crawls social media pages of verified businesses to discover and push temporal upcoming events |
 
-Both agents participate in a [shared memory protocol](#-shared-agent-memory) that enables cross-session learning.
+All three agents participate in a [shared memory protocol](#-shared-agent-memory) that enables cross-session learning.
 
 > [!NOTE]
-> Additional agents (`fina_listing_map_search`, `fina_listing_embedder`, `fina_events_finder`, `fina_docs_reviewer`) exist as skills/scripts but are **not yet production-ready**. Their supporting CLI scripts are available in `scripts/` for future activation. See the [Architecture Guide](docs/guides/ide_agent_architecture.md) for details.
+> Additional agents (`fina_listing_map_search`, `fina_listing_embedder`, `fina_docs_reviewer`) exist as skills/scripts but are **not yet production-ready**. Their supporting CLI scripts are available in `scripts/` for future activation. See the [Architecture Guide](docs/guides/ide_agent_architecture.md) for details.
 
 ---
 
@@ -96,6 +97,11 @@ Trigger agents directly in the Antigravity Chat UI. For long-running scans, pref
 >
 > "Use the `fina_listing_enrichment` skill to enrich listings in SYDNEY."
 
+**Events Discovery:**
+> **Task-Based Queue System**: The `fina_events_listing` skill targets a **single city** and scans the social media pages of the next pending listing for upcoming events.
+>
+> "Use the `fina_events_listing` skill to discover events in SYDNEY."
+
 ### 2. Running Scripts via CLI
 
 #### Web Search Task Manager
@@ -132,6 +138,23 @@ python3 scripts/agent_enrichment_tasks.py --action complete --city SYDNEY --task
 python3 scripts/agent_enrichment_tasks.py --action summary --city SYDNEY --trace-id <CONVERSATION_ID>
 ```
 
+#### Events Task Manager
+```bash
+# Generate per-listing events tasks for a city (only listings with social URLs, idempotent)
+python3 scripts/agent_events_tasks.py --action generate --city SYDNEY --trace-id <CONVERSATION_ID>
+
+# Get the next pending events task (atomically transitions to IN_PROGRESS)
+python3 scripts/agent_events_tasks.py --action next --city SYDNEY --trace-id <CONVERSATION_ID>
+
+# Mark events task as completed with metrics
+python3 scripts/agent_events_tasks.py --action complete --city SYDNEY --task-id <ID> \
+  --events-discovered 3 --events-pushed 3 --social-urls-scanned 2 \
+  --follower-counts-updated 2 --bookmarks-updated 2 --trace-id <CONVERSATION_ID>
+
+# View aggregate events progress
+python3 scripts/agent_events_tasks.py --action summary --city SYDNEY --trace-id <CONVERSATION_ID>
+```
+
 #### Shared Utilities
 ```bash
 # Fetch existing city listings for deduplication context
@@ -141,7 +164,7 @@ python3 scripts/agent_fetch_targets.py --type city-listings --city SYDNEY --trac
 python3 scripts/agent_check_duplicate.py --file tmp/existing_city_listings.json --name "<NAME>" --url "<URL>" --trace-id <CONVERSATION_ID>
 
 # Push data via GraphQL (single payload)
-python3 scripts/agent_graphql_push.py --operation <CreateListing|UpdateListingData|CreateReview> --variables @tmp/payload.json --trace-id <CONVERSATION_ID>
+python3 scripts/agent_graphql_push.py --operation <CreateListing|UpdateListingData|CreateReview|CreateEvent|UpdateListingSocialUrls|UpsertSocialPostTracker> --variables @tmp/payload.json --trace-id <CONVERSATION_ID>
 ```
 
 > [!IMPORTANT]
@@ -156,6 +179,9 @@ Schedule agents to run periodic background scans using the `/schedule` slash com
 
 # Listing enrichment — daily at 6am
 /schedule CronExpression="0 6 * * *" Prompt="Use the fina_listing_enrichment skill to enrich listings in SYDNEY."
+
+# Events discovery — daily at noon
+/schedule CronExpression="0 12 * * *" Prompt="Use the fina_events_listing skill to discover events in SYDNEY."
 ```
 *(Note: The Antigravity IDE window must remain active for scheduled agents to execute.)*
 
@@ -163,7 +189,7 @@ Schedule agents to run periodic background scans using the `/schedule` slash com
 
 ## 🧠 Shared Agent Memory
 
-Both production agents participate in a shared, self-evolving memory protocol via [`data/fina_agent_memory.md`](data/fina_agent_memory.md). This enables agents to learn from their executions and share operational knowledge across sessions.
+All three production agents participate in a shared, self-evolving memory protocol via [`data/fina_agent_memory.md`](data/fina_agent_memory.md). This enables agents to learn from their executions and share operational knowledge across sessions.
 
 **How it works:**
 1. **Read Phase** — At session start, the agent reads the memory file and internalises relevant insights.

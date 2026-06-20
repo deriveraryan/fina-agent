@@ -14,8 +14,9 @@ flowchart TD
     
     AgentSelect -->|fina_listing_web_search| WebFlow["Web & Social Discovery"]
     AgentSelect -->|fina_listing_enrichment| EnrichFlow["Listing Enrichment Pipeline"]
+    AgentSelect -->|fina_events_listing| EventsFlow["Events Discovery Pipeline"]
 
-    WebFlow & EnrichFlow --> ReadMemory["Read data/fina_agent_memory.md"]
+    WebFlow & EnrichFlow & EventsFlow --> ReadMemory["Read data/fina_agent_memory.md"]
     ReadMemory --> PythonCLI["Execute Python CLI Scripts"]
     PythonCLI --> Verification{"Authenticity Heuristic / Web Verification"}
     Verification -->|Verified| GQLPush["Execute agent_graphql_push.py"]
@@ -32,7 +33,7 @@ flowchart TD
 
 ### Production Agents
 
-The following 2 agents are production-ready and actively executing tasks:
+The following 3 agents are production-ready and actively executing tasks:
 
 #### 1. `fina_listing_web_search`
 *   **Role**: Discovers new listing candidates on Facebook, Instagram, TikTok, web platforms, and Google Maps (via browser). Scoped to a **single task** (1 location × 1 category × 1 search template) with a limit of 30 new listings. **Single-task-per-session**: processes exactly one task, then stops.
@@ -67,6 +68,21 @@ The following 2 agents are production-ready and actively executing tasks:
     10. Runs post-execution retrospective against `data/fina_agent_memory.md`. Updates within the 200-line budget if new insights were surfaced; skips otherwise.
     11. **Stops.** Does not claim the next task.
 
+#### 3. `fina_events_listing`
+*   **Role**: Crawls social media pages of verified businesses to discover temporal upcoming events. Task-per-listing state machine (scans all social URLs for one listing). **Single-task-per-session**: processes exactly one listing, then stops.
+*   **CLI Trigger**: `python3 scripts/agent_events_tasks.py --action next --city <CITY> --trace-id <CONVERSATION_ID>`
+*   **Logic**:
+    1. Reads shared agent memory from `data/fina_agent_memory.md`.
+    2. Generates one events task per listing with social URLs (idempotent) via `--action generate`. Pass `--force` to regenerate while merging existing state.
+    3. Claims next pending task via `--action next` (atomic via `fcntl.flock()`).
+    4. For each non-null social URL (Facebook, Instagram, TikTok): fetches the scan bookmark via `agent_fetch_targets.py --type social-post-tracker`, navigates to the page via Chrome DevTools, captures follower count, and scans up to 10 posts backward from newest.
+    5. Applies event classification heuristics: temporal validation (future dates only), missing date exclusion, content filtering (excludes menus, promos, recaps).
+    6. Resolves relative post timestamps and event dates using Australian timezone offsets, converting to UTC ISO 8601.
+    7. Pushes events via `CreateEvent` (with `--generate-embeddings`), follower counts via `UpdateListingSocialUrls`, and updated scan bookmarks via `UpsertSocialPostTracker`. Self-correction on validation failure (up to 3 retries).
+    8. Closes all browser tabs, marks task `COMPLETED` with metrics via `--action complete`.
+    9. Runs post-execution retrospective against `data/fina_agent_memory.md`. Updates within the 200-line budget if new insights were surfaced; skips otherwise.
+    10. **Stops.** Does not claim the next task.
+
 ### Planned Agents (Not Yet Released)
 
 The following agents exist as skills/scripts but are not yet production-ready. Their supporting CLI scripts are available in `scripts/` for future activation.
@@ -75,7 +91,6 @@ The following agents exist as skills/scripts but are not yet production-ready. T
 |---|---|---|
 | `fina_listing_map_search` | Google Places API discovery | `scripts/agent_maps_search_tasks.py` |
 | `fina_listing_embedder` | Vector embedding backfill | `scripts/agent_generate_embeddings.py` |
-| `fina_events_finder` | Social media event scraping | `scripts/agent_fetch_targets.py --type business-socials` |
 | `fina_docs_reviewer` | Documentation audit | Controlled at agent level |
 
 ---
@@ -110,6 +125,13 @@ pip install -r requirements.txt
   python3 scripts/agent_enrichment_tasks.py --action next --city <CITY> --trace-id <CONVERSATION_ID>
   python3 scripts/agent_enrichment_tasks.py --action complete --city <CITY> --task-id <ID> --listings-enriched N --reviews-extracted N --reviews-pushed N --socials-enriched N --descriptions-rewritten N --maps-visits N --trace-id <CONVERSATION_ID>
   python3 scripts/agent_enrichment_tasks.py --action summary --city <CITY> --trace-id <CONVERSATION_ID>
+  ```
+- **Events Tasks**:
+  ```bash
+  python3 scripts/agent_events_tasks.py --action generate --city <CITY> --trace-id <CONVERSATION_ID>
+  python3 scripts/agent_events_tasks.py --action next --city <CITY> --trace-id <CONVERSATION_ID>
+  python3 scripts/agent_events_tasks.py --action complete --city <CITY> --task-id <ID> --events-discovered N --events-pushed N --social-urls-scanned N --follower-counts-updated N --bookmarks-updated N --trace-id <CONVERSATION_ID>
+  python3 scripts/agent_events_tasks.py --action summary --city <CITY> --trace-id <CONVERSATION_ID>
   ```
 - **Shared Utilities**:
   ```bash
@@ -179,7 +201,7 @@ pip install -r requirements.txt
 *   **Rule**: Decouple core ingestion logic from orchestrator runners. Scripts must be executable both via Python CLI (local) and Cloud Run/Functions (cloud). Database calls target production resources.
 
 ### 🚨 Rule 1.15: Shared Agent Memory Protocol
-*   **Rule**: Discovery and enrichment agents **must** participate in the shared memory protocol via `data/fina_agent_memory.md`.
+*   **Rule**: Discovery, enrichment, and events agents **must** participate in the shared memory protocol via `data/fina_agent_memory.md`.
 *   **Read Phase**: Read the memory file at session start, before task execution.
 *   **Retrospective Phase**: At session end, evaluate: _"Did this execution surface any new insight not already captured?"_
     *   If **yes**: Merge into the appropriate section, enforce the **200-line** budget, write back.
