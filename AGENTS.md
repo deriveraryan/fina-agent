@@ -1,120 +1,88 @@
 # Fina native IDE Agents Guide (AGENTS.md)
 
-Welcome! This document defines the architectural rules, workflows, technical standards, and execution constraints for the autonomous AI agents working in the `fina-agent` repository. It ensures that all modifications preserve the core architecture, preventing architectural drift and keeping the codebase 100% native to the Firebase and Google Antigravity platforms.
+This document defines the architectural rules, workflows, and execution constraints for the autonomous AI agents in the `fina-agent` repository. It preserves core architecture, prevents drift, and keeps the codebase 100% native to Firebase and Google Antigravity.
 
 ---
 
 ## 🏛️ Architecture & Orchestration Overview
 
-The `fina-agent` repository houses a pipeline of data discovery, verification, and enrichment agents for **Fina** (the Filipino-Australian community directory). It consists of specialized Antigravity IDE subagents that execute lightweight Python scripts locally, parse data, verify authenticity, and push results securely through a GraphQL layer directly into the live Fina PostgreSQL database.
+The `fina-agent` repository houses a pipeline of data discovery, verification, and enrichment agents for **Fina** (the Filipino-Australian community directory). Specialized Antigravity IDE subagents execute lightweight Python scripts locally, parse data, verify authenticity, and push results through a GraphQL layer into the live Fina PostgreSQL database.
 
 ```mermaid
 flowchart TD
     Start(["Trigger: Manual or Schedule"]) --> AgentSelect{"Choose Subagent"}
     
-    AgentSelect -->|fina_listing_map_search| PlacesFlow["Google Places Discovery"]
+    AgentSelect -->|fina_listing_web_search| WebFlow["Web & Social Discovery"]
     AgentSelect -->|fina_listing_enrichment| EnrichFlow["Listing Enrichment Pipeline"]
-    AgentSelect -->|fina_events_finder| EventsFlow["Upcoming Events Scraper"]
-    AgentSelect -->|fina_listing_web_search| CommFlow["Social Community Discovery"]
-    AgentSelect -->|fina_listing_embedder| EmbedFlow["Vector Embedding Backfill"]
-    AgentSelect -->|fina_docs_reviewer| DocsFlow["Documentation Audit"]
 
-    %% Shared logic
-    PlacesFlow & EnrichFlow & EventsFlow & CommFlow & EmbedFlow --> PythonCLI["Execute Python CLI Scripts"]
+    WebFlow & EnrichFlow --> ReadMemory["Read data/fina_agent_memory.md"]
+    ReadMemory --> PythonCLI["Execute Python CLI Scripts"]
     PythonCLI --> Verification{"Authenticity Heuristic / Web Verification"}
-    Verification -->|Verified| GQLPush["Execute agent_graphql_push.py / agent_generate_embeddings.py"]
+    Verification -->|Verified| GQLPush["Execute agent_graphql_push.py"]
     GQLPush --> PostgreSQL[(PostgreSQL Database)]
-    DocsFlow --> AuditDocs["Audit Docs Against Codebase"]
-    AuditDocs --> UpdateDocs["Update Markdown Files / Write Report"]
+    GQLPush --> Retro["Post-Execution Retrospective"]
+    Retro -->|New insight| UpdateMemory["Update fina_agent_memory.md"]
+    Retro -->|Nothing new| Stop(["Stop"])
+    UpdateMemory --> Stop
 ```
 
 ---
 
 ## 🤖 Agent Registry
 
-Here is the registry of the 6 specialized Antigravity subagents:
+### Production Agents
 
-### 1. `fina_listing_map_search`
-*   **Role**: Discovers and verifies Filipino businesses on Google Places (New). Each run is scoped to a single task (1 city × 1 category × 1 search template).
-*   **CLI Trigger**: `python3 scripts/agent_maps_search_tasks.py --action next --city <CITY> --trace-id <CONVERSATION_ID>`
-*   **Logic**:
-    1. Generates all task permutations for a city (idempotent) via `scripts/agent_maps_search_tasks.py --action generate --city <CITY>`, producing `data/listing_map_search_tasks_{city}.json` with all (category × template) combinations at city-level only by default. Pass `--include-suburbs` to add suburb permutations. Pass `--force` to regenerate while merging existing task state.
-    2. Retrieves the next pending task via `--action next`, which uses `fcntl.flock()` to atomically claim the task under an exclusive file lock, preventing concurrent agents from picking the same task. Returns the task's pre-formatted search query, category, and location.
-    3. Runs `scripts/agent_fetch_targets.py --type city-listings --city <CITY> --trace-id <CONVERSATION_ID> > tmp/existing_city_listings_<CONVERSATION_ID>.json` to write existing city context to a per-agent temporary file.
-    4. Calls `scripts/agent_maps_fetch.py --query "<formatted_query>" --city <CITY> --category <CATEGORY> --trace-id <CONVERSATION_ID>` to make a single Google Places (New) Text Search API call.
-    5. Checks for duplicates by running `python3 scripts/agent_check_duplicate.py --file tmp/existing_city_listings_<CONVERSATION_ID>.json --name "<NAME>" --url "<URL>" --trace-id <CONVERSATION_ID>`.
-    6. Evaluates name and description context internally to verify authentic Filipino affiliation.
-    7. Pushes verified listings using the `CreateListing` mutation (without `--generate-embeddings`) with self-correction on validation failure.
-    8. Marks the task as `COMPLETED` with metrics via `--action complete --task-id <ID> --listings-created N --places-fetched N --candidates-evaluated N --candidates-rejected N --candidates-duplicate N --trace-id <CONVERSATION_ID>`. Completion also uses `fcntl.flock()` to safely merge metrics without clobbering other agents' state.
+The following 2 agents are production-ready and actively executing tasks:
 
-### 2. `fina_listing_web_search`
-*   **Role**: Discovers new listing candidates on Facebook, Instagram, TikTok, web platforms, and Google Maps (via browser). Each run is scoped to a **single task** (1 location × 1 category × 1 search template) with a limit of 30 new listings. Per-round page limits: 10 pages for social/web rounds, unlimited scroll for Maps. **Single-task-per-session**: the agent processes exactly one task per session, then stops. Accuracy and precision take priority over throughput.
+#### 1. `fina_listing_web_search`
+*   **Role**: Discovers new listing candidates on Facebook, Instagram, TikTok, web platforms, and Google Maps (via browser). Scoped to a **single task** (1 location × 1 category × 1 search template) with a limit of 30 new listings. **Single-task-per-session**: processes exactly one task, then stops.
 *   **CLI Trigger**: `python3 scripts/agent_web_search_tasks.py --action next --city <CITY> --trace-id <CONVERSATION_ID>`
 *   **Logic**:
-    1. Reads shared agent memory from `data/fina_agent_memory.md` to internalise operational insights from prior executions.
-    2. Generates all task permutations for a city (idempotent) via `scripts/agent_web_search_tasks.py --action generate --city <CITY>`, producing `data/listing_web_search_tasks_{city}.json` with all (category × template × location) combinations ordered city-first (all city-level tasks across all categories, then all suburb-level tasks) from `data/top_suburbs_per_city.json`. Categories with `"cityOnly": true` in `data/categories.json` (e.g. `GOVERNMENT`) produce only city-level tasks, skipping suburb permutations. Individual templates listed in `"cityOnlySearchTemplateIndices"` (e.g. metro-wide SERVICES templates) also skip suburb permutations. By default, skips if the file already exists; pass `--force` to regenerate while merging existing task state (status, metrics) into the new file via atomic replacement.
-    3. Retrieves the next pending task via `--action next`, which uses `fcntl.flock()` to atomically claim the task under an exclusive file lock, preventing concurrent agents from picking the same task. Returns the task's pre-formatted search query, category, and location.
-    4. Runs `scripts/agent_fetch_targets.py --type city-listings --city <CITY> --trace-id <CONVERSATION_ID> > tmp/existing_city_listings_<CONVERSATION_ID>.json` to write existing city context to a per-agent temporary file.
-    5. Uses native web search with site-specific queries in four mandatory sequential rounds (Facebook, Instagram, General Web, and Google Maps browser). Round 1 uses `<formatted_query> site:facebook.com`, Round 2 uses `<formatted_query> site:instagram.com`, Round 3 uses `<formatted_query> -site:facebook.com -site:instagram.com` (excludes social platforms already covered in Rounds 1-2), and Round 4 uses the task's `maps_formatted_query`. Rounds 1-3 scan up to 10 search result pages each. Round 4 navigates to Google Maps via Chrome DevTools (`https://www.google.com/maps/search/<query>`) and scrolls through the full results list. All 4 rounds must be attempted before task completion (exceptions: 30-listing cap or saturation early-exit). Candidates from Round 4 skip the Step 6e Maps enrichment (already Maps-sourced) and receive the `google-maps` tag.
-    6. Checks for duplicates by running `python3 scripts/agent_check_duplicate.py --file tmp/existing_city_listings_<CONVERSATION_ID>.json --name "<NAME>" --url "<URL>" --trace-id <CONVERSATION_ID>`. When the check returns `should_merge: true`, the agent pushes new fields via the `UpdateListingData` mutation using the matched listing's `id` (not `CreateListing`). While `CreateListing` has built-in server-side dedup that handles merges transparently, agents must use `UpdateListingData` for explicit merge scenarios to avoid redundant dedup work.
-    7. Navigates to candidate pages via Chrome DevTools, extracting only visible text/selectors to prevent raw HTML bloat.
-    8. For Rounds 1-3 candidates, navigates to Google Maps via Chrome DevTools to enrich verified candidates with latitude/longitude (parsed from URL bar), address, opening hours, phone, Place ID, and website — filling only empty fields. Adds a `google-maps` tag when enrichment succeeds. Proceeds to push regardless of Maps enrichment outcome.
-    9. Creates verified **new** listings via `agent_graphql_push.py --operation CreateListing` (without `--generate-embeddings`, including `tiktokUrl` and `tiktokFollowers`) with self-correction on validation failure.
-    10. Marks the task as `COMPLETED` with metrics via `--action complete --task-id <ID> --listings-created N --pages-searched N --candidates-evaluated N --candidates-rejected N --candidates-duplicate N --candidates-merged N --maps-results-scraped N --trace-id <CONVERSATION_ID>`. Completion also uses `fcntl.flock()` to safely merge metrics without clobbering other agents' state.
-    11. Runs a post-execution retrospective against `data/fina_agent_memory.md`. If the run surfaced genuinely new operational insights (platform behaviours, search patterns, city intelligence, failure modes), updates the memory file within the 150-line budget. Skips the update if nothing new was learned.
-    12. **Stops.** Does not claim the next task. Each session processes exactly one task.
+    1. Reads shared agent memory from `data/fina_agent_memory.md`.
+    2. Generates task permutations (idempotent) via `--action generate`, producing `data/listing_web_search_tasks_{city}.json`. Categories with `"cityOnly": true` or templates in `"cityOnlySearchTemplateIndices"` skip suburb permutations. Pass `--force` to regenerate while merging existing state.
+    3. Claims next pending task via `--action next` (atomic via `fcntl.flock()`).
+    4. Fetches existing city listings to `tmp/existing_city_listings_<CONVERSATION_ID>.json` for dedup context.
+    5. Runs four sequential search rounds: Facebook (`site:facebook.com`), Instagram (`site:instagram.com`), General Web (excludes social), and Google Maps browser. Per-round page limits: 10 for social/web, unlimited scroll for Maps.
+    6. Checks duplicates via `agent_check_duplicate.py`. Merge scenarios use `UpdateListingData`; new listings use `CreateListing`.
+    7. Navigates to candidates via Chrome DevTools, extracting visible text/selectors only.
+    8. For Rounds 1-3 candidates, enriches from Google Maps (lat/lng, address, hours, phone, Place ID, website). Adds `google-maps` tag on success.
+    9. Pushes verified listings via `agent_graphql_push.py --operation CreateListing` (without `--generate-embeddings`) with self-correction on validation failure.
+    10. Marks task `COMPLETED` with metrics via `--action complete`.
+    11. Runs post-execution retrospective against `data/fina_agent_memory.md`. Updates within the 200-line budget if new insights were surfaced; skips otherwise.
+    12. **Stops.** Does not claim the next task.
 
-### 3. `fina_listing_enrichment`
-*   **Role**: Enriches every existing listing in the database by extracting reviews, synthesising AuE descriptions, and filling missing social URLs. Uses a task-per-listing state machine for resumability and concurrency. Strictly targets a single city per run. **Single-task-per-session**: the agent processes exactly one listing per session, then stops. Accuracy and precision take priority over throughput.
+#### 2. `fina_listing_enrichment`
+*   **Role**: Enriches existing listings by extracting reviews, synthesising AuE descriptions, updating operating hours, and filling missing social URLs. Task-per-listing state machine. **Single-task-per-session**: processes exactly one listing, then stops.
 *   **CLI Trigger**: `python3 scripts/agent_enrichment_tasks.py --action next --city <CITY> --trace-id <CONVERSATION_ID>`
 *   **Logic**:
-    1. Reads shared agent memory from `data/fina_agent_memory.md` to internalise operational insights from prior executions.
-    2. Generates one enrichment task per listing (idempotent) via `scripts/agent_enrichment_tasks.py --action generate --city <CITY>`, producing `data/listing_enrichment_tasks_{city}.json` by fetching all listings from the database via `ListAdminListings`. Pass `--force` to regenerate while merging existing task state.
-    3. Reads canonical category definitions from `data/categories.json` to inform accurate description synthesis.
-    4. Retrieves the next pending task via `--action next`, which uses `fcntl.flock()` to atomically claim the task under an exclusive file lock. Returns the listing's identity, current description, source URL, and existing social URLs.
-    5. Extracts reviews in three mandatory sequential rounds (all must be attempted): (a) Google Maps browser via Chrome DevTools — navigates to the listing's Maps page and extracts up to 10 visible reviews, operating hours (parsed via `parse_maps_opening_hours()`), and social links; (b) Social media — visits existing Facebook/Instagram/TikTok pages to extract testimonials and capture missing social URLs + follower counts; (c) Web search — searches for `"<name>" <city> reviews` across up to 5 pages.
-    6. Pushes extracted reviews to the database individually via `CreateReview` mutation (idempotent via `externalSourceId` uniqueness constraint).
-    7. Synthesises a new 150-250 word description in Australian English (AuE) combining extracted reviews with the listing's existing description. The agent writes the description internally following an embedded style guide (friendly, professional tone; plain language accessible to non-native speakers).
-    8. Pushes the enriched data via `UpdateListingData` mutation — includes the new description, operating hours (always overwritten to keep current), and any newly-discovered social URLs/follower counts (only filling previously-null fields).
-    9. Closes all browser tabs opened during enrichment, then marks the task as `COMPLETED` with metrics via `--action complete --task-id <ID> --listings-enriched N --reviews-extracted N --reviews-pushed N --socials-enriched N --descriptions-rewritten N --maps-visits N --trace-id <CONVERSATION_ID>`. Completion uses `fcntl.flock()` to safely merge metrics.
-    10. Runs a post-execution retrospective against `data/fina_agent_memory.md`. If the run surfaced genuinely new operational insights (platform behaviours, enrichment patterns, city intelligence, failure modes), updates the memory file within the 150-line budget. Skips the update if nothing new was learned.
-    11. **Stops.** Does not claim the next task. Each session processes exactly one listing.
+    1. Reads shared agent memory from `data/fina_agent_memory.md`.
+    2. Generates one enrichment task per listing (idempotent) via `--action generate`. Pass `--force` to regenerate while merging existing state.
+    3. Reads canonical category definitions from `data/categories.json`.
+    4. Claims next pending task via `--action next` (atomic via `fcntl.flock()`).
+    5. Extracts reviews in three sequential rounds: (a) Google Maps browser — reviews, operating hours, social links; (b) Social media — testimonials, follower counts; (c) Web search — `"<name>" <city> reviews` across up to 5 pages.
+    6. Pushes reviews individually via `CreateReview` mutation (idempotent via `externalSourceId`).
+    7. Synthesises a 150-250 word AuE description combining reviews with existing description.
+    8. Pushes enriched data via `UpdateListingData` — description, operating hours, social URLs/follower counts.
+    9. Closes all browser tabs, marks task `COMPLETED` with metrics via `--action complete`.
+    10. Runs post-execution retrospective against `data/fina_agent_memory.md`. Updates within the 200-line budget if new insights were surfaced; skips otherwise.
+    11. **Stops.** Does not claim the next task.
 
-### 4. `fina_listing_embedder`
-*   **Role**: Generates and updates description vector embeddings for listings missing them. Strictly targets a single city per run.
-*   **CLI Trigger**: `python3 scripts/agent_generate_embeddings.py --city <CITY> --trace-id <CONVERSATION_ID> --limit <LIMIT> > tmp/fina_listing_embedder_run.json`
-*   **Logic**:
-    1. Fetches listings lacking embeddings for a city using `ListListingsMissingEmbedding`.
-    2. Constructs a composite description string for each listing.
-    3. Calls the local GenAI embedding function to generate a 768-dimension vector.
-    4. Pushes the updated vector to the database via the `UpdateListingData` mutation (sleeping 0.2s between calls to prevent rate limits).
-    5. Outputs a summary report as JSON to stdout, typically redirected to `tmp/fina_listing_embedder_run.json`.
+### Planned Agents (Not Yet Released)
 
-### 5. `fina_events_finder`
-*   **Role**: Crawls social media pages of verified businesses to discover upcoming temporal events. Strictly targets a single city per run.
-*   **CLI Trigger**: `python3 scripts/agent_fetch_targets.py --type business-socials --city <CITY> --trace-id <CONVERSATION_ID> > tmp/business_socials_targets.json`
-*   **Logic**:
-    1. Retrieves verified social media URLs for a city and redirects them to a file to prevent context bloat.
-    2. Retrieves the last scanned post timestamp bookmark from the database via the social-post-tracker endpoint.
-    3. Uses Chrome DevTools to navigate to candidate pages, extracting only visible text/selectors (follower count and post content) to avoid outerHTML bloat.
-    4. Evaluates posts chronologically, using current local time to resolve relative dates into UTC ISO 8601 strings and parsing follower counts to integers (including using the python parser for TikTok).
-    5. Filters events against strict heuristics (future-bound, non-promotional) and pushes events, bookmarks, and follower counts (facebookFollowers, instagramFollowers, or tiktokFollowers) using mutations with validation self-correction on failure.
+The following agents exist as skills/scripts but are not yet production-ready. Their supporting CLI scripts are available in `scripts/` for future activation.
 
-
-### 6. `fina_docs_reviewer`
-*   **Role**: Reviews architecture guides, READMEs, and configurations for gaps and alignment.
-*   **Trigger**: Controlled entirely at the agent level.
-*   **Logic**:
-    1. Audits documentation files against active python script arguments and configurations.
-    2. Reports discrepancies and updates document details to keep them up to date.
-    3. Files markdown run reports under `logs/`.
+| Agent | Purpose | Key Script |
+|---|---|---|
+| `fina_listing_map_search` | Google Places API discovery | `scripts/agent_maps_search_tasks.py` |
+| `fina_listing_embedder` | Vector embedding backfill | `scripts/agent_generate_embeddings.py` |
+| `fina_events_finder` | Social media event scraping | `scripts/agent_fetch_targets.py --type business-socials` |
+| `fina_docs_reviewer` | Documentation audit | Controlled at agent level |
 
 ---
 
 ## 🛠️ Setup & CLI Commands
 
 ### Environment Setup
-Before executing any agent commands, verify the local environment is configured:
 ```bash
 # 1. Create and activate virtual environment
 python3 -m venv .venv
@@ -128,246 +96,140 @@ pip install -r requirements.txt
 ```
 
 ### CLI Script Reference
-- **Fetch Targets**:
-  ```bash
-  # Fetch targets and redirect output to a file to prevent context bloat
-  python3 scripts/agent_fetch_targets.py --type <missing-social|business-socials|city-listings|social-post-tracker> --city <CITY> --trace-id <CONVERSATION_ID> > tmp/targets_output.json
 
-  # Retrieve social post tracker bookmark (requires --listing-id and --platform)
-  python3 scripts/agent_fetch_targets.py --type social-post-tracker --listing-id <LISTING_UUID> --platform <facebook|instagram|tiktok> --trace-id <CONVERSATION_ID>
-  ```
-- **Maps Fetch**:
-  ```bash
-  # Single Google Places API call using a pre-formatted query
-  python3 scripts/agent_maps_fetch.py --query "<QUERY>" --city <CITY> --category <CATEGORY> --trace-id <CONVERSATION_ID>
-  ```
-- **Listing Embeddings Generation**:
-  ```bash
-  python3 scripts/agent_generate_embeddings.py --city <CITY> --trace-id <CONVERSATION_ID> --limit <LIMIT> > tmp/fina_listing_embedder_run.json
-  ```
 - **Web Search Tasks**:
   ```bash
-  # Generate task permutations for a city (idempotent, pass --force to regenerate)
   python3 scripts/agent_web_search_tasks.py --action generate --city <CITY> --trace-id <CONVERSATION_ID>
-
-  # Get next pending task (atomically transitions to IN_PROGRESS)
   python3 scripts/agent_web_search_tasks.py --action next --city <CITY> --trace-id <CONVERSATION_ID>
-
-  # Mark task as completed with metrics
   python3 scripts/agent_web_search_tasks.py --action complete --city <CITY> --task-id <ID> --listings-created N --pages-searched N --candidates-evaluated N --candidates-rejected N --candidates-duplicate N --candidates-merged N --maps-results-scraped N --trace-id <CONVERSATION_ID>
-
-  # View aggregate progress
   python3 scripts/agent_web_search_tasks.py --action summary --city <CITY> --trace-id <CONVERSATION_ID>
-  ```
-- **Maps Search Tasks**:
-  ```bash
-  # Generate city-level task permutations (idempotent, pass --force to regenerate, pass --include-suburbs for suburb tasks)
-  python3 scripts/agent_maps_search_tasks.py --action generate --city <CITY> --trace-id <CONVERSATION_ID>
-
-  # Get next pending task (atomically transitions to IN_PROGRESS)
-  python3 scripts/agent_maps_search_tasks.py --action next --city <CITY> --trace-id <CONVERSATION_ID>
-
-  # Mark task as completed with metrics
-  python3 scripts/agent_maps_search_tasks.py --action complete --city <CITY> --task-id <ID> --listings-created N --places-fetched N --candidates-evaluated N --candidates-rejected N --candidates-duplicate N --trace-id <CONVERSATION_ID>
-
-  # View aggregate progress
-  python3 scripts/agent_maps_search_tasks.py --action summary --city <CITY> --trace-id <CONVERSATION_ID>
   ```
 - **Enrichment Tasks**:
   ```bash
-  # Generate per-listing enrichment tasks for a city (idempotent, pass --force to regenerate)
   python3 scripts/agent_enrichment_tasks.py --action generate --city <CITY> --trace-id <CONVERSATION_ID>
-
-  # Get next pending enrichment task (atomically transitions to IN_PROGRESS)
   python3 scripts/agent_enrichment_tasks.py --action next --city <CITY> --trace-id <CONVERSATION_ID>
-
-  # Mark enrichment task as completed with metrics
   python3 scripts/agent_enrichment_tasks.py --action complete --city <CITY> --task-id <ID> --listings-enriched N --reviews-extracted N --reviews-pushed N --socials-enriched N --descriptions-rewritten N --maps-visits N --trace-id <CONVERSATION_ID>
-
-  # View aggregate enrichment progress
   python3 scripts/agent_enrichment_tasks.py --action summary --city <CITY> --trace-id <CONVERSATION_ID>
   ```
-- **Check Duplicate**:
+- **Shared Utilities**:
   ```bash
-  # Check local listings file for duplicate name or URL match
+  # Fetch targets (redirect output to prevent context bloat)
+  python3 scripts/agent_fetch_targets.py --type <city-listings|missing-social|business-socials|social-post-tracker> --city <CITY> --trace-id <CONVERSATION_ID> > tmp/targets_output.json
+
+  # Check duplicate
   python3 scripts/agent_check_duplicate.py --file tmp/existing_city_listings.json --name "<NAME>" --url "<URL>" --trace-id <CONVERSATION_ID>
-  ```
-- **GraphQL Push**:
-  ```bash
-  # Single Payload (Note: Omit --generate-embeddings for maps and web finder discovery agents)
-  python3 scripts/agent_graphql_push.py --operation <CreateListing|UpdateListingSocialUrls|CreateEvent|UpsertSocialPostTracker> --variables @tmp/payload.json --trace-id <CONVERSATION_ID>
-  
-  # Bulk Payload (Array of JSON Objects)
-  python3 scripts/agent_graphql_push.py --operation BulkCreateListing --variables @tmp/bulk_payload.json --trace-id <CONVERSATION_ID>
-  ```
-- **Migrate Embeddings** (one-time migration utility):
-  ```bash
-  python3 scripts/migrate_embeddings.py --city <CITY> --trace-id <CONVERSATION_ID>
-  ```
-- **Migrate Template Descriptions** (one-time migration utility):
-  ```bash
-  python3 scripts/migrate_template_descriptions.py --trace-id <CONVERSATION_ID>
-  ```
-- **Backup & Reset** (database reset utility):
-  ```bash
-  python3 scripts/agent_backup_and_reset.py --trace-id <CONVERSATION_ID>
+
+  # GraphQL push (single payload)
+  python3 scripts/agent_graphql_push.py --operation <CreateListing|UpdateListingData|UpdateListingSocialUrls|CreateReview|CreateEvent|UpsertSocialPostTracker> --variables @tmp/payload.json --trace-id <CONVERSATION_ID>
   ```
 
 ---
 
 ## 1. Core Architectural Constraints (Strict Invariants)
 
-Any agent executing tasks in this codebase must strictly adhere to the following rules:
-
 ### 🚨 Rule 1.1: GraphQL Impersonation Client Pattern
-*   **Rule**: The Python discovery and enrichment agents **must** read and write to the database exclusively using the GraphQL REST impersonation layer (e.g., calling `execute_graphql_operation`).
-*   **Invariant**: Do NOT build custom direct database drivers or write raw SQL to bypass the GraphQL endpoint. Bypassing the security context, audit triggers, and schema validation enforced by the GraphQL layer is strictly prohibited.
+*   **Rule**: Agents **must** read and write to the database exclusively using the GraphQL REST impersonation layer (`execute_graphql_operation`).
+*   **Invariant**: No custom direct database drivers or raw SQL. The GraphQL layer enforces security context, audit triggers, and schema validation.
 
 ### 🚨 Rule 1.2: Python CLI Agent Workflows & Trace ID Correlation
-*   **Rule**: All discovery, auditing, and enrichment logic must run natively inside the Python 3 CLI scripts in the `/scripts` directory, structured into cohesive features under `/features`.
-*   **Trace correlation**: When executing CLI scripts or pushing mutations via `agent_graphql_push.py`, you **must** pass the current conversation ID as `--trace-id` (e.g., `agent_graphql_push.py --trace-id <CONVERSATION_ID>`).
-*   **Safety Invariant**: Inside discovery workflows, you **must** filter or guard against acting recursively on the agent's own created/modified records, ensuring that queries exclude records recently processed or marked with specific metadata to avoid duplicate scan passes.
+*   **Rule**: All logic must run inside Python 3 CLI scripts in `/scripts`, structured into features under `/features`.
+*   **Trace correlation**: Always pass `--trace-id <CONVERSATION_ID>` to CLI scripts and mutations.
+*   **Safety Invariant**: Guard against acting recursively on the agent's own created/modified records.
 
 ### 🚨 Rule 1.3: Single Source of Truth for Categories
-*   **Rule**: All business categories, verification rules, and display names must be defined strictly in `data/categories.json`.
-*   **Invariant**: Never hardcode category checks, display names, or verification rules inside Python scripts. Always load and validate categories against `data/categories.json` (e.g., using `load_valid_categories()`). The database schemas and mutations are defined by the main Fina application, and agents must strictly comply with the database schema by matching parameter typing exactly when invoking `execute_graphql_operation`.
+*   **Rule**: All business categories, verification rules, and display names must be defined in `data/categories.json`.
+*   **Invariant**: Never hardcode category checks. Always load and validate via `load_valid_categories()`. Match parameter typing exactly when invoking `execute_graphql_operation`.
 
 ### 🚨 Rule 1.4: State Decoupling, Caching, and Concurrent Access
-*   **Rule**: Local agent cache must be kept completely decoupled from execution logic. When multiple agents run concurrently, all shared mutable state must be protected.
-*   **File Locking Invariant**: Task state files (e.g., `data/listing_map_search_tasks_{city}.json`, `data/listing_web_search_tasks_{city}.json`) must be accessed through `locked_next_task()` and `locked_complete_task()` from `features/scanning/task_lifecycle.py`, which use `fcntl.flock()` to guarantee exclusive access during read-modify-write sequences.
-*   **Tmp File Isolation Invariant**: All temporary files written to `tmp/` must include the agent's `CONVERSATION_ID` in the filename (e.g., `tmp/existing_city_listings_<CONVERSATION_ID>.json`, `tmp/tiktok_profile_<CONVERSATION_ID>.html`) to prevent file collisions between concurrent agents.
-*   **Known Limitation**: The `CreateListing` deduplication check (`check_duplicate()` in `dedup.py`) uses a TOCTOU (Time-Of-Check-Time-Of-Use) pattern against the database. When concurrent agents discover the same listing simultaneously, both may pass the dedup check before either inserts. The long-term fix is a PostgreSQL unique constraint on `(normalized_name, city)` or `(source_url)` with upsert semantics in the GraphQL mutation layer.
+*   **File Locking**: Task state files must be accessed through `locked_next_task()` and `locked_complete_task()` from `features/scanning/task_lifecycle.py` (`fcntl.flock()`).
+*   **Tmp File Isolation**: All temporary files in `tmp/` must include the agent's `CONVERSATION_ID` in the filename.
+*   **Known Limitation**: `CreateListing` deduplication uses a TOCTOU pattern. Concurrent agents may both pass the dedup check before either inserts.
 
 ### 🚨 Rule 1.5: Test-Driven Development (TDD) Enforcement
-*   **Rule**: You **must** utilize Test-Driven Development (TDD) workflows whenever pragmatic for backend Python helper logic, validation heuristics, and parsing utilities.
-*   **Test-First Cycle**: Write failing unit test assertions (`unittest` under `tests/` or `features/scanning/tests/`) *before* implementing new heuristics, data filters, or parsing structures.
-*   **Mocking Boundaries**: Always mock network boundaries (like HTTP requests to Google Places/social media sites) and database calls (`execute_graphql_operation`) to keep test execution deterministic, offline, and ultra-fast (completing in < 1s).
-*   **Production/Live Cloud Integration (No Emulators)**: For actual execution and push operations, the graphql client connects directly to the live development/production resources in Google Cloud / Firebase. Local emulators are not used to simplify local workflows and ensure environment consistency.
-*   **Integration Testing**: Integration testing must always complement unit testing, NOT duplicate it, taking a pragmatic approach when adding integration tests.
+*   **Rule**: Utilize TDD whenever pragmatic for Python helper logic, validation heuristics, and parsing utilities.
+*   **Test-First**: Write failing assertions before implementing. Mock all network and database boundaries. Tests must complete in <1s.
+*   **Live Cloud**: Actual execution connects directly to production/live resources. No emulators.
 
 ### 🚨 Rule 1.6: Vertical Slice Architecture & Bounded DDD Abstraction
-*   **Rule**: Organize the agent codebase by cohesive feature domains ("vertical slices") under `/features` (e.g., `features/scanning/`, `features/notifications/`) to keep implementation isolated and focused.
-*   **Structure Alignment**: Group associated heuristics, deduplication logic, and target lists under the same feature directory. Shared utilities (like logging, graphql client, and environment loaders) are isolated under `features/shared/`.
-*   **Refactoring Phase & DRY**: During refactoring, review feature slices with the **DRY (Don't Repeat Yourself)** principle. Infrastructure components (like HTTP client utilities, logging, and environment loaders) should be shared globally to ensure stability. Otherwise, leave feature slices isolated and focused to avoid premature or fragile abstraction.
+*   **Rule**: Organize by feature domains under `/features`. Shared utilities under `features/shared/`.
+*   **DRY**: Share infrastructure globally; keep feature slices isolated to avoid premature abstraction.
 
 ### 🚨 Rule 1.7: Type System Design
-*   **Rule**: Enforce run-time correctness and developer clarity through robust typing in the Python environment.
-*   **Python Hints**: Annotate all script signatures, parser functions, and helper methods with explicit PEP 484 type hints (e.g., `str`, `dict`, `Union`, `None`). Ensure static checks pass.
-*   **Payload Types**: Ensure all variables passed to GraphQL operations strictly match the database schemas (e.g., `UUID`, `Timestamp`, `int` for followers, string for categories).
+*   **Rule**: Annotate all signatures with PEP 484 type hints. Payload types must match database schemas exactly.
 
 ### 🚨 Rule 1.8: Self-Documenting Source Code
-*   **Rule**: Code must be expressive and self-documenting. Use descriptive, semantic naming for classes, variables, and methods.
-*   **API Documentation**: Document all public classes, methods, parser functions, and CLI scripts using triple-quote docstrings (`"""`) following PEP 257.
-*   **Clutter Avoidance**: Omit redundant comments describing *what* the code does. Reserve comments to document *why* a complex logic decision or regex pattern was chosen.
+*   **Rule**: Use descriptive naming. Document public APIs with PEP 257 docstrings. Omit redundant "what" comments; reserve comments for "why".
 
 ### 🚨 Rule 1.9: Continuous Architectural Sync (CAS)
-*   **Rule**: This agent guide (`AGENTS.md`) is a living semantic document. Whenever you perform web research or discover updated/deprecated API standards, you **must** update `AGENTS.md` to keep the rules synchronized with official developer feeds.
-*   **Validation**: Ensure all script definitions, command lines, and directory structures mentioned in the guide align exactly with the current state of the repository.
+*   **Rule**: `AGENTS.md` is a living document. Update it whenever API standards change or new patterns are discovered.
 
 ### 🚨 Rule 1.10: Pragmatic Defensive Programming
-*   **Rule**: Lean into defensive programming specifically when dealing with critical validation boundaries, deduplication heuristics, and external API rate limits. Explicit validation in these areas prevents bad data from corrupting the production database.
-*   **Noise Invariant**: Avoid defensive coding when it turns into pure noise. If a validation check or assertion does not provide clear value to data integrity or execution safety, omit it to preserve clean, maintainable code.
+*   **Rule**: Apply defensive programming at critical validation boundaries, deduplication heuristics, and API rate limits. Avoid defensive noise that doesn't serve data integrity.
 
 ### 🚨 Rule 1.11: Greenfield Rebuild & Breaking-Changes Policy
-*   **Rule**: In all scenarios—including refactoring search algorithms, updating heuristics, fixing parser bugs, or planning new agent pipelines—always evaluate whether rebuilding a parser or heuristic function from scratch is a more systematic, clean, and deterministic approach than applying incremental patches.
-*   **Breaking-Changes Safe**: Because the ingestion pipelines are in active development, the codebase must be treated as completely "breaking-changes safe." Feel free to restructure internal variables, change cache file shapes, or modify CLI flags without concern for backward compatibility until noted otherwise.
+*   **Rule**: Evaluate rebuilding from scratch vs. incremental patches. The codebase is "breaking-changes safe" during active development.
 
 ### 🚨 Rule 1.12: Pure Functions Refactoring Policy
-*   **Rule**: During refactoring, always apply a pure function approach whenever applicable. Focus on writing stateless, side-effect-free functions (especially for data parsers, heuristics, and deduplication math) that produce the exact same output given the exact same input. This simplifies unit testing (TDD) and eliminates side-effect bugs in the pipelines.
+*   **Rule**: Prefer stateless, side-effect-free functions for parsers, heuristics, and deduplication logic.
 
 ### 🚨 Rule 1.13: Atomic Implementation Planning
-*   **Rule**: When planning and writing an implementation plan (or feature specs), you **must** always break it down into very small, logical units of implementation. This guarantees a systematic methodology and achieves a deterministic outcome since the implementation is broken down into smaller units.
-*   **Invariant**: Breaking feature designs down into micro-logical units enforces a highly systematic development methodology, guarantees deterministic execution outcomes, simplifies localized unit testing (TDD), and prevents compounding integration errors.
+*   **Rule**: Break implementation plans into very small, logical units. Micro-logical units enforce systematic methodology and simplify TDD.
 
 ### 🚨 Rule 1.14: Dual-Mode Scheduled Task Execution
-*   **Rule**: All scheduled, cron, or periodic discovery tasks must be structured to run in a dual-mode model, decoupling the core data ingestion logic from the orchestrator UI / runner.
-*   **Invariant**:
-    1. Core agent ingestion logic must be defined inside vertical feature slices as standalone CLI scripts or async Python functions that interact with the database via GraphQL.
-    2. For cloud execution, wrap the core logic in Cloud Run or Cloud Functions scheduler triggers.
-    3. For local execution/debugging, ensure that the scripts can be executed directly via the standard Python CLI with required arguments.
-    4. Database calls within tasks must target production/live resources in the cloud. Do not configure or route calls through local emulators.
+*   **Rule**: Decouple core ingestion logic from orchestrator runners. Scripts must be executable both via Python CLI (local) and Cloud Run/Functions (cloud). Database calls target production resources.
 
 ### 🚨 Rule 1.15: Shared Agent Memory Protocol
-*   **Rule**: Agents that execute discovery or enrichment workflows **must** participate in the shared memory protocol via `data/fina_agent_memory.md`.
-*   **Read Phase**: At session start (after environment setup, before task execution), agents must read the memory file and internalise any relevant insights for the upcoming task.
-*   **Retrospective Phase**: At session end (after task completion metrics are reported), agents must run a structured learning review: _"Did this execution surface any new platform behaviour, search technique, city-specific pattern, or failure mode not already captured in the memory file?"_
-    *   If **yes**: Read the current file, merge the new insight into the appropriate section, enforce the 150-line budget by trimming lowest-value entries if needed, and write the file back.
-    *   If **no**: Skip the update entirely. Do not write to the file.
-*   **Budget Invariant**: The memory file has a hard budget of **150 lines**. Agents must count lines before writing and prune stale or low-value entries to stay within budget.
-*   **Supersession Rule**: New insights that contradict existing entries must **replace** them, not append alongside them.
-*   **Content Invariant**: The file is **not** a changelog, history log, or execution diary. It contains only distilled, reusable operational knowledge that directly benefits future executions.
+*   **Rule**: Discovery and enrichment agents **must** participate in the shared memory protocol via `data/fina_agent_memory.md`.
+*   **Read Phase**: Read the memory file at session start, before task execution.
+*   **Retrospective Phase**: At session end, evaluate: _"Did this execution surface any new insight not already captured?"_
+    *   If **yes**: Merge into the appropriate section, enforce the **200-line** budget, write back.
+    *   If **no**: Skip the update entirely.
+*   **Budget Invariant**: Hard budget of **200 lines**. Prune stale/low-value entries when approaching the cap.
+*   **Supersession Rule**: New insights that contradict existing entries **replace** them.
+*   **Content Invariant**: Not a changelog or execution diary. Only distilled, reusable operational knowledge.
 
 ---
 
-## 2. Business Logic Architecture (The Three-Tier Approach)
+## 2. Business Logic Architecture (Three-Tier Approach)
 
-All business logic in this codebase must strictly be mapped to one of these three layers, avoiding traditional intermediate REST/FastAPI routing:
-
-1. **Security & Validation Layer (Declarative Database Boundary)**:
-   * Enforced on SQL Connect using CEL (`@auth` and `@check` rules) in GraphQL schemas. Used for authorization, structural sanitization, and input parameter ranges.
-2. **Heuristic & Filtering Layer (Local Agent Boundary)**:
-   * Enforced locally within the agent codebase (`features/scanning/heuristics.py`). Drops false-positives and verifies Filipino affiliation before pushing.
-3. **Deduplication & Merge Layer (Synchronous Pipeline Ingestion)**:
-   * Enforced synchronously inside `agent_graphql_push.py` using in-memory batch deduplication and database-level similarity queries.
+1. **Security & Validation Layer (Declarative Database Boundary)**: CEL rules (`@auth`, `@check`) in GraphQL schemas for authorization and input validation.
+2. **Heuristic & Filtering Layer (Local Agent Boundary)**: `features/scanning/heuristics.py` — drops false-positives, verifies Filipino affiliation.
+3. **Deduplication & Merge Layer (Synchronous Pipeline Ingestion)**: `agent_graphql_push.py` — in-memory batch dedup and database similarity queries.
 
 ---
 
-## 3. Native SaaS Capabilities (Tech Stack Definitions)
+## 3. Native SaaS Capabilities
 
-To ensure modern SaaS capabilities remain completely native to the Firebase and Google platforms, we define the following technology choices for Fina and its Agents:
-
-1. **Authentication (Firebase Auth)**:
-   * **Stack Choice**: Impersonated service context is passed through custom admin headers when running agent tasks, mapping to security boundaries in Firebase SQL Connect schemas.
-2. **User Uploads & Media Assets (Firebase Storage)**:
-   * **Stack Choice**: Binary object storage (e.g. logos, event images) is integrated with Google Cloud/Firebase Storage, secured via Storage Security Rules.
-3. **Telemetry & Observability (BackendObservability)**:
-   * **Stack Choice**: Unified backend logs and structured execution tracing are generated using `BackendObservability` and routed to standard error/outputs to correlate with trace IDs.
+| Capability | Stack Choice |
+|---|---|
+| **Authentication** | Firebase Auth — impersonated service context via custom admin headers |
+| **Media Assets** | Firebase Storage — secured via Storage Security Rules |
+| **Observability** | `BackendObservability` — structured tracing routed to stderr, correlated by trace IDs |
 
 ---
 
 ## 4. Documentation-Driven Project Management
 
-We eliminate external project management tools entirely, managing all work dynamically via in-repo specifications:
-
-1. **Lean In-Repo Documentation Directory**:
-   * `/docs/guides/ide_agent_architecture.md`: The comprehensive architecture and runbook guide detailing agent flows, mechanics, and database integration.
-   * Future specifications can be added under `/docs/specs/` as the project scales.
-2. **Refactoring & Refinement Workflow**:
-   * **Active Specifications**: Specs guide implementation and TDD tests. Breaking changes and schema updates are highly encouraged during active greenfield development.
-   * **Codebase as Source of Truth**: Once a spec is fully implemented, verified, and merged into the master branch, the codebase itself becomes the ultimate source of truth.
+*   `/docs/guides/ide_agent_architecture.md`: Comprehensive architecture and runbook guide.
+*   Future specifications under `/docs/specs/` as the project scales.
+*   Once a spec is implemented and merged, the codebase becomes the source of truth.
 
 ---
 
 ## 4.5. Context Engineering & Routing Rules
 
-To ensure maximum cognitive efficiency and avoid state drift, all developer agents operating in this workspace must follow this context engineering matrix:
-
-| Target File Types / Subdirectories | Relevant Instructions (Read First) | Scope / Context Boundary |
+| Target Files | Instructions (Read First) | Scope |
 | :--- | :--- | :--- |
-| `scripts/agent_*.py`, `features/**/*.py` | [python.instructions.md](file:///Users/ryan/.gemini/antigravity/scratch/fina/.agents/instructions/python.instructions.md) | Python CLI scripts, data pipeline parsers, heuristics, and type annotations |
-| `tests/**/*.py`, `features/scanning/tests/**/*.py` | [testing.instructions.md](file:///Users/ryan/.gemini/antigravity/scratch/fina/.agents/instructions/testing.instructions.md) | TDD cycles, unit tests, mock assertions, and offline test execution |
-| `features/shared/observability.py` | [observability.instructions.md](file:///Users/ryan/.gemini/antigravity/scratch/fina/.agents/instructions/observability.instructions.md) | Unified observability, logging, and metrics telemetry tracing |
-| `data/categories.json` | [categories.json](file:///Users/ryan/.gemini/antigravity/scratch/fina-agent/data/categories.json) | Canonical category categories, rules, and example checks |
+| `scripts/agent_*.py`, `features/**/*.py` | [python.instructions.md](file:///Users/ryan/.gemini/antigravity/scratch/fina/.agents/instructions/python.instructions.md) | Python CLI, parsers, heuristics, types |
+| `tests/**/*.py` | [testing.instructions.md](file:///Users/ryan/.gemini/antigravity/scratch/fina/.agents/instructions/testing.instructions.md) | TDD, unit tests, mocks |
+| `features/shared/observability.py` | [observability.instructions.md](file:///Users/ryan/.gemini/antigravity/scratch/fina/.agents/instructions/observability.instructions.md) | Logging, metrics, tracing |
+| `data/categories.json` | [categories.json](file:///Users/ryan/.gemini/antigravity/scratch/fina-agent/data/categories.json) | Canonical categories and rules |
 
 ---
 
 ## 5. Evaluation & Verification Guidelines
 
-Before concluding any development turn, the agent **must** execute the following verification steps:
-
-1. **Scan for Infinite Ingestion Loops**:
-   Ensure search parameters prevent querying and ingestion of the same data repeatedly.
-2. **Validate Categories**:
-   Ensure all new/modified categories align with `data/categories.json`.
-3. **Execute Local Test Suites**:
-   Run all local tests (using `python3 -m unittest discover tests`) to confirm that all test assertions are completely green.
-
----
-
-## 6. Bundled Executable Tooling
-
-* **Test Suite Runner**:
-  ```bash
-  python3 -m unittest discover tests
-  ```
-  Verifies ingestion rules, deduplication helpers, and GraphQL push parsing logic.
+Before concluding any development turn:
+1. **Scan for Infinite Ingestion Loops**: Ensure search parameters prevent querying the same data repeatedly.
+2. **Validate Categories**: Ensure all categories align with `data/categories.json`.
+3. **Execute Test Suites**: `python3 -m unittest discover tests` — all assertions must pass.

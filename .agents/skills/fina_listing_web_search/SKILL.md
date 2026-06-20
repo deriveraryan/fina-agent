@@ -197,7 +197,7 @@ Examples of insights worth capturing:
 1. Read the current `data/fina_agent_memory.md` using `view_file`.
 2. Merge the new insight into the appropriate section (Platform & Browser Insights, Discovery Patterns, City Intelligence, or Known Pitfalls).
 3. If the insight contradicts an existing entry, **replace** the old entry (supersession rule).
-4. Count the total lines. If the file exceeds **150 lines**, trim the lowest-value entries to fit within budget.
+4. Count the total lines. If the file exceeds **200 lines**, trim the lowest-value entries to fit within budget.
 5. Write the updated file back using the `write_to_file` tool with `Overwrite: true`.
 
 **If no** (nothing new was learned): Skip this step entirely. Do not write to the file.

@@ -2,7 +2,7 @@
 
 > Self-evolving shared memory for Fina discovery and enrichment agents.
 > Agents read this file at session start and update it post-execution.
-> Maximum budget: **150 lines**. Agents must aggressively prune stale entries.
+> Maximum budget: **200 lines**. Agents must aggressively prune stale entries.
 > Supersession rule: new insights that contradict existing entries replace them.
 > Format: concise bullet points (one line per insight). No prose paragraphs.
 

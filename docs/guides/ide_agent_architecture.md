@@ -250,7 +250,7 @@ The framework is built on five core principles, each drawn from research into le
 
 | Principle | Origin | Implementation |
 |---|---|---|
-| **Bounded curation** | [Hermes](https://arxiv.org/abs/2310.00710) (~800 token active memory) | 150-line hard budget forces agents to prioritise quality over quantity |
+| **Bounded curation** | [Hermes](https://arxiv.org/abs/2310.00710) (~800 token active memory) | 200-line hard budget forces agents to prioritise quality over quantity |
 | **Post-execution reflection** | [OpenClaw](https://arxiv.org/abs/2401.13178) (dreaming pipeline) | Structured retrospective step after every task completion |
 | **Self-managing memory** | [MemGPT/Letta](https://arxiv.org/abs/2310.08560) (agents edit their own memory) | Agents read, merge, prune, and write back the memory file autonomously |
 | **Quality-gated learning** | [Reflexion](https://arxiv.org/abs/2303.11366) (execute → reflect → crystallise) | Explicit "did I learn anything new?" gate prevents noise accumulation |
@@ -258,9 +258,9 @@ The framework is built on five core principles, each drawn from research into le
 
 **What was deliberately not adopted:**
 - **OpenClaw's daily log rotation** — Fina agents run as single-task sessions, not daemons
-- **MemGPT's multi-tier storage** — Overkill for a single markdown file with 150-line budget
+- **MemGPT's multi-tier storage** — Overkill for a single markdown file with 200-line budget
 - **Hermes' skill crystallisation** — Agent skills are manually curated SKILL.md files, not auto-generated
-- **Vector-indexed episodic memory** — The 150-line cap makes full-text reading cheaper than semantic retrieval
+- **Vector-indexed episodic memory** — The 200-line cap makes full-text reading cheaper than semantic retrieval
 
 ### Architecture
 
@@ -298,7 +298,7 @@ The memory file has a fixed five-section structure, each serving a distinct know
 # Fina Agent Memory
 
 > Self-evolving shared memory for Fina discovery and enrichment agents.
-> Maximum budget: **150 lines**.
+> Maximum budget: **200 lines**.
 > Supersession rule: new insights replace contradictory old entries.
 > Format: concise bullet points (one line per insight). No prose paragraphs.
 
@@ -330,10 +330,10 @@ The memory file has a fixed five-section structure, each serving a distinct know
 
 ### Budget Management
 
-The memory file enforces a **150-line hard cap** (including headers, section headings, and blockquote rules). This constraint is deliberate:
+The memory file enforces a **200-line hard cap** (including headers, section headings, and blockquote rules). This constraint is deliberate:
 
 - **Forces curation**: Agents must evaluate what's truly worth retaining versus what's transient noise.
-- **Prevents context bloat**: At ~150 lines, the entire file fits comfortably within a single `view_file` call, keeping the read phase cheap.
+- **Prevents context bloat**: At ~200 lines, the entire file fits comfortably within a single `view_file` call, keeping the read phase cheap.
 - **Drives supersession**: When new insights contradict existing entries, agents replace the old entry rather than appending both.
 
 **Pruning heuristics** (applied by agents when the file approaches the budget):
@@ -368,14 +368,14 @@ The current implementation uses a **last-writer-wins** strategy:
 
 ### Participating Agents
 
-The memory protocol is currently implemented for two agents:
+The memory protocol is currently implemented for the 2 production-ready agents:
 
 | Agent | Read Step | Retro Step | Typical insights |
 |---|---|---|---|
 | `fina_listing_web_search` | Step 0.7 | Step 7.5 | Search template effectiveness, platform rate limits, suburb saturation |
 | `fina_listing_enrichment` | Step 0.7 | Step 7.5 | Maps UI selectors, review extraction techniques, hours parsing edge cases |
 
-Other agents (`fina_listing_map_search`, `fina_events_finder`, `fina_listing_embedder`) do not currently participate but can be onboarded by adding the same Step 0.7/7.5 pattern to their SKILL.md files.
+Planned agents (`fina_listing_map_search`, `fina_events_finder`, `fina_listing_embedder`) are not yet released but can be onboarded by adding the same Step 0.7/7.5 pattern to their SKILL.md files.
 
 ### Governing Rule
 
