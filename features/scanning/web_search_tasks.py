@@ -1,7 +1,8 @@
 """Module to manage the task-based search state machine for the web finder agent.
 
 Generates all web search task permutations for a city (categories × templates × locations),
-always including suburb-level tasks. Provides web-search-specific metric constants
+ordered city-first then suburb-level. Supports category-level ``cityOnly`` and per-template
+``cityOnlySearchTemplateIndices``. Provides web-search-specific metric constants
 and task building. Lifecycle functions are imported from task_lifecycle.
 """
 
@@ -14,20 +15,23 @@ from typing import Any, Dict, List, Set, Sequence
 WEB_SEARCH_ALLOWED_METRICS: Set[str] = {
     "listings_created", "pages_searched",
     "candidates_evaluated", "candidates_rejected",
-    "candidates_duplicate", "maps_results_scraped",
+    "candidates_duplicate", "candidates_merged",
+    "maps_results_scraped",
 }
 
 WEB_SEARCH_METRIC_FIELDS: Sequence[str] = (
     "listings_created", "pages_searched",
     "candidates_evaluated", "candidates_rejected",
-    "candidates_duplicate", "maps_results_scraped",
+    "candidates_duplicate", "candidates_merged",
+    "maps_results_scraped",
 )
 
 WEB_SEARCH_MUTABLE_FIELDS: Sequence[str] = (
     "status", "started_at", "completed_at",
     "listings_created", "pages_searched",
     "candidates_evaluated", "candidates_rejected",
-    "candidates_duplicate", "maps_results_scraped", "errors",
+    "candidates_duplicate", "candidates_merged",
+    "maps_results_scraped", "errors",
 )
 
 
@@ -41,8 +45,9 @@ def generate_tasks(
     Creates one task per (category × template × location) combination.
     Location is either the city itself or a suburb from the suburbs file.
 
-    Ordering: categories in file order → template index ascending →
-    city-level first, then suburbs in list order.
+    Ordering: ALL city-level tasks first (category order → template index
+    ascending), then ALL suburb-level tasks (category order → template
+    index ascending → suburb list order).
 
     Args:
         city: Target city name (e.g. "Sydney").
@@ -77,17 +82,30 @@ def generate_tasks(
     city_display = city.strip()
     suburbs = suburbs_data[city_key]
 
-    tasks: List[Dict[str, Any]] = []
+    city_tasks: List[Dict[str, Any]] = []
+    suburb_tasks: List[Dict[str, Any]] = []
 
     for category_key, category_cfg in categories_data.items():
         templates = category_cfg.get("searchTemplates", [])
         if not templates:
             continue
-        city_only = category_cfg.get("cityOnly", False)
+        city_only: bool = category_cfg.get("cityOnly", False)
+        city_only_template_indices: Set[int] = set(
+            category_cfg.get("cityOnlySearchTemplateIndices", [])
+        )
+
+        # Validate template indices are within bounds
+        max_index = len(templates) - 1
+        invalid = [i for i in city_only_template_indices if i > max_index]
+        if invalid:
+            raise ValueError(
+                f"Category '{category_key}': cityOnlySearchTemplateIndices "
+                f"{invalid} exceed searchTemplates length ({len(templates)})"
+            )
 
         for template_index, template_str in enumerate(templates):
             # City-level task
-            tasks.append(_build_task(
+            city_tasks.append(_build_task(
                 city_key=city_key,
                 city_display=city_display,
                 category=category_key,
@@ -97,12 +115,12 @@ def generate_tasks(
                 location_type="city",
             ))
 
-            if city_only:
+            if city_only or template_index in city_only_template_indices:
                 continue
 
             # Suburb tasks
             for suburb in suburbs:
-                tasks.append(_build_task(
+                suburb_tasks.append(_build_task(
                     city_key=city_key,
                     city_display=city_display,
                     category=category_key,
@@ -112,7 +130,7 @@ def generate_tasks(
                     location_type="suburb",
                 ))
 
-    return tasks
+    return city_tasks + suburb_tasks
 
 
 def _build_task(
@@ -180,6 +198,7 @@ def _build_task(
         "candidates_evaluated": 0,
         "candidates_rejected": 0,
         "candidates_duplicate": 0,
+        "candidates_merged": 0,
         "maps_results_scraped": 0,
         "errors": [],
     }

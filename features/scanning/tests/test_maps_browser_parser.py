@@ -168,6 +168,25 @@ class TestParseMapsOpeningHours(unittest.TestCase):
         self.assertEqual(parsed["mon"], "9 AM – 5 PM")
         self.assertEqual(parsed["tue"], "10 AM – 4 PM")
 
+    def test_no_colon_after_day_name(self) -> None:
+        """Should handle hours text where day name and hours are not separated by colon."""
+        hours_text = "Saturday9:30 am–5:30 pmSunday9:30 am–5:30 pmMondayClosed"
+        result = parse_maps_opening_hours(hours_text)
+        self.assertIsNotNone(result)
+        parsed = json.loads(result)
+        self.assertEqual(parsed["sat"], "9:30 am–5:30 pm")
+        self.assertEqual(parsed["sun"], "9:30 am–5:30 pm")
+        self.assertEqual(parsed["mon"], "Closed")
+
+    def test_comma_after_day_name(self) -> None:
+        """Should handle hours text where day name and hours are separated by a comma (and optional colon)."""
+        hours_text = "Saturday, 9:30 am–5:30 pm\nSunday: , 9:30 am–5:30 pm"
+        result = parse_maps_opening_hours(hours_text)
+        self.assertIsNotNone(result)
+        parsed = json.loads(result)
+        self.assertEqual(parsed["sat"], "9:30 am–5:30 pm")
+        self.assertEqual(parsed["sun"], "9:30 am–5:30 pm")
+
 
 class TestParseMapsAddress(unittest.TestCase):
     """Tests for normalizing Maps address text."""

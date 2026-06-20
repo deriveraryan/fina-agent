@@ -55,29 +55,43 @@ class TestGenerateTasks(unittest.TestCase):
         self.assertEqual(len(tasks), 9)
 
     def test_city_level_tasks_come_first_per_template(self) -> None:
-        """For each category+template, the city-level task should precede suburb tasks."""
+        """All city-level tasks should appear before any suburb task."""
         tasks = generate_tasks("Sydney", self.categories_path, self.suburbs_path)
-        # First task should be RESTAURANT template 0 at city level
+        # First 3 tasks should be city-level (RESTAURANT t0, RESTAURANT t1, CAFE t0)
         self.assertEqual(tasks[0]["category"], "RESTAURANT")
         self.assertEqual(tasks[0]["template_index"], 0)
         self.assertEqual(tasks[0]["location_type"], "city")
         self.assertEqual(tasks[0]["location"], "Sydney")
+        self.assertEqual(tasks[1]["category"], "RESTAURANT")
+        self.assertEqual(tasks[1]["template_index"], 1)
+        self.assertEqual(tasks[1]["location_type"], "city")
+        self.assertEqual(tasks[2]["category"], "CAFE")
+        self.assertEqual(tasks[2]["location_type"], "city")
 
-    def test_suburb_tasks_follow_city_level(self) -> None:
-        """Suburb tasks follow the city-level task within the same template."""
+    def test_suburb_tasks_follow_all_city_tasks(self) -> None:
+        """All suburb tasks follow all city-level tasks."""
         tasks = generate_tasks("Sydney", self.categories_path, self.suburbs_path)
-        # Tasks 1 and 2 should be RESTAURANT template 0 suburbs
-        self.assertEqual(tasks[1]["location_type"], "suburb")
-        self.assertEqual(tasks[1]["location"], "Parramatta")
-        self.assertEqual(tasks[2]["location_type"], "suburb")
-        self.assertEqual(tasks[2]["location"], "Blacktown")
+        # 3 city tasks, then 6 suburb tasks
+        # First suburb task (index 3) should be RESTAURANT template 0 Parramatta
+        self.assertEqual(tasks[3]["location_type"], "suburb")
+        self.assertEqual(tasks[3]["category"], "RESTAURANT")
+        self.assertEqual(tasks[3]["location"], "Parramatta")
+        self.assertEqual(tasks[4]["location_type"], "suburb")
+        self.assertEqual(tasks[4]["location"], "Blacktown")
 
     def test_category_ordering_follows_categories_json(self) -> None:
-        """RESTAURANT tasks should all appear before CAFE tasks."""
+        """Within city and suburb groups, RESTAURANT tasks precede CAFE tasks."""
         tasks = generate_tasks("Sydney", self.categories_path, self.suburbs_path)
-        restaurant_indices = [i for i, t in enumerate(tasks) if t["category"] == "RESTAURANT"]
-        cafe_indices = [i for i, t in enumerate(tasks) if t["category"] == "CAFE"]
-        self.assertTrue(max(restaurant_indices) < min(cafe_indices))
+        city_tasks = [t for t in tasks if t["location_type"] == "city"]
+        suburb_tasks = [t for t in tasks if t["location_type"] == "suburb"]
+        # Within city group: RESTAURANT before CAFE
+        city_rest = [i for i, t in enumerate(city_tasks) if t["category"] == "RESTAURANT"]
+        city_cafe = [i for i, t in enumerate(city_tasks) if t["category"] == "CAFE"]
+        self.assertTrue(max(city_rest) < min(city_cafe))
+        # Within suburb group: RESTAURANT before CAFE
+        sub_rest = [i for i, t in enumerate(suburb_tasks) if t["category"] == "RESTAURANT"]
+        sub_cafe = [i for i, t in enumerate(suburb_tasks) if t["category"] == "CAFE"]
+        self.assertTrue(max(sub_rest) < min(sub_cafe))
 
     def test_all_tasks_start_as_pending(self) -> None:
         """Every generated task should have status PENDING."""
@@ -89,7 +103,10 @@ class TestGenerateTasks(unittest.TestCase):
         """Task IDs should follow the pattern: city__CATEGORY__index__location."""
         tasks = generate_tasks("Sydney", self.categories_path, self.suburbs_path)
         self.assertEqual(tasks[0]["id"], "sydney__RESTAURANT__0__sydney")
-        self.assertEqual(tasks[1]["id"], "sydney__RESTAURANT__0__parramatta")
+        # Second city task is RESTAURANT template 1
+        self.assertEqual(tasks[1]["id"], "sydney__RESTAURANT__1__sydney")
+        # First suburb task is RESTAURANT template 0 Parramatta
+        self.assertEqual(tasks[3]["id"], "sydney__RESTAURANT__0__parramatta")
 
     def test_formatted_query_for_city(self) -> None:
         """City-level tasks should format query with just the city name."""
@@ -99,8 +116,9 @@ class TestGenerateTasks(unittest.TestCase):
     def test_formatted_query_for_suburb(self) -> None:
         """Suburb tasks should format query as '{template} in {suburb}, {city}'."""
         tasks = generate_tasks("Sydney", self.categories_path, self.suburbs_path)
+        # First suburb task is at index 3 (after 3 city tasks)
         self.assertEqual(
-            tasks[1]["formatted_query"],
+            tasks[3]["formatted_query"],
             "Filipino restaurant in Parramatta, Sydney",
         )
 
@@ -125,7 +143,8 @@ class TestGenerateTasks(unittest.TestCase):
             "template_index", "template", "formatted_query", "status",
             "started_at", "completed_at", "listings_created",
             "pages_searched", "candidates_evaluated",
-            "candidates_rejected", "candidates_duplicate", "maps_results_scraped", "errors",
+            "candidates_rejected", "candidates_duplicate", "candidates_merged",
+            "maps_results_scraped", "errors",
             "maps_formatted_query",
         }
         for task in tasks:
@@ -140,6 +159,7 @@ class TestGenerateTasks(unittest.TestCase):
             self.assertEqual(task["candidates_evaluated"], 0)
             self.assertEqual(task["candidates_rejected"], 0)
             self.assertEqual(task["candidates_duplicate"], 0)
+            self.assertEqual(task["candidates_merged"], 0)
             self.assertEqual(task["maps_results_scraped"], 0)
             self.assertEqual(task["errors"], [])
             self.assertIsNone(task["started_at"])

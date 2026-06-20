@@ -90,22 +90,37 @@ def parse_maps_opening_hours(hours_text: Optional[str]) -> Optional[str]:
 
     result = {}
 
+    # Replace private use area newline markers with actual newlines
+    hours_text = hours_text.replace("", "\n")
+
     # Split on newlines and semicolons to handle both formats
     lines = re.split(r"[\n;]", hours_text)
 
     for line in lines:
         line = line.strip()
-        if not line or ":" not in line:
+        if not line:
             continue
 
-        # Split on the first colon to separate day name from hours
-        day_part, _, hours_part = line.partition(":")
-        day_key = day_part.strip().lower()
-        hours_value = hours_part.strip()
+        # Try to find which day name this line starts with
+        line_lower = line.lower()
+        matched_day = None
+        for day_name in DAYS_MAP:
+            if line_lower.startswith(day_name):
+                matched_day = day_name
+                break
 
-        short_day = DAYS_MAP.get(day_key)
-        if short_day and hours_value:
-            result[short_day] = hours_value
+        if not matched_day:
+            continue
+
+        # Extract the hours part by removing the day name prefix
+        hours_part = line[len(matched_day):].strip()
+        # If there is a colon or comma separator, strip it
+        while hours_part and (hours_part.startswith(":") or hours_part.startswith(",")):
+            hours_part = hours_part[1:].strip()
+
+        short_day = DAYS_MAP[matched_day]
+        if hours_part:
+            result[short_day] = hours_part
 
     if not result:
         return None

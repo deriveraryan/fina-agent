@@ -135,6 +135,10 @@ async def process_single_item(operation: str, item_dict: dict, trace_id: str, ge
         reviews_to_push = []
         for r in raw_reviews:
             if isinstance(r, dict):
+                if not r.get("externalSourceId"):
+                    text = r.get("text") or ""
+                    h = hashlib.md5(text.encode("utf-8", errors="ignore")).hexdigest()
+                    r["externalSourceId"] = f"hash_{h}"
                 reviews_to_push.append(r)
             elif isinstance(r, str):
                 h = hashlib.md5(r.encode()).hexdigest()

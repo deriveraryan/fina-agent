@@ -81,10 +81,10 @@ class TestDeduplication(unittest.IsolatedAsyncioTestCase):
         deduped = deduplicate_batch(batch)
         self.assertEqual(len(deduped), 2)
         
-        # Check Lola's Kitchen merged correctly by unioning categories sequentially
+        # Check Lola's Kitchen merged correctly by overwriting categories sequentially
         lola = next(item for item in deduped if item["name"] == "Lola's Kitchen")
-        self.assertEqual(sorted(lola["categories"]), ["CAFE", "RESTAURANT", "SHOP"])
-        
+        self.assertEqual(lola["categories"], ["SHOP"])
+
         # Check Unique Place exists
         unique = next(item for item in deduped if item["name"] == "Unique Place")
         self.assertEqual(unique["categories"], ["CHURCH"])

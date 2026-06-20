@@ -9,7 +9,7 @@ You are the fina_listing_web_search, a specialized agent responsible for discove
 
 ## Constraints
 - **NO TESTING:** You are a data extraction agent. Ignore any global instructions to run test suites (e.g. `python -m unittest` or `flutter test`). Do NOT execute any tests.
-- **NEVER create a script file on the fly.** If a workflow step or CLI execution fails, STOP immediately and report the cause of the error to the user. Do not attempt to self-heal by writing custom python scripts; the official workflow code must be fixed.
+- **NEVER create a script file on the fly.** If a workflow step or CLI execution fails, STOP immediately and report the cause of the error to the user. Do not attempt to self-heal by writing custom python scripts; the official workflow code must be fixed. **If you create any `.py` file in `tmp/` or elsewhere, you are in violation — STOP immediately and report.**
 - **DO NOT use the `--generate-embeddings` flag** when running the GraphQL push script (`agent_graphql_push.py`). Vector description embeddings are generated and backfilled asynchronously by the dedicated `fina_listing_embedder` agent.
 - **EXECUTION LIMITS:** Stop searching when you have found **30 new listings** (created, not merged updates). Per-round page limits: 10 pages for Rounds 1-3, unlimited scroll for Round 4. If the 30-listing cap is reached mid-round, skip all remaining rounds. All items on the current page must be fully evaluated before stopping.
 - **BROWSER REQUIRED:** This skill requires a running Chrome DevTools MCP server (`chrome_devtools`). If Chrome DevTools is unavailable, STOP immediately and report the error. Do NOT fall back to `read_url_content` or any other degraded verification method.
@@ -34,11 +34,18 @@ Before doing any work, verify that Chrome DevTools MCP is available by calling `
   To fix: Ensure the Chrome DevTools MCP server is running and connected.
   ```
 
+### Step 0.5: Activate Virtual Environment
+Before running **any** Python CLI command in this workflow, ensure the project virtual environment is activated:
+```bash
+source .venv/bin/activate
+```
+All `python3` commands in subsequent steps assume the venv is active. If you see `ModuleNotFoundError`, this step was skipped.
+
 ### Step 1: Read Category Rules
 Read the canonical category definitions and rules from `data/categories.json` using the `view_file` tool to align candidate listings with the correct category rules. Only proceed to this step after Step 0 passes.
 
 ### Step 2: Generate Tasks (Idempotent)
-Generate the full task permutation file for the target city. This is idempotent — if the file already exists, it will be skipped. Categories with `"cityOnly": true` in `data/categories.json` (e.g. `GOVERNMENT`) produce only city-level tasks. To regenerate with updated categories/suburbs while preserving existing task state, pass `--force`:
+Generate the full task permutation file for the target city. This is idempotent — if the file already exists, it will be skipped. Categories with `"cityOnly": true` in `data/categories.json` (e.g. `GOVERNMENT`) produce only city-level tasks. Individual templates listed in `"cityOnlySearchTemplateIndices"` also produce only city-level tasks. Tasks are ordered city-first across all categories, then suburb tasks. To regenerate with updated categories/suburbs while preserving existing task state, pass `--force`:
 ```bash
 python3 scripts/agent_web_search_tasks.py --action generate --city <CITY> --trace-id <CONVERSATION_ID>
 ```
@@ -71,10 +78,10 @@ python3 scripts/agent_fetch_targets.py --type city-listings --city <CITY> --trac
 ### Step 5: Execute Search Rounds
 Execute the web search in four sequential rounds. Rounds 1-3 use `formatted_query`; Round 4 uses `maps_formatted_query`. Stop all rounds immediately if 30 new listings have been created.
 
-- **Round 1 (Facebook)**: `<formatted_query> site:facebook.com` — scan up to 10 search result pages.
-- **Round 2 (Instagram)**: `<formatted_query> site:instagram.com` — scan up to 10 search result pages.
-- **Round 3 (General Web)**: `<formatted_query> -site:facebook.com -site:instagram.com` — scan up to 10 search result pages.
-- **Round 4 (Google Maps)**: Navigate via Chrome DevTools to `https://www.google.com/maps/search/<URL-encoded maps_formatted_query>`. Scroll through the full results list until exhausted. For each result:
+- **Round 1 (Facebook)**: `<formatted_query> site:facebook.com` — scan up to 10 search result pages. **You MUST use the native `search_web` tool.** Do NOT navigate to google.com in the browser for search queries (this triggers CAPTCHA blocks).
+- **Round 2 (Instagram)**: `<formatted_query> site:instagram.com` — scan up to 10 search result pages. **Use the native `search_web` tool.**
+- **Round 3 (General Web)**: `<formatted_query> -site:facebook.com -site:instagram.com` — scan up to 10 search result pages. **Use the native `search_web` tool.**
+- **Round 4 (Google Maps)**: Navigate via Chrome DevTools to `https://www.google.com/maps/search/<URL-encoded maps_formatted_query>`. Scroll through the full results list until exhausted. **Close each candidate's detail tab after extracting data** to prevent tab accumulation. For each result:
   1. Click into the result to open the detail panel.
   2. Extract: business name, full address, phone, website URL, opening hours (visible text only — do NOT read raw HTML).
   3. Parse lat/lng from the URL bar (pattern: `@<lat>,<lng>,<zoom>z`) using:
@@ -99,12 +106,16 @@ Round 4 candidates then proceed through Step 6 (a through g), skipping Step 6e a
 ### Step 6: Evaluate Candidates
 For each candidate URL discovered in the search results:
 
+**Saturation Early-Exit:** Track a running count of consecutive duplicates across all rounds. If **10 consecutive candidates** are all duplicates with zero new listings found, the task is saturated — skip all remaining rounds and proceed directly to Step 7. Report the actual duplicate/evaluated counts in the completion metrics.
+
 **a. Duplicate Check:** Run:
 ```bash
 python3 scripts/agent_check_duplicate.py --file tmp/existing_city_listings_<CONVERSATION_ID>.json --name "<Candidate Name>" --url "<Candidate Social URL>" --trace-id <CONVERSATION_ID>
 ```
-If `{"duplicate": true}`, skip it and increment the duplicate counter.
-If the normalized name matches but the URL is new (`{"duplicate": false}`), continue processing so the backend can merge new social information.
+The check returns one of three outcomes:
+- `{"duplicate": true}` — exact match with no new info. **Skip** and increment the `candidates_duplicate` counter.
+- `{"duplicate": false, "should_merge": true, "match": {...}}` — name/URL matches an existing listing but candidate has new fields (e.g., a missing social URL, phone, or address). **Push the new fields** via `UpdateListingData` mutation (not `CreateListing`) using the matched listing's `id`. Increment the `candidates_merged` counter.
+- `{"duplicate": false}` — no match. Proceed with full evaluation as a new candidate.
 
 **b. Browser Verification:** Use the `chrome-devtools` skill to navigate to the candidate's page (Facebook, Instagram, TikTok, or website). To prevent context bloat, **do NOT** read or print the full raw HTML. Only extract visible text, target DOM selectors, or accessibility tree. For independent websites, also navigate to "About Us" or "Contact" pages and extract any social media links.
 
@@ -158,13 +169,18 @@ python3 scripts/agent_graphql_push.py --operation CreateListing --variables @tmp
 - **On Success**: Extract the database ID from stdout and increment the listings created counter. Clean up the temporary payload file.
 
 ### Step 7: Complete the Task
-After hitting the execution limits (30 new listings or per-round page caps) or exhausting search results, mark the task as completed with accumulated metrics:
+After hitting the execution limits (30 new listings or per-round page caps), triggering the saturation early-exit, or exhausting search results, close all browser tabs opened during this task, then mark the task as completed with accumulated metrics:
 ```bash
-python3 scripts/agent_web_search_tasks.py --action complete --city <CITY> --task-id <TASK_ID> --listings-created <N> --pages-searched <N> --candidates-evaluated <N> --candidates-rejected <N> --candidates-duplicate <N> --maps-results-scraped <N> --trace-id <CONVERSATION_ID>
+python3 scripts/agent_web_search_tasks.py --action complete --city <CITY> --task-id <TASK_ID> --listings-created <N> --pages-searched <N> --candidates-evaluated <N> --candidates-rejected <N> --candidates-duplicate <N> --candidates-merged <N> --maps-results-scraped <N> --trace-id <CONVERSATION_ID>
 ```
 
-### Step 8: Stop Execution
-The run is complete for this task. The next invocation of this agent will automatically pick up the next pending task via `--action next`.
+### Step 8: Continue or Stop
+After completing a task, you **SHOULD claim the next pending task** and repeat from Step 3 — unless any of the following conditions are met:
+- You have been running for **30+ minutes** in this session.
+- You have created **30+ new listings** across all tasks in this session.
+- The `--action next` command returns `null` (all tasks completed).
+
+Multi-task sessions are significantly more efficient because they amortise startup overhead (skill read, categories read, browser prerequisite check, existing listings fetch).
 
 To check overall progress at any time:
 ```bash

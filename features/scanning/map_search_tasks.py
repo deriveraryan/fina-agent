@@ -1,7 +1,8 @@
 """Module to manage the task-based search state machine for the maps search agent.
 
 Generates all map search task permutations for a city (categories × templates × locations),
-defaulting to city-level only. Provides maps-specific metric constants and task building.
+defaulting to city-level only. Supports category-level ``cityOnly`` and per-template
+``cityOnlySearchTemplateIndices``. Provides maps-specific metric constants and task building.
 Lifecycle functions (load, save, start, complete, etc.) are imported from task_lifecycle.
 """
 
@@ -88,6 +89,18 @@ def generate_tasks(
         if not templates:
             continue
         city_only = category_cfg.get("cityOnly", False)
+        city_only_template_indices: Set[int] = set(
+            category_cfg.get("cityOnlySearchTemplateIndices", [])
+        )
+
+        # Validate template indices are within bounds
+        max_index = len(templates) - 1
+        invalid = [i for i in city_only_template_indices if i > max_index]
+        if invalid:
+            raise ValueError(
+                f"Category '{category_key}': cityOnlySearchTemplateIndices "
+                f"{invalid} exceed searchTemplates length ({len(templates)})"
+            )
 
         for template_index, template_str in enumerate(templates):
             # City-level task (always generated)
@@ -101,7 +114,7 @@ def generate_tasks(
                 location_type="city",
             ))
 
-            if city_only:
+            if city_only or template_index in city_only_template_indices:
                 continue
 
             # Suburb tasks (only when include_suburbs is True)
