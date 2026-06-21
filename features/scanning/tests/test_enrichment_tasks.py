@@ -151,6 +151,32 @@ class TestGenerateEnrichmentTasks(unittest.TestCase):
 
         self.assertIn("No ID Business", str(ctx.exception))
 
+    def test_listing_status_captured_for_closure_detection(self):
+        """Listing's current status is captured as listing_status for closure detection."""
+        listing_operational = self._make_listing(id="uuid-op", status="OPERATIONAL")
+        listing_closed = self._make_listing(id="uuid-cl", status="CLOSED_PERMANENTLY")
+        listing_no_status = self._make_listing(id="uuid-ns")
+        del listing_no_status["status"]
+
+        tasks = generate_enrichment_tasks([listing_operational, listing_closed, listing_no_status])
+
+        self.assertEqual(tasks[0]["listing_status"], "OPERATIONAL")
+        self.assertEqual(tasks[1]["listing_status"], "CLOSED_PERMANENTLY")
+        self.assertEqual(tasks[2]["listing_status"], "OPERATIONAL")  # default
+
+    def test_verification_status_captured_for_affiliation_assessment(self):
+        """Listing's verificationStatus is captured for affiliation assessment."""
+        listing_verified = self._make_listing(id="uuid-v", verificationStatus="VERIFIED")
+        listing_unverified = self._make_listing(id="uuid-u", verificationStatus="UNVERIFIED")
+        listing_no_status = self._make_listing(id="uuid-ns2")
+        del listing_no_status["verificationStatus"]
+
+        tasks = generate_enrichment_tasks([listing_verified, listing_unverified, listing_no_status])
+
+        self.assertEqual(tasks[0]["verification_status"], "VERIFIED")
+        self.assertEqual(tasks[1]["verification_status"], "UNVERIFIED")
+        self.assertEqual(tasks[2]["verification_status"], "UNVERIFIED")  # default
+
 
 class TestEnrichmentMetricsConstants(unittest.TestCase):
     """Tests for enrichment-specific metric constants."""
@@ -164,6 +190,8 @@ class TestEnrichmentMetricsConstants(unittest.TestCase):
             "socials_enriched",
             "descriptions_rewritten",
             "maps_visits",
+            "statuses_updated",
+            "listings_flagged",
         }
         self.assertEqual(ENRICHMENT_ALLOWED_METRICS, expected)
 
@@ -207,6 +235,8 @@ class TestForceRegenerationMergesState(unittest.TestCase):
                 "socials_enriched": 1,
                 "descriptions_rewritten": 1,
                 "maps_visits": 1,
+                "statuses_updated": 0,
+                "listings_flagged": 0,
                 "errors": [],
             },
         ]
@@ -223,6 +253,8 @@ class TestForceRegenerationMergesState(unittest.TestCase):
                 "socials_enriched": 0,
                 "descriptions_rewritten": 0,
                 "maps_visits": 0,
+                "statuses_updated": 0,
+                "listings_flagged": 0,
                 "errors": [],
             },
             {
@@ -236,6 +268,8 @@ class TestForceRegenerationMergesState(unittest.TestCase):
                 "socials_enriched": 0,
                 "descriptions_rewritten": 0,
                 "maps_visits": 0,
+                "statuses_updated": 0,
+                "listings_flagged": 0,
                 "errors": [],
             },
         ]

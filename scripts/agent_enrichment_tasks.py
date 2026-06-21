@@ -129,6 +129,8 @@ def main() -> None:
     parser.add_argument("--socials-enriched", type=int, default=0, help="Number of social URLs filled.")
     parser.add_argument("--descriptions-rewritten", type=int, default=0, help="Number of descriptions rewritten.")
     parser.add_argument("--maps-visits", type=int, default=0, help="Number of Google Maps page visits.")
+    parser.add_argument("--statuses-updated", type=int, default=0, help="Number of listing statuses updated.")
+    parser.add_argument("--listings-flagged", type=int, default=0, help="Number of listings flagged as non-Filipino.")
 
     args = parser.parse_args()
 
@@ -187,6 +189,8 @@ def main() -> None:
                 "socials_enriched": args.socials_enriched,
                 "descriptions_rewritten": args.descriptions_rewritten,
                 "maps_visits": args.maps_visits,
+                "statuses_updated": args.statuses_updated,
+                "listings_flagged": args.listings_flagged,
             }
             locked_complete_task(tasks_path, args.task_id, metrics, ENRICHMENT_ALLOWED_METRICS)
 

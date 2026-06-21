@@ -16,6 +16,8 @@ ENRICHMENT_ALLOWED_METRICS: Set[str] = {
     "socials_enriched",
     "descriptions_rewritten",
     "maps_visits",
+    "statuses_updated",
+    "listings_flagged",
 }
 
 ENRICHMENT_METRIC_FIELDS: Sequence[str] = (
@@ -25,6 +27,8 @@ ENRICHMENT_METRIC_FIELDS: Sequence[str] = (
     "socials_enriched",
     "descriptions_rewritten",
     "maps_visits",
+    "statuses_updated",
+    "listings_flagged",
 )
 
 ENRICHMENT_MUTABLE_FIELDS: Sequence[str] = (
@@ -37,6 +41,8 @@ ENRICHMENT_MUTABLE_FIELDS: Sequence[str] = (
     "socials_enriched",
     "descriptions_rewritten",
     "maps_visits",
+    "statuses_updated",
+    "listings_flagged",
     "errors",
 )
 
@@ -99,6 +105,10 @@ def _build_enrichment_task(listing: Dict[str, Any]) -> Dict[str, Any]:
         "facebook_url": listing.get("facebookUrl"),
         "instagram_url": listing.get("instagramUrl"),
         "tiktok_url": listing.get("tiktokUrl"),
+        # Current listing status (for closure detection)
+        "listing_status": listing.get("status", "OPERATIONAL"),
+        # Current verification status (for affiliation assessment)
+        "verification_status": listing.get("verificationStatus", "UNVERIFIED"),
         # Task lifecycle state
         "status": "PENDING",
         "started_at": None,
@@ -110,6 +120,8 @@ def _build_enrichment_task(listing: Dict[str, Any]) -> Dict[str, Any]:
         "socials_enriched": 0,
         "descriptions_rewritten": 0,
         "maps_visits": 0,
+        "statuses_updated": 0,
+        "listings_flagged": 0,
         # Error tracking
         "errors": [],
     }
