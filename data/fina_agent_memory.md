@@ -23,3 +23,5 @@
 
 ## Known Pitfalls
 <!-- Failure modes, validation errors, and how to avoid them -->
+*   **City Casing Case-Sensitivity**: Firebase SQL Connect queries are case-sensitive (e.g. `city: { eq: "SYDNEY" }`). Any listings created or restored with capitalized or lowercase city names (e.g., `Sydney` or `sydney`) will be hidden from client browse/search results. Ad-hoc scripts and ingestion agents must always normalize city values to uppercase (as defined in the frontend's City enum).
+*   **Listing ID Drift**: Re-creating listings from backup generates new database UUIDs. Any external files or trackers referencing the old listing IDs will become obsolete and must be regenerated or updated.
