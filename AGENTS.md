@@ -49,7 +49,7 @@ The following 3 agents are production-ready and actively executing tasks:
     8. For Rounds 1-3 candidates, enriches from Google Maps (lat/lng, address, hours, phone, Place ID, website). Adds `google-maps` tag on success.
     9. Pushes verified listings via `agent_graphql_push.py --operation CreateListing` (without `--generate-embeddings`) with self-correction on validation failure.
     10. Marks task `COMPLETED` with metrics via `--action complete`.
-    11. Runs post-execution retrospective against `data/fina_agent_memory.md`. Updates within the 200-line budget if new insights were surfaced; skips otherwise.
+    11. Runs post-execution retrospective against `data/fina_agent_memory.md`. Updates within the 500-line budget if new insights were surfaced; skips otherwise.
     12. **Stops.** Does not claim the next task.
 
 #### 2. `fina_listing_enrichment`
@@ -67,7 +67,7 @@ The following 3 agents are production-ready and actively executing tasks:
     9. Pushes enriched data via `UpdateListingData` — description, operating hours, social URLs/follower counts, and status (if changed).
     10. For `UNVERIFIED` listings, assesses Filipino affiliation using all collected context. Flags listings with zero affiliation as `FLAGGED` via `UpdateListingStatus`.
     11. Closes all browser tabs, marks task `COMPLETED` with metrics via `--action complete`.
-    12. Runs post-execution retrospective against `data/fina_agent_memory.md`. Updates within the 200-line budget if new insights were surfaced; skips otherwise.
+    12. Runs post-execution retrospective against `data/fina_agent_memory.md`. Updates within the 500-line budget if new insights were surfaced; skips otherwise.
     13. **Stops.** Does not claim the next task.
 
 #### 3. `fina_events_listing`
@@ -82,7 +82,7 @@ The following 3 agents are production-ready and actively executing tasks:
     6. Resolves relative post timestamps and event dates using Australian timezone offsets, converting to UTC ISO 8601.
     7. Pushes events via `CreateEvent` (with `--generate-embeddings`), follower counts via `UpdateListingSocialUrls`, and updated scan bookmarks via `UpsertSocialPostTracker`. Self-correction on validation failure (up to 3 retries).
     8. Closes all browser tabs, marks task `COMPLETED` with metrics via `--action complete`.
-    9. Runs post-execution retrospective against `data/fina_agent_memory.md`. Updates within the 200-line budget if new insights were surfaced; skips otherwise.
+    9. Runs post-execution retrospective against `data/fina_agent_memory.md`. Updates within the 500-line budget if new insights were surfaced; skips otherwise.
     10. **Stops.** Does not claim the next task.
 
 ### Planned Agents (Not Yet Released)
@@ -206,9 +206,9 @@ pip install -r requirements.txt
 *   **Rule**: Discovery, enrichment, and events agents **must** participate in the shared memory protocol via `data/fina_agent_memory.md`.
 *   **Read Phase**: Read the memory file at session start, before task execution.
 *   **Retrospective Phase**: At session end, evaluate: _"Did this execution surface any new insight not already captured?"_
-    *   If **yes**: Merge into the appropriate section, enforce the **200-line** budget, write back.
+    *   If **yes**: Merge into the appropriate section, enforce the **500-line** budget, write back.
     *   If **no**: Skip the update entirely.
-*   **Budget Invariant**: Hard budget of **200 lines**. Prune stale/low-value entries when approaching the cap.
+*   **Budget Invariant**: Hard budget of **500 lines**. Prune stale/low-value entries when approaching the cap.
 *   **Supersession Rule**: New insights that contradict existing entries **replace** them.
 *   **Content Invariant**: Not a changelog or execution diary. Only distilled, reusable operational knowledge.
 

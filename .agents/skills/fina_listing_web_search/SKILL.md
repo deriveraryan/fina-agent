@@ -189,15 +189,19 @@ Run a structured learning review of this execution. Ask yourself:
 Examples of insights worth capturing:
 - A platform started blocking or rate-limiting a specific query pattern.
 - A particular search template consistently yields high duplicate rates for a category.
-- A suburb is fully saturated for a category (all results are duplicates).
+- A geographic region has consistently zero Filipino businesses across multiple categories (aggregate pattern, not individual suburb logs).
+- A novel discovery — a business found inside another business, or a previously unknown cluster.
 - A Google Maps UI change affected data extraction (e.g., hours selector moved).
 - A validation error pattern that required payload adjustment.
+- A non-obvious non-Filipino false positive that shares Filipino naming/keywords.
+
+⚠️ **DO NOT** log individual suburb-level saturation entries (e.g., "SYDNEY/Toongabbie: CAFE fully saturated"). The task state machine already tracks completion — these entries waste memory budget. Only record *aggregate geographic patterns* or *genuinely novel discoveries*.
 
 **If yes** (new insight exists):
 1. Read the current `data/fina_agent_memory.md` using `view_file`.
 2. Merge the new insight into the appropriate section (Platform & Browser Insights, Discovery Patterns, City Intelligence, or Known Pitfalls).
 3. If the insight contradicts an existing entry, **replace** the old entry (supersession rule).
-4. Count the total lines. If the file exceeds **200 lines**, trim the lowest-value entries to fit within budget.
+4. Count the total lines. If the file exceeds **500 lines**, trim the lowest-value entries to fit within budget.
 5. Write the updated file back using the `write_to_file` tool with `Overwrite: true`.
 
 **If no** (nothing new was learned): Skip this step entirely. Do not write to the file.

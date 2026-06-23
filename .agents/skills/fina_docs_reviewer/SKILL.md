@@ -31,7 +31,7 @@ Follow these steps exactly:
    - Ensure planned agents are documented separately and not presented as production-ready.
    - Check if any documented CLI triggers refer to scripts that do not exist.
 3. Verify the shared agent memory protocol:
-   - `data/fina_agent_memory.md` exists and has the correct 200-line budget in its header.
+   - `data/fina_agent_memory.md` exists and has the correct 500-line budget in its header.
    - Both production agent SKILL.md files have Step 0.7 (Read Memory) and Step 7.5 (Retrospective).
    - Rule 1.15 in `AGENTS.md` matches the memory file's declared budget.
 4. Review the list of categories in `data/categories.json` and ensure all documentation referring to category choices matches this list.

@@ -193,7 +193,7 @@ All three production agents participate in a shared, self-evolving memory protoc
 
 **How it works:**
 1. **Read Phase** — At session start, the agent reads the memory file and internalises relevant insights.
-2. **Retrospective Phase** — After task completion, the agent evaluates whether the execution surfaced new operational knowledge. If yes, it merges the insight into the memory file within a **200-line budget**. If no, it skips the update entirely.
+2. **Retrospective Phase** — After task completion, the agent evaluates whether the execution surfaced new operational knowledge. If yes, it merges the insight into the memory file within a **500-line budget**. If no, it skips the update entirely.
 
 The memory file is not a changelog — it contains only distilled, reusable operational knowledge (platform behaviours, search patterns, city intelligence, known pitfalls). See the [Architecture Guide](docs/guides/ide_agent_architecture.md#-shared-agent-memory) for the full design rationale.
 
