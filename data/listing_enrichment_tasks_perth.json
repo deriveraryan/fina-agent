@@ -1,0 +1,30 @@
+[
+  {
+    "id": "e472bca338304ea5b908c7c7b218b25f",
+    "listing_id": "e472bca338304ea5b908c7c7b218b25f",
+    "name": "Philippine Consulate in Western Australia",
+    "city": "PERTH",
+    "categories": [
+      "GOVERNMENT"
+    ],
+    "description": "A verified Filipino government in Perth.",
+    "source_url": "https://www.google.com/maps/place/?q=place_id:ChIJKapyBwC7MioRxw6Vam4tkrc",
+    "facebook_url": "https://www.facebook.com/mock-philippineconsulateinwesternaustralia",
+    "instagram_url": null,
+    "tiktok_url": null,
+    "listing_status": "OPERATIONAL",
+    "verification_status": "UNVERIFIED",
+    "status": "PENDING",
+    "started_at": null,
+    "completed_at": null,
+    "listings_enriched": 0,
+    "reviews_extracted": 0,
+    "reviews_pushed": 0,
+    "socials_enriched": 0,
+    "descriptions_rewritten": 0,
+    "maps_visits": 0,
+    "statuses_updated": 0,
+    "listings_flagged": 0,
+    "errors": []
+  }
+]

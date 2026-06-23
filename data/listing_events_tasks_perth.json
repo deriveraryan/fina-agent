@@ -1,0 +1,23 @@
+[
+  {
+    "id": "e472bca338304ea5b908c7c7b218b25f",
+    "listing_id": "e472bca338304ea5b908c7c7b218b25f",
+    "name": "Philippine Consulate in Western Australia",
+    "city": "PERTH",
+    "categories": [
+      "GOVERNMENT"
+    ],
+    "facebook_url": "https://www.facebook.com/mock-philippineconsulateinwesternaustralia",
+    "instagram_url": null,
+    "tiktok_url": null,
+    "status": "PENDING",
+    "started_at": null,
+    "completed_at": null,
+    "events_discovered": 0,
+    "events_pushed": 0,
+    "social_urls_scanned": 0,
+    "follower_counts_updated": 0,
+    "bookmarks_updated": 0,
+    "errors": []
+  }
+]
