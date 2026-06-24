@@ -16,7 +16,20 @@ class TestHeuristics(unittest.TestCase):
             "Kmart",
             "Aldi",
             "IGA",
-            "Subway"
+            "Subway",
+            # New blocklist categories
+            "Ray White Parramatta",
+            "LJ Hooker Melbourne",
+            "Chatime Chatswood",
+            "Gong Cha Sydney",
+            "Telstra Store",
+            "Specsavers Westfield",
+            "San Churro",
+            "Taco Bell Penrith",
+            "Harris Scarfe",
+            "Bottlemart",
+            "Crunch Fitness",
+            "Fernwood Fitness",
         ]
         for name in chains:
             self.assertTrue(
@@ -49,9 +62,8 @@ class TestFilipinoAffiliation(unittest.TestCase):
     def test_authentic_filipino_keywords(self):
         # Name-based checks
         self.assertTrue(verify_filipino_affiliation("Manila Sunset Diner"))
-        self.assertTrue(verify_filipino_affiliation("Lolas Island Shop"))
         self.assertTrue(verify_filipino_affiliation("Pinoy Grill N Chill"))
-        self.assertTrue(verify_filipino_affiliation("My Lola's Table"))
+        self.assertTrue(verify_filipino_affiliation("My Lola's Table"))  # Exact token 'lola' matches high-collision
         
         # Culinary signals
         self.assertTrue(verify_filipino_affiliation("Kanto Bagnet"))
@@ -66,6 +78,36 @@ class TestFilipinoAffiliation(unittest.TestCase):
         self.assertTrue(verify_filipino_affiliation("Halo-Halo Desserts"))
         self.assertTrue(verify_filipino_affiliation("Sari-Sari Store"))
         self.assertTrue(verify_filipino_affiliation("Lola's Cafe", reviews=[{"text": "They serve halo halo and sari sari items"}]))
+    
+    def test_new_compound_phrases(self):
+        """Compound phrases added for modern Fil-Aus dining and cultural concepts."""
+        self.assertTrue(verify_filipino_affiliation("Kamayan Feast", description="Boodle fight style dining"))
+        self.assertTrue(verify_filipino_affiliation("Nanay's Kitchen", description="Authentic turo-turo eatery"))
+        self.assertTrue(verify_filipino_affiliation("Kare-Kare House"))
+        self.assertTrue(verify_filipino_affiliation("Best Turo Turo in Sydney"))
+        self.assertTrue(verify_filipino_affiliation("Kare Kare and Sinigang"))
+    
+    def test_new_low_collision_keywords(self):
+        """Diaspora logistics, dining, and cultural terms unique to Filipino context."""
+        self.assertTrue(verify_filipino_affiliation("Balikbayan Box Express"))  # Cargo/logistics
+        self.assertTrue(verify_filipino_affiliation("Padala Remittance Centre"))  # Money transfer
+        self.assertTrue(verify_filipino_affiliation("Pasalubong Corner"))  # Gift/import shop
+        self.assertTrue(verify_filipino_affiliation("Kamayan Kitchen"))  # Feast dining
+        self.assertTrue(verify_filipino_affiliation("Dinuguan ni Nanay"))  # Pork blood stew
+        self.assertTrue(verify_filipino_affiliation("Chicken Inasal House"))  # Bacolod grilled chicken
+        self.assertTrue(verify_filipino_affiliation("Calamansi Cafe"))  # Philippine lime
+        self.assertTrue(verify_filipino_affiliation("Fresh Bangus Market"))  # Milkfish
+        self.assertTrue(verify_filipino_affiliation("Ate's Carinderia"))  # Filipino eatery
+        self.assertTrue(verify_filipino_affiliation("Bayanihan Community Centre"))  # Community spirit
+        self.assertTrue(verify_filipino_affiliation("Sinangag Express"))  # Garlic rice
+        self.assertTrue(verify_filipino_affiliation("Bagoong Club"))  # Fermented paste
+    
+    def test_new_high_collision_keywords(self):
+        """High-collision terms match only as exact tokens (no suffix stripping)."""
+        self.assertTrue(verify_filipino_affiliation("Ube Cheesecake Co"))  # Exact 'ube' token
+        self.assertTrue(verify_filipino_affiliation("Longganisa Factory"))  # Exact 'longganisa' token
+        self.assertTrue(verify_filipino_affiliation("Chicharon ni Mang Juan"))  # Exact 'chicharon' token
+        self.assertTrue(verify_filipino_affiliation("Ensaymada House"))  # Exact 'ensaymada' token
 
     def test_false_positives_rejection(self):
         # Tapas/salami substring collision
@@ -77,4 +119,12 @@ class TestFilipinoAffiliation(unittest.TestCase):
         # General non-Filipino terms
         self.assertFalse(verify_filipino_affiliation("Lululemon Athletica"))
         self.assertFalse(verify_filipino_affiliation("Laminate Flooring Co"))
+        
+        # Lola as a common non-Filipino cafe name (now high-collision, plurals won't match)
+        self.assertFalse(verify_filipino_affiliation("Lolas Bistro"))  # Token 'lolas' ≠ exact 'lola'
+        
+        # Ube substring safety (should NOT match embedded occurrences)
+        self.assertFalse(verify_filipino_affiliation("Uber Eats Delivery"))  # Token 'uber' ≠ 'ube'
+        self.assertFalse(verify_filipino_affiliation("Cube Design Studio"))  # Token 'cube' ≠ 'ube'
+        self.assertFalse(verify_filipino_affiliation("Tube Station Bar"))  # Token 'tube' ≠ 'ube'
 

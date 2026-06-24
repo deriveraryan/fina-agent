@@ -63,10 +63,36 @@ BLOCKLIST_CHAINS = [
     # Services, Gyms & Entertainment
     "Australia Post", "AusPost", "Anytime Fitness", "Jetts", "Plus Fitness", 
     "F45", "Snap Fitness", "Goodlife Health Clubs", "Fitness First", 
+    "Crunch Fitness", "Fernwood",
     "mycar", "mycar Tyre & Auto", "Bob Jane T-Marts", "Bob Jane", "JAX Tyres", 
     "Tyrepower", "Bridgestone Select", "Flight Centre", "Helloworld", 
     "Event Cinemas", "Hoyts", "Village Cinemas", "Timezone", "Petbarn", 
-    "Petstock", "EB Games", "Zing Pop Culture", "Toyworld", "Dymocks", "QBD Books"
+    "Petstock", "EB Games", "Zing Pop Culture", "Toyworld", "Dymocks", "QBD Books",
+    
+    # Real Estate Agencies
+    "Ray White", "LJ Hooker", "McGrath", "Century 21", "Raine & Horne", 
+    "Harcourts", "Barry Plant", "Belle Property", "First National",
+    
+    # Boba Tea & Asian Chains
+    "Chatime", "Gong cha", "Gong Cha", "Sharetea", "Sushi Hub", "Noodle Box",
+    
+    # Telecommunications
+    "Telstra", "Optus", "Vodafone",
+    
+    # Health, Optical & Insurance
+    "Specsavers", "OPSM", "Bupa", "Medibank", "Blooms The Chemist",
+    
+    # Cafes & Casual Dining (additional)
+    "San Churro", "Gelatissimo", "The Pancake Parlour", "Rashays",
+    
+    # Fast Food (additional)
+    "Taco Bell", "Carl's Jr", "Carls Jr", "Ogalo",
+    
+    # Retail (additional)
+    "Harris Scarfe", "City Beach", "Smiggle",
+    
+    # Liquor (additional)
+    "Bottlemart", "Liquor Legends", "SipnSave", "Sip n Save"
 ]
 
 # Compile list sorted by length descending to match longer patterns first (e.g. Bunnings Warehouse before Bunnings)
@@ -116,7 +142,8 @@ def verify_filipino_affiliation(name: str, description: str = "", reviews: list 
     
     # 1. Direct checks for compound phrases or terms in the combined lowercase text
     compound_phrases = {
-        "halo-halo", "halo halo", "sari-sari", "sari sari", "salamat po"
+        "halo-halo", "halo halo", "sari-sari", "sari sari", "salamat po",
+        "boodle fight", "turo-turo", "turo turo", "kare-kare", "kare kare"
     }
     for phrase in compound_phrases:
         if phrase in full_text:
@@ -126,13 +153,21 @@ def verify_filipino_affiliation(name: str, description: str = "", reviews: list 
     words = re.findall(r'[a-z]+', full_text)
     
     # Keyword sets
-    high_collision = {"lami", "tapa"}
+    high_collision = {
+        "lami", "tapa", "ube", "lola",
+        "longganisa", "longanisa", "chicharon", "tsitsaron", "ensaymada"
+    }
     low_collision = {
         "masarap", "sarap", "salamat", "kabayan", "mabuhay", 
         "adobo", "sinigang", "lechon", "sisig", "pancit", "lumpia", 
         "halohalo", "caldereta", "bagnet", "tocino", "pandesal",
-        "filipino", "pinoy", "manila", "lola", "bahay", "tagalog",
-        "sarisari"
+        "filipino", "pinoy", "manila", "bahay", "tagalog",
+        "sarisari", "karekare",
+        # Diaspora logistics, dining, and cultural terms
+        "balikbayan", "padala", "pasalubong", "kamayan",
+        "dinuguan", "inasal", "calamansi", "kalamansi",
+        "bagoong", "bangus", "sinangag", "bayanihan",
+        "carinderia", "karinderya"
     }
     
     for word in words:
@@ -140,13 +175,17 @@ def verify_filipino_affiliation(name: str, description: str = "", reviews: list 
         if "sarap" in word or "silog" in word or "halohalo" in word:
             return True
             
-        # Clean possessives and plurals for standard words
+        # Match against low-collision keywords (raw word first, then stripped)
+        if word in low_collision:
+            return True
+            
+        # Clean possessives and plurals for a second-pass lookup
         clean_word = word
         if clean_word.endswith("s"):
             if clean_word != "tapas":
                 clean_word = clean_word[:-1]
                 
-        # Match against low-collision keywords
+        # Match stripped word against low-collision keywords
         if clean_word in low_collision:
             return True
             
