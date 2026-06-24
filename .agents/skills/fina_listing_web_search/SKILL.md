@@ -136,6 +136,7 @@ The check returns one of three outcomes:
 - `name`: Raw business name.
 - `description`: Descriptive page text.
 - `category`: Must exactly match the task's category.
+- `email`: Business contact email address, if visible on the Facebook "About" / "Contact Info" section or on the business website's "Contact" page.
 - `facebookUrl`, `instagramUrl`, `tiktokUrl`: Direct profile page links.
 - `facebookFollowers`, `instagramFollowers`, `tiktokFollowers`: Convert text to integer (e.g. "1.5K" → 1500, "2.4M" → 2400000). For TikTok, save raw HTML to `tmp/tiktok_profile_<CONVERSATION_ID>.html` and parse:
   ```bash

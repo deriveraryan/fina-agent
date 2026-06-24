@@ -198,6 +198,7 @@ async def process_single_item(operation: str, item_dict: dict, trace_id: str, ge
                             "categories": merged.get("categories"),
                             "phone": merged.get("phone"),
                             "website": merged.get("website"),
+                            "email": merged.get("email"),
                             "facebookUrl": merged.get("facebookUrl"),
                             "instagramUrl": merged.get("instagramUrl"),
                             "tiktokUrl": merged.get("tiktokUrl"),

@@ -95,11 +95,13 @@ Extract reviews from three sources in priority order. Track `reviews_extracted` 
    ```
    Record the resulting JSON string for Step 6. If no hours section is visible, omit `operatingHours` from the Step 6 payload entirely (do NOT set it to `null`, as that would clear existing hours in the database).
 7. **Closure signal check**: Look for a "Permanently closed" or "Temporarily closed" banner in the Maps detail panel. Also note if the Maps listing can't be found at all (place removed). Record the signal for Step 5.5.
-8. Increment the `maps_visits` counter.
+8. **Email check (best-effort)**: Look for a business email address in the Maps info panel (sometimes displayed under the contact section alongside phone and website). Record it for Step 6 if found.
+9. Increment the `maps_visits` counter.
 
 **Round 2 — Social Media (if URLs exist):**
 1. Visit Facebook page (if `facebook_url` exists or was discovered in Round 1). Extract customer reviews, testimonials, or community posts mentioning the business (up to 5). Use `externalSourceId` format: `fb_<md5>`.
    - Extract follower count. Parse and convert to integer (e.g. "1.5K followers" → 1500, "2.4M followers" → 2400000). Set to `null` if not visible.
+   - **Email extraction**: Check the Facebook page's "About" or "Contact Info" section for a business email address. Record it for Step 6 if found and the listing's current email is empty.
 2. Visit Instagram page (if `instagram_url` exists or was discovered). Extract relevant testimonials or tagged posts (up to 5). Use `externalSourceId` format: `ig_<md5>`.
    - Extract follower count and convert to integer.
 3. Visit TikTok page (if `tiktok_url` exists or was discovered). Extract relevant comments or testimonials (up to 5). Use `externalSourceId` format: `tt_<md5>`.
@@ -190,6 +192,7 @@ The payload must include:
 Additionally, include any newly-discovered social URLs and follower counts (only for fields that were previously empty/null on the listing):
 - `facebookUrl`, `instagramUrl`, `tiktokUrl`: New social URLs discovered during Step 3.
 - `facebookFollowers`, `instagramFollowers`, `tiktokFollowers`: Follower counts as integers.
+- `email`: Business email address discovered during Step 3 (only if the listing's existing email is empty/null).
 
 Additionally, if Step 5.5 determined a status change is needed:
 - `status`: The assessed status (`OPERATIONAL`, `CLOSED_PERMANENTLY`, or `CLOSED_TEMPORARILY`). **Only include when it differs from the task's `listing_status`.**

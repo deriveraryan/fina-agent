@@ -388,6 +388,7 @@ class TestAgentScripts(unittest.IsolatedAsyncioTestCase):
                 "categories": ["RESTAURANT", "CAFE"],
                 "phone": None,
                 "website": None,
+                "email": None,
                 "facebookUrl": "fb.com/old",
                 "instagramUrl": "ig.com/new",
                 "tiktokUrl": None,

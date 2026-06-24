@@ -60,6 +60,7 @@ def check_duplicate_in_cache(
     facebook_followers: int | None = None,
     instagram_followers: int | None = None,
     tiktok_followers: int | None = None,
+    email: str | None = None,
 ) -> dict[str, Any]:
     """Checks if a candidate is a duplicate within a local JSON listings file."""
     if not os.path.exists(file_path):
@@ -112,6 +113,7 @@ def check_duplicate_in_cache(
             candidate_fields = {
                 "website": website,
                 "phone": phone,
+                "email": email,
                 "operatingHours": hours,
                 "description": description,
                 "facebookUrl": facebook_url,
@@ -187,6 +189,7 @@ def main() -> None:
     parser.add_argument("--facebook-followers", type=int, help="Facebook followers count to check.")
     parser.add_argument("--instagram-followers", type=int, help="Instagram followers count to check.")
     parser.add_argument("--tiktok-followers", type=int, help="Tiktok followers count to check.")
+    parser.add_argument("--email", help="Email address to check.")
     parser.add_argument("--trace-id", help="Trace correlation ID.")
     args = parser.parse_args()
 
@@ -211,6 +214,7 @@ def main() -> None:
         facebook_followers=args.facebook_followers,
         instagram_followers=args.instagram_followers,
         tiktok_followers=args.tiktok_followers,
+        email=args.email,
     )
 
     sys.stdout.write(json.dumps(result))
