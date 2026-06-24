@@ -132,7 +132,7 @@ python3 scripts/agent_enrichment_tasks.py --action next --city SYDNEY --trace-id
 # Mark enrichment task as completed with metrics
 python3 scripts/agent_enrichment_tasks.py --action complete --city SYDNEY --task-id <ID> \
   --listings-enriched 1 --reviews-extracted 8 --reviews-pushed 8 --socials-enriched 2 \
-  --descriptions-rewritten 1 --maps-visits 1 --trace-id <CONVERSATION_ID>
+  --descriptions-rewritten 1 --maps-visits 1 --statuses-updated 0 --listings-flagged 0 --trace-id <CONVERSATION_ID>
 
 # View aggregate enrichment progress
 python3 scripts/agent_enrichment_tasks.py --action summary --city SYDNEY --trace-id <CONVERSATION_ID>
@@ -164,7 +164,7 @@ python3 scripts/agent_fetch_targets.py --type city-listings --city SYDNEY --trac
 python3 scripts/agent_check_duplicate.py --file tmp/existing_city_listings.json --name "<NAME>" --url "<URL>" --trace-id <CONVERSATION_ID>
 
 # Push data via GraphQL (single payload)
-python3 scripts/agent_graphql_push.py --operation <CreateListing|UpdateListingData|CreateReview|CreateEvent|UpdateListingSocialUrls|UpsertSocialPostTracker> --variables @tmp/payload.json --trace-id <CONVERSATION_ID>
+python3 scripts/agent_graphql_push.py --operation <CreateListing|UpdateListingData|UpdateListingStatus|CreateReview|CreateEvent|UpdateListingSocialUrls|UpsertSocialPostTracker> --variables @tmp/payload.json --trace-id <CONVERSATION_ID>
 ```
 
 > [!IMPORTANT]

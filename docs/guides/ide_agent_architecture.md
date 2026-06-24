@@ -114,7 +114,7 @@ The following agents exist as skills/scripts but are not yet production-ready:
 ### 4. Database Integration Scripts
 To maintain security and ensure all data mutations pass through the authorized GraphQL layer, the subagents rely on local Python helper CLI scripts that connect to the core `fina` Firebase project:
 *   `scripts/agent_fetch_targets.py`: Fetches target source URLs, missing-social listings, business-socials, city-listings (for deduplication context), or social-post-trackers from the database.
-*   `scripts/agent_graphql_push.py`: Pushes verified JSON objects or updates to the backend using GraphQL operations (including `CreateListing`, `UpdateListingData`, `UpdateListingSocialUrls`, `CreateReview`, `CreateEvent`, and `UpsertSocialPostTracker`). It normalizes platform names, dynamically validates and normalizes categories against [categories.json](file:///Users/ryan/.gemini/antigravity/scratch/fina-agent/data/categories.json), caches loaded categories in module scope, and synchronously handles geocoding and deduplication before creating new listings.
+*   `scripts/agent_graphql_push.py`: Pushes verified JSON objects or updates to the backend using GraphQL operations (including `CreateListing`, `UpdateListingData`, `UpdateListingStatus`, `UpdateListingSocialUrls`, `CreateReview`, `CreateEvent`, and `UpsertSocialPostTracker`). It normalizes platform names, dynamically validates and normalizes categories against [categories.json](file:///Users/ryan/.gemini/antigravity/scratch/fina-agent/data/categories.json), caches loaded categories in module scope, and synchronously handles geocoding and deduplication before creating new listings.
 *   `scripts/agent_check_duplicate.py`: Checks a local JSON file of existing listings for duplicate candidates by name and/or social URL match.
 *   `scripts/agent_web_search_tasks.py`: Manages the task-based state machine for `fina_listing_web_search` (`generate`, `next`, `complete`, `summary`).
 *   `scripts/agent_enrichment_tasks.py`: Manages the task-based state machine for `fina_listing_enrichment` (`generate`, `next`, `complete`, `summary`).
@@ -213,11 +213,11 @@ The memory file has a fixed five-section structure, each serving a distinct know
 
 | Section | Written by | Example entries |
 |---|---|---|
-| Platform & Browser Insights | Both agents | "Facebook requires login to view follower counts as of 2026-06" |
+| Platform & Browser Insights | All 3 production agents | "Facebook requires login to view follower counts as of 2026-06" |
 | Discovery Patterns | `fina_listing_web_search` | "RESTAURANT category in Sydney CBD yields >80% duplicates — consider skipping" |
 | Enrichment Patterns | `fina_listing_enrichment` | "Google Maps reviews section now uses `div[data-review-id]` selector" |
-| City Intelligence | Both agents | "Melbourne: Dandenong and Footscray are highest-density Filipino suburbs" |
-| Known Pitfalls | Both agents | "`CreateListing` rejects `openingHours` with trailing whitespace in day names" |
+| City Intelligence | All 3 production agents | "Melbourne: Dandenong and Footscray are highest-density Filipino suburbs" |
+| Known Pitfalls | All 3 production agents | "`CreateListing` rejects `openingHours` with trailing whitespace in day names" |
 
 ### Budget Management
 

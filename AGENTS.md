@@ -144,7 +144,7 @@ pip install -r requirements.txt
   python3 scripts/agent_check_duplicate.py --file tmp/existing_city_listings.json --name "<NAME>" --url "<URL>" --trace-id <CONVERSATION_ID>
 
   # GraphQL push (single payload)
-  python3 scripts/agent_graphql_push.py --operation <CreateListing|UpdateListingData|UpdateListingSocialUrls|CreateReview|CreateEvent|UpsertSocialPostTracker> --variables @tmp/payload.json --trace-id <CONVERSATION_ID>
+  python3 scripts/agent_graphql_push.py --operation <CreateListing|UpdateListingData|UpdateListingStatus|UpdateListingSocialUrls|CreateReview|CreateEvent|UpsertSocialPostTracker> --variables @tmp/payload.json --trace-id <CONVERSATION_ID>
   ```
 
 ---
