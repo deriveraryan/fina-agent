@@ -123,5 +123,6 @@
 - The `agent_check_duplicate.py` name matching is highly sensitive to naming variations; Google Maps results containing descriptive suffixes (e.g., "The Bangketa Grocer - Filipino shop" vs "The Bangketa Grocer") will fail to match, so you should check with the base/shortened name if duplicate checks fail.
 - The GraphQL `CreateListing` mutation variables do not accept a `suburb` key; passing it will trigger an `INVALID_ARGUMENT` execution error indicating `$suburb is not expected`.
 - Separate parishes of the same dedication (e.g., Mary Immaculate Catholic Church in Bossley Park vs Eagle Vale) share identical names; append the suburb or location suffix to the listing name to prevent incorrect name-based duplicate collisions.
+- When Google Maps has no structured hours for a listing (common for churches, community orgs, markets), extract schedule information from the listing's description and gathered web/social text. Store as standard `operatingHours` JSON. If Maps hours also exist, merge with ` | ` separator per day (Maps hours first, then description context). Tag listings with `description-hours` for provenance tracking.
 
 

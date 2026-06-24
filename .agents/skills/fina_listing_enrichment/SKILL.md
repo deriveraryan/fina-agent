@@ -93,10 +93,43 @@ Extract reviews from three sources in priority order. Track `reviews_extracted` 
    ```bash
    python3 -c "from features.scanning.maps_browser_parser import parse_maps_opening_hours; print(parse_maps_opening_hours('<HOURS_TEXT>'))"
    ```
-   Record the resulting JSON string for Step 6. If no hours section is visible, omit `operatingHours` from the Step 6 payload entirely (do NOT set it to `null`, as that would clear existing hours in the database).
+   Record the resulting JSON string for Step 3.5. If no hours section is visible, record that Maps hours are absent — proceed to Step 3.5 for description-based fallback.
 7. **Closure signal check**: Look for a "Permanently closed" or "Temporarily closed" banner in the Maps detail panel. Also note if the Maps listing can't be found at all (place removed). Record the signal for Step 5.5.
 8. **Email check (best-effort)**: Look for a business email address in the Maps info panel (sometimes displayed under the contact section alongside phone and website). Record it for Step 6 if found.
 9. Increment the `maps_visits` counter.
+
+### Step 3.5: Description-Based Schedule Extraction (Fallback)
+After completing Round 1 (Google Maps), evaluate whether `operatingHours` can be enriched further or constructed from description text. This step applies to **all categories** (not just churches).
+
+**If Maps hours were extracted in Round 1:**
+Check whether the gathered text (from the Maps description area or the listing's existing `description` field from the task data) contains **additional schedule context** not captured in the standard Maps hours — for example, specific service times, mass schedules, or event days. If so, **merge** the description context into the Maps hours using the ` | ` separator:
+- For each day that has both Maps hours and description-derived detail, append the detail: e.g. `{"sun": "Open 24 hours | Tagalog Mass 3:00 PM"}`
+- For days only in Maps hours, keep them as-is.
+- For days only in description context, add them as new entries.
+
+**If Maps hours were NOT found in Round 1:**
+Attempt to extract schedule/timing information from all currently available text sources, preferring freshly gathered data:
+1. **Gathered text from Round 1**: Description area on Maps, any text captured from the Maps detail panel.
+2. **Existing DB description**: The listing's stored `description` field from the task data.
+
+Parse any recognisable schedule patterns into the standard `operatingHours` JSON format. Examples:
+- "Tagalog mass every Sunday at 3pm" → `{"sun": "Tagalog Mass 3:00 PM"}`
+- "Open weekends 10am-4pm" → `{"sat": "10:00 AM - 4:00 PM", "sun": "10:00 AM - 4:00 PM"}`
+- "Services: Saturday Vigil 5:30 PM, Sunday 9 AM, 10:30 AM, 12 PM" → `{"sat": "Vigil 5:30 PM", "sun": "9:00 AM, 10:30 AM, 12:00 PM"}`
+- "Mon-Fri 9am-5pm" → `{"mon": "9:00 AM - 5:00 PM", "tue": "9:00 AM - 5:00 PM", ...}`
+
+Use `parse_maps_opening_hours()` if the text happens to be in standard `Day: Time` format. Otherwise, construct the JSON dict manually and serialise with:
+```bash
+python3 -c "import json; print(json.dumps({...}))"
+```
+
+**Tagging:** If schedule information was extracted (fully or partially) from description text, add `description-hours` to the listing's tags for provenance tracking.
+
+**No schedule found:** If no schedule information can be found in any source, omit `operatingHours` from the Step 6 payload entirely (do NOT set it to `null`, as that would clear existing hours in the database).
+
+**Late enrichment:** If Rounds 2-3 (social media, web search) later surface additional schedule context (e.g. a Facebook About section listing service times), incorporate it into the `operatingHours` result before constructing the Step 6 payload — using the same merge rules above.
+
+Record the final `operatingHours` JSON string for Step 6.
 
 **Round 2 — Social Media (if URLs exist):**
 1. Visit Facebook page (if `facebook_url` exists or was discovered in Round 1). Extract customer reviews, testimonials, or community posts mentioning the business (up to 5). Use `externalSourceId` format: `fb_<md5>`.
@@ -144,7 +177,7 @@ Using the collected reviews and the listing's existing description (from the tas
 - **Accessibility**: Plain language accessible to non-native English speakers. Keep sentences short (15-20 words average). Avoid jargon and idioms. Use active voice.
 - **Length**: 150-250 words.
 - **Structure**: Open with what the business is, highlight what customers love (paraphrased from reviews — do NOT quote verbatim), detail key offerings, and close with community/location context.
-- **Exclusions**: Do NOT include pricing, opening hours, contact details, marketing superlatives, or self-referential phrasing.
+- **Grounding**: Base the description on gathered sources. Include relevant details like service times, key offerings, and community context naturally. Avoid marketing superlatives ("best in Sydney!") and self-referential ad-copy phrasing ("We are the...").
 - **No reviews available**: Rewrite the existing description in AuE style. If the existing description is also empty or minimal, write a factual description based solely on the listing's name, category, and city — do NOT fabricate details.
 - **Closed business**: If the business is assessed as closed in Step 5.5 (which follows this step), still synthesise a description but add a factual closing note at the end (e.g., "This business has permanently closed."). Keep the description informative so users understand what the business was. You may need to revise the description after Step 5.5 if a closure is detected.
 
@@ -187,7 +220,7 @@ python3 scripts/agent_graphql_push.py --operation UpdateListingData --variables 
 The payload must include:
 - `id`: The listing's UUID from the task.
 - `description`: The newly synthesised description from Step 5.
-- `operatingHours`: The parsed JSON string from Step 3, Round 1. **Always include this field when hours were extracted** — even if the listing already has operating hours, overwrite with the latest value from Google Maps. **Omit this field entirely** if no hours were visible on the Maps page (do NOT pass `null`, as the GraphQL mutation would clear existing hours).
+- `operatingHours`: The parsed/merged JSON string from Step 3 Round 1 and/or Step 3.5. **Always include this field when hours were extracted from any source** (Maps, description, or both merged) — even if the listing already has operating hours, overwrite with the latest value. **Omit this field entirely** if no hours were found in any source (do NOT pass `null`, as the GraphQL mutation would clear existing hours).
 
 Additionally, include any newly-discovered social URLs and follower counts (only for fields that were previously empty/null on the listing):
 - `facebookUrl`, `instagramUrl`, `tiktokUrl`: New social URLs discovered during Step 3.
@@ -197,7 +230,7 @@ Additionally, include any newly-discovered social URLs and follower counts (only
 Additionally, if Step 5.5 determined a status change is needed:
 - `status`: The assessed status (`OPERATIONAL`, `CLOSED_PERMANENTLY`, or `CLOSED_TEMPORARILY`). **Only include when it differs from the task's `listing_status`.**
 
-**Merge rule**: Never overwrite existing social URLs — only fill fields that were `null` in the task data. The exceptions are `operatingHours` (always overwritten to keep hours current) and `status` (overwritten when closure is detected or a closed business is confirmed reopened).
+**Merge rule**: Never overwrite existing social URLs — only fill fields that were `null` in the task data. The exceptions are `operatingHours` (always overwritten to keep hours current) and `status` (overwritten when closure is detected or a closed business is confirmed reopened). If hours were derived (fully or partially) from description text in Step 3.5, ensure `description-hours` is included in the listing's tags.
 
 **Self-Correction on Failure**: If the push exits with code 1, read the validation error from stdout/stderr, fix the payload, and retry. If it still fails after 2 retries, log the error and proceed to Step 7.
 

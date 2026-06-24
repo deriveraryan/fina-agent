@@ -47,7 +47,7 @@ The following 4 agents are production-ready and actively executing tasks:
     5. Runs four sequential search rounds: Facebook (`site:facebook.com`), Instagram (`site:instagram.com`), General Web (excludes social), and Google Maps browser. Per-round page limits: 10 for social/web, unlimited scroll for Maps.
     6. Checks duplicates via `agent_check_duplicate.py`. Merge scenarios use `UpdateListingData`; new listings use `CreateListing`.
     7. Navigates to candidates via Chrome DevTools, extracting visible text/selectors only.
-    8. For Rounds 1-3 candidates, enriches from Google Maps (lat/lng, address, hours, phone, Place ID, website). Adds `google-maps` tag on success.
+    8. For Rounds 1-3 candidates, enriches from Google Maps (lat/lng, address, hours, phone, Place ID, website). Falls back to description-based schedule extraction when Maps hours are absent (tagged `description-hours`). Adds `google-maps` tag on success.
     9. Pushes verified listings via `agent_graphql_push.py --operation CreateListing` (without `--generate-embeddings`) with self-correction on validation failure.
     10. Marks task `COMPLETED` with metrics via `--action complete`.
     11. Runs post-execution retrospective against `data/fina_agent_memory.md`. Updates within the 500-line budget if new insights were surfaced; skips otherwise.
@@ -61,9 +61,9 @@ The following 4 agents are production-ready and actively executing tasks:
     2. Generates one enrichment task per listing (idempotent) via `--action generate`. Pass `--force` to regenerate while merging existing state.
     3. Reads canonical category definitions from `data/categories.json`.
     4. Claims next pending task via `--action next` (atomic via `fcntl.flock()`).
-    5. Extracts reviews in three sequential rounds, collecting closure signals passively: (a) Google Maps browser — reviews, operating hours, social links, closure banners; (b) Social media — testimonials, follower counts, closure announcements; (c) Web search — `"<name>" <city> reviews` across up to 5 pages, closure mentions.
+    5. Extracts reviews in three sequential rounds, collecting closure signals passively: (a) Google Maps browser — reviews, operating hours (with description-based fallback when Maps hours absent, tagged `description-hours`), social links, closure banners; (b) Social media — testimonials, follower counts, closure announcements; (c) Web search — `"<name>" <city> reviews` across up to 5 pages, closure mentions.
     6. Pushes reviews individually via `CreateReview` mutation (idempotent via `externalSourceId`).
-    7. Synthesises a 150-250 word AuE description combining reviews with existing description.
+    7. Synthesises a 150-250 word AuE description combining reviews with existing description. Description synthesis is naturally grounded from gathered sources (no artificial exclusion of hours or contact details).
     8. Assesses business status using closure signals from step 5. Updates `status` only when it differs from the listing's current status (Maps banners are the strongest signal).
     9. Pushes enriched data via `UpdateListingData` — description, operating hours, social URLs/follower counts, and status (if changed).
     10. For `UNVERIFIED` listings, assesses Filipino affiliation using all collected context. Flags listings with zero affiliation as `FLAGGED` via `UpdateListingStatus`.

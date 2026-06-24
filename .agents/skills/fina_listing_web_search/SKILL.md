@@ -144,7 +144,7 @@ The check returns one of three outcomes:
   ```
 - `status`: `'OPERATIONAL'` (default), `'CLOSED_PERMANENTLY'`, or `'CLOSED_TEMPORARILY'`.
 
-**e. Google Maps Enrichment (Best-Effort — Rounds 1-3 candidates only):** Skip this step for candidates discovered in Round 4 (Google Maps) — they already have full structured data (address, lat/lng, phone, hours, website). Always add `google-maps` to the tags for Round 4 candidates and proceed directly to Step 6f.
+**e. Google Maps Enrichment (Best-Effort — Rounds 1-3 candidates only):** Skip this step for candidates discovered in Round 4 (Google Maps) — they already have full structured data (address, lat/lng, phone, hours, website). Always add `google-maps` to the tags for Round 4 candidates and proceed directly to Step 6e.5.
 
 For candidates from Rounds 1-3, attempt to enrich with structured data from Google Maps via Chrome DevTools:
 
@@ -165,7 +165,26 @@ For candidates from Rounds 1-3, attempt to enrich with structured data from Goog
    - `website`: Extract only if no website was found in prior steps.
 4. **Merge rule**: Existing data from social/web pages always takes precedence. Maps data only fills empty fields.
 5. **Tag**: If at least one field was successfully enriched from Maps, add `google-maps` to the listing's tags.
-6. **On failure**: If the Maps page fails to load or no matching result is found, proceed to step 6f without any Maps data. Do NOT skip the listing.
+6. **On failure**: If the Maps page fails to load or no matching result is found, proceed to step 6e.5 without any Maps data. Do NOT skip the listing.
+
+**e.5. Description-Based Schedule Extraction (Fallback):** This step applies to **all categories**.
+
+**If Step 6e extracted Maps `operatingHours`:**
+Check whether the page text collected during browser verification (Steps 6b/6d — Facebook About section, website pages, Google Maps description area) contains **additional schedule context** not captured in the standard Maps hours — for example, specific service times, mass schedules, or event days. If so, **merge** the description context into the Maps hours using the ` | ` separator:
+- For each day that has both Maps hours and description-derived detail, append: e.g. `{"sun": "Open 24 hours | Tagalog Mass 3:00 PM"}`
+- For days only in Maps, keep as-is. For days only in description, add as new entries.
+
+**If Step 6e found no `operatingHours`** (Maps hours absent, Maps enrichment skipped, or Round 4 candidate with no hours):
+Attempt to extract schedule/timing information from the page text gathered during Steps 6b and 6d. Parse recognisable schedule patterns into the standard `operatingHours` JSON format. Examples:
+- "Tagalog mass every Sunday at 3pm" → `{"sun": "Tagalog Mass 3:00 PM"}`
+- "Open weekends 10am-4pm" → `{"sat": "10:00 AM - 4:00 PM", "sun": "10:00 AM - 4:00 PM"}`
+- "Mon-Fri 9am-5pm" → `{"mon": "9:00 AM - 5:00 PM", "tue": "9:00 AM - 5:00 PM", ...}`
+
+Use `parse_maps_opening_hours()` if the text is in standard `Day: Time` format. Otherwise, construct the JSON dict manually and serialise with `json.dumps()`.
+
+**Tagging:** If schedule info was derived (fully or partially) from description/page text, add `description-hours` to the listing's tags.
+
+**No schedule found:** If no schedule information can be found, omit `operatingHours` from the payload entirely.
 
 **f. Address Handling:** If neither the social/web page nor Google Maps provided a physical street address, set address to the city name (e.g. `'Sydney, NSW'`) and use city center coordinates. Add `'online-org'` to the tags.
 
