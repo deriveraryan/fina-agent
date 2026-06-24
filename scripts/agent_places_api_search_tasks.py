@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""CLI agent script to manage the maps search task state machine.
+"""CLI agent script to manage the Places API search task state machine.
 
 Provides actions to generate task permutations, retrieve the next pending task,
 mark tasks as completed with metrics, and view aggregate progress.
@@ -21,11 +21,11 @@ sys.path.insert(
 )
 
 from features.shared.observability import BackendObservability
-from features.scanning.map_search_tasks import (
+from features.scanning.places_api_search_tasks import (
     generate_tasks,
-    MAP_SEARCH_ALLOWED_METRICS,
-    MAP_SEARCH_METRIC_FIELDS,
-    MAP_SEARCH_MUTABLE_FIELDS,
+    PLACES_API_SEARCH_ALLOWED_METRICS,
+    PLACES_API_SEARCH_METRIC_FIELDS,
+    PLACES_API_SEARCH_MUTABLE_FIELDS,
 )
 from features.scanning.task_lifecycle import (
     load_tasks,
@@ -40,7 +40,7 @@ from features.scanning.task_lifecycle import (
 def main() -> None:
     """CLI script entrypoint."""
     parser = argparse.ArgumentParser(
-        description="Manage the maps search task state machine."
+        description="Manage the Places API search task state machine."
     )
     parser.add_argument(
         "--action",
@@ -67,7 +67,7 @@ def main() -> None:
         "--tasks-file",
         type=str,
         default=None,
-        help="Path to the search tasks JSON file. Defaults to data/listing_map_search_tasks_{city}.json",
+        help="Path to the search tasks JSON file. Defaults to data/listing_places_api_search_tasks_{city}.json",
     )
     parser.add_argument(
         "--stale-timeout-minutes",
@@ -95,6 +95,7 @@ def main() -> None:
     parser.add_argument("--candidates-evaluated", type=int, default=0, help="Number of candidates evaluated.")
     parser.add_argument("--candidates-rejected", type=int, default=0, help="Number of candidates rejected.")
     parser.add_argument("--candidates-duplicate", type=int, default=0, help="Number of duplicate candidates found.")
+    parser.add_argument("--candidates-merged", type=int, default=0, help="Number of candidates merged into existing listings.")
 
     args = parser.parse_args()
 
@@ -103,7 +104,7 @@ def main() -> None:
     if args.tasks_file:
         tasks_path = args.tasks_file
     else:
-        tasks_path = f"data/listing_map_search_tasks_{city_key}.json"
+        tasks_path = f"data/listing_places_api_search_tasks_{city_key}.json"
 
     try:
         if args.action == "generate":
@@ -124,7 +125,7 @@ def main() -> None:
                 return
 
             BackendObservability.info(
-                f"Generating map search tasks for city={args.city}"
+                f"Generating Places API search tasks for city={args.city}"
                 + (" (force merge)" if args.force else "")
                 + (f" (include_suburbs={args.include_suburbs})" if args.include_suburbs else ""),
                 conversation_id=args.trace_id,
@@ -135,7 +136,7 @@ def main() -> None:
                 suburbs_path=args.suburbs_file,
                 include_suburbs=args.include_suburbs,
             )
-            merge_result = merge_existing_state(new_tasks, existing_tasks, MAP_SEARCH_MUTABLE_FIELDS)
+            merge_result = merge_existing_state(new_tasks, existing_tasks, PLACES_API_SEARCH_MUTABLE_FIELDS)
 
             save_tasks(tasks_path, new_tasks)
 
@@ -198,8 +199,9 @@ def main() -> None:
                 "candidates_evaluated": args.candidates_evaluated,
                 "candidates_rejected": args.candidates_rejected,
                 "candidates_duplicate": args.candidates_duplicate,
+                "candidates_merged": args.candidates_merged,
             }
-            locked_complete_task(tasks_path, args.task_id, metrics, MAP_SEARCH_ALLOWED_METRICS)
+            locked_complete_task(tasks_path, args.task_id, metrics, PLACES_API_SEARCH_ALLOWED_METRICS)
 
             BackendObservability.info(
                 f"Completed task {args.task_id} with metrics: {metrics}",
@@ -218,10 +220,10 @@ def main() -> None:
                     f"No tasks found at {tasks_path}.",
                     conversation_id=args.trace_id,
                 )
-                print(json.dumps(get_progress_summary([], MAP_SEARCH_METRIC_FIELDS, stale_timeout_minutes=args.stale_timeout_minutes)))
+                print(json.dumps(get_progress_summary([], PLACES_API_SEARCH_METRIC_FIELDS, stale_timeout_minutes=args.stale_timeout_minutes)))
                 return
 
-            summary = get_progress_summary(tasks, MAP_SEARCH_METRIC_FIELDS, stale_timeout_minutes=args.stale_timeout_minutes)
+            summary = get_progress_summary(tasks, PLACES_API_SEARCH_METRIC_FIELDS, stale_timeout_minutes=args.stale_timeout_minutes)
             BackendObservability.info(
                 f"Progress summary for {args.city}: {summary}",
                 conversation_id=args.trace_id,
@@ -230,7 +232,7 @@ def main() -> None:
 
     except Exception as e:
         BackendObservability.fatal(
-            f"Failed during map search tasks action={args.action}: {e}",
+            f"Failed during Places API search tasks action={args.action}: {e}",
             exception=e,
             conversation_id=args.trace_id,
         )

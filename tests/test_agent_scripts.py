@@ -168,9 +168,9 @@ class TestAgentScripts(unittest.IsolatedAsyncioTestCase):
     @patch("sys.stdout")
     @patch("httpx.AsyncClient.post")
     @patch.dict("os.environ", {"GOOGLE_MAPS_API_KEY": "fake-key"})
-    async def test_maps_fetch_single_query(self, mock_post: AsyncMock, mock_stdout: MagicMock) -> None:
-        """Tests that agent_maps_fetch.py executes a single Places API query and returns formatted results."""
-        import agent_maps_fetch
+    async def test_places_api_fetch_single_query(self, mock_post: AsyncMock, mock_stdout: MagicMock) -> None:
+        """Tests that agent_places_api_fetch.py executes a single Places API query and returns formatted results."""
+        import agent_places_api_fetch
 
         mock_response = MagicMock()
         mock_response.status_code = 200
@@ -204,9 +204,9 @@ class TestAgentScripts(unittest.IsolatedAsyncioTestCase):
         }
         mock_post.return_value = mock_response
 
-        sys.argv = ["agent_maps_fetch.py", "--query", "Filipino restaurant in Sydney", "--city", "SYDNEY", "--category", "RESTAURANT"]
+        sys.argv = ["agent_places_api_fetch.py", "--query", "Filipino restaurant in Sydney", "--city", "SYDNEY", "--category", "RESTAURANT"]
 
-        await agent_maps_fetch.main()
+        await agent_places_api_fetch.main()
 
         self.assertTrue(mock_post.called)
         written_calls = [call.args[0] for call in mock_stdout.write.call_args_list]
@@ -221,11 +221,11 @@ class TestAgentScripts(unittest.IsolatedAsyncioTestCase):
     @patch("sys.stdout")
     @patch("httpx.AsyncClient.post")
     @patch.dict("os.environ", {"GOOGLE_MAPS_API_KEY": "fake-key"})
-    async def test_maps_fetch_with_business_status(self, mock_post: AsyncMock, mock_stdout: MagicMock) -> None:
-        """Tests that agent_maps_fetch.py correctly parses businessStatus and review fields."""
+    async def test_places_api_fetch_with_business_status(self, mock_post: AsyncMock, mock_stdout: MagicMock) -> None:
+        """Tests that agent_places_api_fetch.py correctly parses businessStatus and review fields."""
         import importlib
-        import agent_maps_fetch
-        importlib.reload(agent_maps_fetch)
+        import agent_places_api_fetch
+        importlib.reload(agent_places_api_fetch)
 
         mock_response = MagicMock()
         mock_response.status_code = 200
@@ -256,9 +256,9 @@ class TestAgentScripts(unittest.IsolatedAsyncioTestCase):
         }
         mock_post.return_value = mock_response
 
-        sys.argv = ["agent_maps_fetch.py", "--query", "Filipino restaurant in Sydney", "--city", "SYDNEY", "--category", "RESTAURANT"]
+        sys.argv = ["agent_places_api_fetch.py", "--query", "Filipino restaurant in Sydney", "--city", "SYDNEY", "--category", "RESTAURANT"]
 
-        await agent_maps_fetch.main()
+        await agent_places_api_fetch.main()
 
         self.assertTrue(mock_post.called)
         written_calls = [call.args[0] for call in mock_stdout.write.call_args_list]
@@ -949,17 +949,17 @@ class TestAgentScripts(unittest.IsolatedAsyncioTestCase):
         self.assertIn("Validation Error: --listing-id and --platform are required for social-post-tracker", stderr_calls)
 
     @patch("sys.stderr")
-    async def test_maps_fetch_requires_api_key(self, mock_stderr: MagicMock) -> None:
-        """Tests that agent_maps_fetch.py exits with code 1 when GOOGLE_MAPS_API_KEY is not set."""
-        import agent_maps_fetch
+    async def test_places_api_fetch_requires_api_key(self, mock_stderr: MagicMock) -> None:
+        """Tests that agent_places_api_fetch.py exits with code 1 when GOOGLE_MAPS_API_KEY is not set."""
+        import agent_places_api_fetch
 
         if "GOOGLE_MAPS_API_KEY" in os.environ:
             del os.environ["GOOGLE_MAPS_API_KEY"]
 
-        sys.argv = ["agent_maps_fetch.py", "--query", "Filipino services in Sydney", "--city", "SYDNEY", "--category", "SERVICES"]
+        sys.argv = ["agent_places_api_fetch.py", "--query", "Filipino services in Sydney", "--city", "SYDNEY", "--category", "SERVICES"]
 
         with self.assertRaises(SystemExit) as context:
-            await agent_maps_fetch.main()
+            await agent_places_api_fetch.main()
 
         self.assertEqual(context.exception.code, 1)
 
@@ -1063,12 +1063,12 @@ class TestAgentScripts(unittest.IsolatedAsyncioTestCase):
         )
 
     @patch("os.path.exists")
-    def test_maps_fetch_categories_file_missing(self, mock_exists: MagicMock) -> None:
-        """Tests that agent_maps_fetch.load_valid_categories raises FileNotFoundError when category file is missing."""
-        import agent_maps_fetch
+    def test_places_api_fetch_categories_file_missing(self, mock_exists: MagicMock) -> None:
+        """Tests that agent_places_api_fetch.load_valid_categories raises FileNotFoundError when category file is missing."""
+        import agent_places_api_fetch
         mock_exists.return_value = False
         with self.assertRaises(FileNotFoundError):
-            agent_maps_fetch.load_valid_categories()
+            agent_places_api_fetch.load_valid_categories()
 
     @patch("os.path.exists")
     async def test_graphql_push_categories_file_missing(self, mock_exists: MagicMock) -> None:
@@ -1081,15 +1081,15 @@ class TestAgentScripts(unittest.IsolatedAsyncioTestCase):
 
     @patch("os.path.exists")
     @patch("builtins.open")
-    def test_maps_fetch_categories_file_corrupted(self, mock_open: MagicMock, mock_exists: MagicMock) -> None:
-        """Tests that agent_maps_fetch.load_valid_categories raises exception when category file has corrupted JSON."""
-        import agent_maps_fetch
+    def test_places_api_fetch_categories_file_corrupted(self, mock_open: MagicMock, mock_exists: MagicMock) -> None:
+        """Tests that agent_places_api_fetch.load_valid_categories raises exception when category file has corrupted JSON."""
+        import agent_places_api_fetch
         mock_exists.return_value = True
         mock_file = MagicMock()
         mock_file.read.return_value = "invalid json{"
         mock_open.return_value.__enter__.return_value = mock_file
         with self.assertRaises(json.JSONDecodeError):
-            agent_maps_fetch.load_valid_categories()
+            agent_places_api_fetch.load_valid_categories()
 
     @patch("os.path.exists")
     @patch("builtins.open")
@@ -1244,16 +1244,16 @@ class TestAgentScripts(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(parsed["listings_processed"], 1)
         self.assertEqual(parsed["embeddings_generated"], 1)
 
-    def test_maps_fetch_format_place_socials_mapping(self) -> None:
-        """Tests that agent_maps_fetch.format_place extracts social URLs from websiteUri."""
-        import agent_maps_fetch
+    def test_places_api_fetch_format_place_socials_mapping(self) -> None:
+        """Tests that agent_places_api_fetch.format_place extracts social URLs from websiteUri."""
+        import agent_places_api_fetch
 
         place_fb = {
             "id": "mock_place_fb",
             "displayName": {"text": "FB Business"},
             "websiteUri": "https://www.facebook.com/myfbbusiness"
         }
-        res_fb = agent_maps_fetch.format_place(place_fb, "Sydney", "RESTAURANT")
+        res_fb = agent_places_api_fetch.format_place(place_fb, "Sydney", "RESTAURANT")
         self.assertEqual(res_fb["facebookUrl"], "https://www.facebook.com/myfbbusiness")
         self.assertIsNone(res_fb["instagramUrl"])
         self.assertIsNone(res_fb["tiktokUrl"])
@@ -1263,7 +1263,7 @@ class TestAgentScripts(unittest.IsolatedAsyncioTestCase):
             "displayName": {"text": "IG Business"},
             "websiteUri": "https://instagram.com/myigbusiness"
         }
-        res_ig = agent_maps_fetch.format_place(place_ig, "Sydney", "RESTAURANT")
+        res_ig = agent_places_api_fetch.format_place(place_ig, "Sydney", "RESTAURANT")
         self.assertIsNone(res_ig["facebookUrl"])
         self.assertEqual(res_ig["instagramUrl"], "https://instagram.com/myigbusiness")
         self.assertIsNone(res_ig["tiktokUrl"])
@@ -1273,7 +1273,7 @@ class TestAgentScripts(unittest.IsolatedAsyncioTestCase):
             "displayName": {"text": "TikTok Business"},
             "websiteUri": "https://tiktok.com/@mytiktokbusiness"
         }
-        res_tt = agent_maps_fetch.format_place(place_tt, "Sydney", "RESTAURANT")
+        res_tt = agent_places_api_fetch.format_place(place_tt, "Sydney", "RESTAURANT")
         self.assertIsNone(res_tt["facebookUrl"])
         self.assertIsNone(res_tt["instagramUrl"])
         self.assertEqual(res_tt["tiktokUrl"], "https://tiktok.com/@mytiktokbusiness")

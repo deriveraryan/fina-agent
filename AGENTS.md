@@ -15,8 +15,9 @@ flowchart TD
     AgentSelect -->|fina_listing_web_search| WebFlow["Web & Social Discovery"]
     AgentSelect -->|fina_listing_enrichment| EnrichFlow["Listing Enrichment Pipeline"]
     AgentSelect -->|fina_events_listing| EventsFlow["Events Discovery Pipeline"]
+    AgentSelect -->|fina_listing_places_api_search| PlacesFlow["Places API Discovery"]
 
-    WebFlow & EnrichFlow & EventsFlow --> ReadMemory["Read data/fina_agent_memory.md"]
+    WebFlow & EnrichFlow & EventsFlow & PlacesFlow --> ReadMemory["Read data/fina_agent_memory.md"]
     ReadMemory --> PythonCLI["Execute Python CLI Scripts"]
     PythonCLI --> Verification{"Authenticity Heuristic / Web Verification"}
     Verification -->|Verified| GQLPush["Execute agent_graphql_push.py"]
@@ -33,7 +34,7 @@ flowchart TD
 
 ### Production Agents
 
-The following 3 agents are production-ready and actively executing tasks:
+The following 4 agents are production-ready and actively executing tasks:
 
 #### 1. `fina_listing_web_search`
 *   **Role**: Discovers new listing candidates on Facebook, Instagram, TikTok, web platforms, and Google Maps (via browser). Scoped to a **single task** (1 location × 1 category × 1 search template) with a limit of 30 new listings. **Single-task-per-session**: processes exactly one task, then stops.
@@ -85,13 +86,28 @@ The following 3 agents are production-ready and actively executing tasks:
     9. Runs post-execution retrospective against `data/fina_agent_memory.md`. Updates within the 500-line budget if new insights were surfaced; skips otherwise.
     10. **Stops.** Does not claim the next task.
 
+#### 4. `fina_listing_places_api_search`
+*   **Role**: Discovers new listing candidates via the Google Places API (New) Text Search endpoint. Pure API agent (no browser dependency). Scoped to a **single task** (1 location × 1 category × 1 search template). **Single-task-per-session**: processes exactly one task, then stops.
+*   **CLI Trigger**: `python3 scripts/agent_places_api_search_tasks.py --action next --city <CITY> --trace-id <CONVERSATION_ID>`
+*   **Logic**:
+    1. Reads shared agent memory from `data/fina_agent_memory.md`.
+    2. Generates task permutations (idempotent) via `--action generate`, producing `data/listing_places_api_search_tasks_{city}.json`. City-level tasks only by default. Pass `--force` to regenerate while merging existing state.
+    3. Claims next pending task via `--action next` (atomic via `fcntl.flock()`).
+    4. Fetches existing city listings to `tmp/existing_city_listings_<CONVERSATION_ID>.json` for dedup context.
+    5. Executes a single Google Places API Text Search call via `agent_places_api_fetch.py`.
+    6. Checks duplicates via `agent_check_duplicate.py`. Merge scenarios use `UpdateListingData`; new listings use `CreateListing`.
+    7. Evaluates Filipino affiliation using structured API data (name, description, types). Rejects non-affiliated candidates.
+    8. Pushes verified listings via `agent_graphql_push.py --operation CreateListing` (without `--generate-embeddings`) with self-correction on validation failure (up to 2 retries). Tags all listings with `google-places-api`. Adopts `businessStatus` from the API directly.
+    9. Marks task `COMPLETED` with metrics via `--action complete`.
+    10. Runs post-execution retrospective against `data/fina_agent_memory.md`. Updates within the 500-line budget if new insights were surfaced; skips otherwise.
+    11. **Stops.** Does not claim the next task.
+
 ### Planned Agents (Not Yet Released)
 
 The following agents exist as skills/scripts but are not yet production-ready. Their supporting CLI scripts are available in `scripts/` for future activation.
 
 | Agent | Purpose | Key Script |
 |---|---|---|
-| `fina_listing_map_search` | Google Places API discovery | `scripts/agent_maps_search_tasks.py` |
 | `fina_listing_embedder` | Vector embedding backfill | `scripts/agent_generate_embeddings.py` |
 | `fina_docs_reviewer` | Documentation audit | Controlled at agent level |
 
@@ -134,6 +150,13 @@ pip install -r requirements.txt
   python3 scripts/agent_events_tasks.py --action next --city <CITY> --trace-id <CONVERSATION_ID>
   python3 scripts/agent_events_tasks.py --action complete --city <CITY> --task-id <ID> --events-discovered N --events-pushed N --social-urls-scanned N --follower-counts-updated N --bookmarks-updated N --trace-id <CONVERSATION_ID>
   python3 scripts/agent_events_tasks.py --action summary --city <CITY> --trace-id <CONVERSATION_ID>
+  ```
+- **Places API Search Tasks**:
+  ```bash
+  python3 scripts/agent_places_api_search_tasks.py --action generate --city <CITY> --trace-id <CONVERSATION_ID>
+  python3 scripts/agent_places_api_search_tasks.py --action next --city <CITY> --trace-id <CONVERSATION_ID>
+  python3 scripts/agent_places_api_search_tasks.py --action complete --city <CITY> --task-id <ID> --listings-created N --places-fetched N --candidates-evaluated N --candidates-rejected N --candidates-duplicate N --candidates-merged N --trace-id <CONVERSATION_ID>
+  python3 scripts/agent_places_api_search_tasks.py --action summary --city <CITY> --trace-id <CONVERSATION_ID>
   ```
 - **Shared Utilities**:
   ```bash

@@ -1,8 +1,8 @@
-"""Unit tests for features.scanning.map_search_tasks module.
+"""Unit tests for features.scanning.places_api_search_tasks module.
 
-Tests maps-specific task generation including city-only default behavior,
-include_suburbs expansion, places_fetched metric field, and cityOnly
-category interaction with the include_suburbs flag.
+Tests Places API search task generation including city-only default behavior,
+include_suburbs expansion, places_fetched and candidates_merged metric fields,
+and cityOnly category interaction with the include_suburbs flag.
 """
 
 import json
@@ -10,11 +10,11 @@ import os
 import tempfile
 import unittest
 
-from features.scanning.map_search_tasks import generate_tasks
+from features.scanning.places_api_search_tasks import generate_tasks
 
 
-class TestGenerateMapSearchTasks(unittest.TestCase):
-    """Tests for the map search generate_tasks function."""
+class TestGeneratePlacesApiSearchTasks(unittest.TestCase):
+    """Tests for the Places API search generate_tasks function."""
 
     def setUp(self) -> None:
         """Create temporary category and suburb files for testing."""
@@ -71,6 +71,13 @@ class TestGenerateMapSearchTasks(unittest.TestCase):
             self.assertIn("places_fetched", task)
             self.assertEqual(task["places_fetched"], 0)
             self.assertNotIn("pages_searched", task)
+
+    def test_candidates_merged_metric(self) -> None:
+        """Tasks should have candidates_merged field initialized to 0."""
+        tasks = generate_tasks("Sydney", self.categories_path, self.suburbs_path)
+        for task in tasks:
+            self.assertIn("candidates_merged", task)
+            self.assertEqual(task["candidates_merged"], 0)
 
     def test_task_id_format(self) -> None:
         """Task IDs should follow the pattern: city__CATEGORY__index__location."""
@@ -142,19 +149,21 @@ class TestGenerateMapSearchTasks(unittest.TestCase):
             self.assertEqual(task["candidates_evaluated"], 0)
             self.assertEqual(task["candidates_rejected"], 0)
             self.assertEqual(task["candidates_duplicate"], 0)
+            self.assertEqual(task["candidates_merged"], 0)
             self.assertEqual(task["errors"], [])
             self.assertIsNone(task["started_at"])
             self.assertIsNone(task["completed_at"])
 
     def test_task_has_all_required_fields(self) -> None:
-        """Each task should contain all required tracking fields with places_fetched."""
+        """Each task should contain all required tracking fields including candidates_merged."""
         tasks = generate_tasks("Sydney", self.categories_path, self.suburbs_path)
         required_fields = {
             "id", "city", "location", "location_type", "category",
             "template_index", "template", "formatted_query", "status",
             "started_at", "completed_at", "listings_created",
             "places_fetched", "candidates_evaluated",
-            "candidates_rejected", "candidates_duplicate", "errors",
+            "candidates_rejected", "candidates_duplicate",
+            "candidates_merged", "errors",
         }
         for task in tasks:
             self.assertEqual(set(task.keys()), required_fields)

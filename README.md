@@ -6,18 +6,19 @@ This repository houses the data discovery, verification, and enrichment agents f
 
 ## 🏛️ Repository Overview
 
-This project is decoupled from the main Fina application backend. It runs lightweight Python scripts locally inside the Antigravity IDE, with three production-ready agents:
+This project is decoupled from the main Fina application backend. It runs lightweight Python scripts locally inside the Antigravity IDE, with four production-ready agents:
 
 | Agent | Purpose |
 |---|---|
 | **`fina_listing_web_search`** | Discovers new Filipino listing candidates on Facebook, Instagram, TikTok, general web platforms, and Google Maps (via browser) using a task-based state machine |
 | **`fina_listing_enrichment`** | Enriches existing listings by extracting reviews, synthesising descriptions, updating operating hours, and filling missing social URLs |
 | **`fina_events_listing`** | Crawls social media pages of verified businesses to discover and push temporal upcoming events |
+| **`fina_listing_places_api_search`** | Discovers new Filipino listing candidates via the Google Places API (New) Text Search endpoint |
 
-All three agents participate in a [shared memory protocol](#-shared-agent-memory) that enables cross-session learning.
+All four agents participate in a [shared memory protocol](#-shared-agent-memory) that enables cross-session learning.
 
 > [!NOTE]
-> Additional agents (`fina_listing_map_search`, `fina_listing_embedder`, `fina_docs_reviewer`) exist as skills/scripts but are **not yet production-ready**. Their supporting CLI scripts are available in `scripts/` for future activation. See the [Architecture Guide](docs/guides/ide_agent_architecture.md) for details.
+> Additional agents (`fina_listing_embedder`, `fina_docs_reviewer`) exist as skills/scripts but are **not yet production-ready**. Their supporting CLI scripts are available in `scripts/` for future activation. See the [Architecture Guide](docs/guides/ide_agent_architecture.md) for details.
 
 ---
 
@@ -44,7 +45,7 @@ GCP_PROJECT="fina-au"
 ```
 
 ### 3. Chrome DevTools MCP Configuration
-Both production agents require a running Chrome DevTools MCP server (`chrome_devtools`). Add it to the `"mcpServers"` object in either:
+The web search, enrichment, and events agents require a running Chrome DevTools MCP server (`chrome_devtools`). The Places API search agent does **not** require a browser. Add it to the `"mcpServers"` object in either:
 - **Global Config**: `~/.gemini/config/mcp_config.json`
 - **Workspace Config**: `.gemini/antigravity/mcp_config.json`
 
@@ -102,6 +103,11 @@ Trigger agents directly in the Antigravity Chat UI. For long-running scans, pref
 >
 > "Use the `fina_events_listing` skill to discover events in SYDNEY."
 
+**Places API Discovery:**
+> **Task-Based Queue System**: The `fina_listing_places_api_search` skill targets a **single city** and executes the next pending Google Places API search task (category × search template × location). No browser required.
+>
+> "Use the `fina_listing_places_api_search` skill to discover new listings in SYDNEY."
+
 ### 2. Running Scripts via CLI
 
 #### Web Search Task Manager
@@ -155,6 +161,23 @@ python3 scripts/agent_events_tasks.py --action complete --city SYDNEY --task-id 
 python3 scripts/agent_events_tasks.py --action summary --city SYDNEY --trace-id <CONVERSATION_ID>
 ```
 
+#### Places API Search Task Manager
+```bash
+# Generate all Places API search task permutations for a city (idempotent, pass --force to regenerate)
+python3 scripts/agent_places_api_search_tasks.py --action generate --city SYDNEY --trace-id <CONVERSATION_ID>
+
+# Get the next pending task (atomically transitions to IN_PROGRESS)
+python3 scripts/agent_places_api_search_tasks.py --action next --city SYDNEY --trace-id <CONVERSATION_ID>
+
+# Mark a task as completed with metrics
+python3 scripts/agent_places_api_search_tasks.py --action complete --city SYDNEY --task-id sydney__RESTAURANT__0__sydney \
+  --listings-created 3 --places-fetched 15 --candidates-evaluated 10 --candidates-rejected 5 \
+  --candidates-duplicate 1 --candidates-merged 1 --trace-id <CONVERSATION_ID>
+
+# View aggregate progress
+python3 scripts/agent_places_api_search_tasks.py --action summary --city SYDNEY --trace-id <CONVERSATION_ID>
+```
+
 #### Shared Utilities
 ```bash
 # Fetch existing city listings for deduplication context
@@ -182,6 +205,9 @@ Schedule agents to run periodic background scans using the `/schedule` slash com
 
 # Events discovery — daily at noon
 /schedule CronExpression="0 12 * * *" Prompt="Use the fina_events_listing skill to discover events in SYDNEY."
+
+# Places API discovery — daily at 6pm
+/schedule CronExpression="0 18 * * *" Prompt="Use the fina_listing_places_api_search skill to discover new listings in SYDNEY."
 ```
 *(Note: The Antigravity IDE window must remain active for scheduled agents to execute.)*
 
@@ -189,7 +215,7 @@ Schedule agents to run periodic background scans using the `/schedule` slash com
 
 ## 🧠 Shared Agent Memory
 
-All three production agents participate in a shared, self-evolving memory protocol via [`data/fina_agent_memory.md`](data/fina_agent_memory.md). This enables agents to learn from their executions and share operational knowledge across sessions.
+All four production agents participate in a shared, self-evolving memory protocol via [`data/fina_agent_memory.md`](data/fina_agent_memory.md). This enables agents to learn from their executions and share operational knowledge across sessions.
 
 **How it works:**
 1. **Read Phase** — At session start, the agent reads the memory file and internalises relevant insights.

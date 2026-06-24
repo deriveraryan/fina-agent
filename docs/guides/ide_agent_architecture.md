@@ -1,6 +1,6 @@
 # Fina Native IDE Agent Architecture & Runbook
 
-This reference document provides a comprehensive overview of the design, logic, and operational execution flow of the Fina Native IDE Agent pipeline. It details how the production agents (`fina_listing_web_search`, `fina_listing_enrichment`, and `fina_events_listing`) interact with Google Maps, social platforms, and the Firebase SQL Connect database (hosted in the core `fina` repository) to automate discovery, enrichment, and event extraction tasks.
+This reference document provides a comprehensive overview of the design, logic, and operational execution flow of the Fina Native IDE Agent pipeline. It details how the production agents (`fina_listing_web_search`, `fina_listing_enrichment`, `fina_events_listing`, and `fina_listing_places_api_search`) interact with Google Maps, social platforms, the Google Places API, and the Firebase SQL Connect database (hosted in the core `fina` repository) to automate discovery, enrichment, and event extraction tasks.
 
 ---
 
@@ -107,7 +107,6 @@ The following agents exist as skills/scripts but are not yet production-ready:
 
 | Agent | Purpose | Key Component |
 |---|---|---|
-| `fina_listing_map_search` | Google Places API discovery via task-based state machine | `scripts/agent_maps_search_tasks.py`, `scripts/agent_maps_fetch.py` |
 | `fina_listing_embedder` | Vector embedding backfill for semantic search | `scripts/agent_generate_embeddings.py` |
 | `fina_docs_reviewer` | Documentation audit against codebase | Controlled at agent level |
 
@@ -266,8 +265,9 @@ The memory protocol is currently implemented for the 3 production-ready agents:
 | `fina_listing_web_search` | Step 0.7 | Step 7.5 | Search template effectiveness, platform rate limits, suburb saturation |
 | `fina_listing_enrichment` | Step 0.7 | Step 7.5 | Maps UI selectors, review extraction techniques, hours parsing edge cases |
 | `fina_events_listing` | Step 0.7 | Step 5.5 | Date parsing quirks, event classification patterns, platform post format changes |
+| `fina_listing_places_api_search` | Step 0.7 | Step 7.5 | Places API field coverage, affiliation heuristic accuracy, template effectiveness |
 
-Planned agents (`fina_listing_map_search`, `fina_listing_embedder`) are not yet released but can be onboarded by adding the same Step 0.7/retro pattern to their SKILL.md files.
+Planned agents (`fina_listing_embedder`) are not yet released but can be onboarded by adding the same Step 0.7/retro pattern to their SKILL.md files.
 
 ### Governing Rule
 

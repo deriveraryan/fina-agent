@@ -1,9 +1,11 @@
-"""Module to manage the task-based search state machine for the maps search agent.
+"""Task generation and configuration for Google Places API search agent.
 
-Generates all map search task permutations for a city (categories × templates × locations),
-defaulting to city-level only. Supports category-level ``cityOnly`` and per-template
-``cityOnlySearchTemplateIndices``. Provides maps-specific metric constants and task building.
-Lifecycle functions (load, save, start, complete, etc.) are imported from task_lifecycle.
+Generates search task permutations by combining categories with
+search templates for city and optional suburb locations. Uses the
+Google Places (New) Text Search API as the discovery source.
+
+Lifecycle functions (load, save, start, complete, etc.) are imported
+from task_lifecycle.
 """
 
 import json
@@ -11,24 +13,24 @@ import os
 from typing import Any, Dict, List, Set, Sequence
 
 
-# Maps-specific metric and state field definitions
-MAP_SEARCH_ALLOWED_METRICS: Set[str] = {
+# Places API search metric and state field definitions
+PLACES_API_SEARCH_ALLOWED_METRICS: Set[str] = {
     "listings_created", "places_fetched",
     "candidates_evaluated", "candidates_rejected",
-    "candidates_duplicate",
+    "candidates_duplicate", "candidates_merged",
 }
 
-MAP_SEARCH_METRIC_FIELDS: Sequence[str] = (
+PLACES_API_SEARCH_METRIC_FIELDS: Sequence[str] = (
     "listings_created", "places_fetched",
     "candidates_evaluated", "candidates_rejected",
-    "candidates_duplicate",
+    "candidates_duplicate", "candidates_merged",
 )
 
-MAP_SEARCH_MUTABLE_FIELDS: Sequence[str] = (
+PLACES_API_SEARCH_MUTABLE_FIELDS: Sequence[str] = (
     "status", "started_at", "completed_at",
     "listings_created", "places_fetched",
     "candidates_evaluated", "candidates_rejected",
-    "candidates_duplicate", "errors",
+    "candidates_duplicate", "candidates_merged", "errors",
 )
 
 
@@ -38,7 +40,7 @@ def generate_tasks(
     suburbs_path: str,
     include_suburbs: bool = False,
 ) -> List[Dict[str, Any]]:
-    """Generate all map search task permutations for a city.
+    """Generate all Places API search task permutations for a city.
 
     Creates one task per (category × template × location) combination.
     By default, only city-level tasks are generated. Suburb-level tasks
@@ -141,7 +143,7 @@ def _build_task(
     location: str,
     location_type: str,
 ) -> Dict[str, Any]:
-    """Build a single maps search task dictionary with all required fields.
+    """Build a single Places API search task dictionary with all required fields.
 
     For city-level tasks, the query is formatted as the template with {city}
     replaced by the city name. For suburb tasks, the query is formatted as
@@ -185,5 +187,6 @@ def _build_task(
         "candidates_evaluated": 0,
         "candidates_rejected": 0,
         "candidates_duplicate": 0,
+        "candidates_merged": 0,
         "errors": [],
     }

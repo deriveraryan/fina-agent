@@ -19,7 +19,7 @@ _LAT_LNG_PATTERN = re.compile(
 )
 
 # Maps day names to short keys used in the operatingHours JSON schema.
-# Public constant — also imported by agent_maps_fetch.py to avoid duplication.
+# Public constant — also imported by agent_places_api_fetch.py to avoid duplication.
 DAYS_MAP = {
     "monday": "mon",
     "tuesday": "tue",

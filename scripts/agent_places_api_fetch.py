@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""CLI script to execute a single Google Places API text search query.
+"""CLI script to execute a single Google Places API (New) text search query.
 
 Accepts a pre-formatted search query and returns formatted place results as JSON.
 """
@@ -145,7 +145,7 @@ def load_valid_categories() -> list[str]:
 async def main() -> None:
     """CLI entrypoint: execute a single Places API text search and output formatted results."""
     parser = argparse.ArgumentParser(
-        description="Execute a single Google Places API text search query."
+        description="Execute a single Google Places API (New) text search query."
     )
     parser.add_argument("--query", type=str, required=True, help="Pre-formatted search query string.")
     parser.add_argument("--city", type=str, required=True, help="Target city name (metadata for format_place).")
@@ -160,7 +160,7 @@ async def main() -> None:
     args = parser.parse_args()
 
     BackendObservability.info(
-        f"Starting agent_maps_fetch.py with query='{args.query}', city={args.city}, category={args.category}",
+        f"Starting Places API fetch with query='{args.query}', city={args.city}, category={args.category}",
         conversation_id=args.trace_id,
     )
 

@@ -11,7 +11,7 @@ Use this skill when the user provides a rough draft, scattered thoughts, or an i
 
 1. **Analyze the Draft**: Read the user's draft to extract the core goal, the specific subagents, scripts, or features involved.
 2. **Contextualize with Fina Agent Architecture**:
-   - Translate general ideas into Fina Agent-specific components (e.g. `fina_listing_map_search`, `fina_listing_web_search`, `agent_graphql_push.py` REST impersonation operations, categories validations via `data/categories.json`).
+   - Translate general ideas into Fina Agent-specific components (e.g. `fina_listing_places_api_search`, `fina_listing_web_search`, `agent_graphql_push.py` REST impersonation operations, categories validations via `data/categories.json`).
    - Reference appropriate CLI triggers (`scripts/agent_*.py` or `features/**/*.py`).
    - Align the goals with standard project workflows (such as TDD under `tests/`, Trace ID correlation via `--trace-id`, and GraphQL impersonation REST layer).
 3. **Draft the Refined Prompt**: Present a structured, clear, and actionable prompt. Ensure it outlines:
@@ -30,7 +30,7 @@ When the user provides a rough draft, respond with the refined version following
 [Insert the refined, clear, and explicit prompt here. Make it direct and imperative, focusing on actions, scripts, and correctness.]
 
 ### Context & Mapping
-- **CLI Trigger / Feature**: [e.g., scripts/agent_maps_fetch.py, features/scanning]
+- **CLI Trigger / Feature**: [e.g., scripts/agent_places_api_fetch.py, features/scanning]
 - **TDD Strategy**: [Identify the unit/mock tests needed under tests/]
 - **Relevant Rules**: [Reference AGENTS.md rules, e.g., GraphQL client rule, Trace ID correlation, category verification rules]
 ```
