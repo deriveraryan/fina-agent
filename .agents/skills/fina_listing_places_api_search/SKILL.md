@@ -79,7 +79,7 @@ Three outcomes:
 
 **c. Data Normalization & Payload:** Prepare the listing payload:
 - `name`: Clean place name.
-- `category`: Must match exactly the task's `category` (uppercase key from `data/categories.json`).
+- `category`: Assign the **best-fit** category from `data/categories.json` based on the candidate's actual business type. This MAY differ from the task's search category. Use the category `rules` and `description` fields to determine the correct fit. The value must be an exact uppercase key from `categories.json`.
 - `city`: Standardized city name.
 - `description`: Descriptive summary of the place.
 - `address`: Full street address.

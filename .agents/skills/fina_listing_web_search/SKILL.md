@@ -135,7 +135,7 @@ The check returns one of three outcomes:
 **d. Information Extraction:** Extract:
 - `name`: Raw business name.
 - `description`: Descriptive page text.
-- `category`: Must exactly match the task's category.
+- `category`: Assign the **best-fit** category from `data/categories.json` based on the business's actual nature. This MAY differ from the task's search category — e.g., a Filipino martial arts school found during a COMMUNITY search should be categorised as `SERVICES`. Use the category `rules` and `description` fields in `categories.json` to determine the correct fit. The value must be an exact uppercase key from `categories.json`.
 - `email`: Business contact email address, if visible on the Facebook "About" / "Contact Info" section or on the business website's "Contact" page.
 - `facebookUrl`, `instagramUrl`, `tiktokUrl`: Direct profile page links.
 - `facebookFollowers`, `instagramFollowers`, `tiktokFollowers`: Convert text to integer (e.g. "1.5K" → 1500, "2.4M" → 2400000). For TikTok, save raw HTML to `tmp/tiktok_profile_<CONVERSATION_ID>.html` and parse:
