@@ -58,14 +58,14 @@ The following 4 agents are production-ready and actively executing tasks:
 *   **CLI Trigger**: `python3 scripts/agent_enrichment_tasks.py --action next --city <CITY> --trace-id <CONVERSATION_ID>`
 *   **Logic**:
     1. Reads shared agent memory from `data/fina_agent_memory.md`.
-    2. Generates one enrichment task per listing (idempotent) via `--action generate`. Pass `--force` to regenerate while merging existing state.
+    2. Generates one enrichment task per enrichable listing (idempotent) via `--action generate`. Task generation filters by `lastEnrichedAt`: never-enriched listings are prioritised first, then listings stale beyond `--stale-days` (default 31) days. Recently enriched listings are excluded. Pass `--force` to regenerate while merging existing state.
     3. Reads canonical category definitions from `data/categories.json`.
     4. Claims next pending task via `--action next` (atomic via `fcntl.flock()`).
     5. Extracts reviews in three sequential rounds, collecting closure signals passively: (a) Google Maps browser — reviews, operating hours (with description-based fallback when Maps hours absent, tagged `description-hours`), social links, closure banners; (b) Social media — testimonials, follower counts, closure announcements; (c) Web search — `"<name>" <city> reviews` across up to 5 pages, closure mentions.
     6. Pushes reviews individually via `CreateReview` mutation (idempotent via `externalSourceId`).
     7. Synthesises a 150-250 word AuE description combining reviews with existing description. Description synthesis is naturally grounded from gathered sources (no artificial exclusion of hours or contact details).
     8. Assesses business status using closure signals from step 5. Updates `status` only when it differs from the listing's current status (Maps banners are the strongest signal).
-    9. Pushes enriched data via `UpdateListingData` — description, operating hours, social URLs/follower counts, and status (if changed).
+    9. Pushes enriched data via `UpdateListingData` — description, operating hours, social URLs/follower counts, status (if changed), and `lastEnrichedAt` (current UTC timestamp).
     10. For `UNVERIFIED` listings, assesses Filipino affiliation using all collected context. Flags listings with zero affiliation as `FLAGGED` via `UpdateListingStatus`.
     11. Closes all browser tabs, marks task `COMPLETED` with metrics via `--action complete`.
     12. Runs post-execution retrospective against `data/fina_agent_memory.md`. Updates within the 500-line budget if new insights were surfaced; skips otherwise.
@@ -144,6 +144,7 @@ pip install -r requirements.txt
   python3 scripts/agent_enrichment_tasks.py --action complete --city <CITY> --task-id <ID> --listings-enriched N --reviews-extracted N --reviews-pushed N --socials-enriched N --descriptions-rewritten N --maps-visits N --statuses-updated N --listings-flagged N --trace-id <CONVERSATION_ID>
   python3 scripts/agent_enrichment_tasks.py --action summary --city <CITY> --trace-id <CONVERSATION_ID>
   ```
+  Task generation filters listings by `lastEnrichedAt`: never-enriched listings are prioritised first, then listings stale beyond `--stale-days` (default 31) days. Recently enriched listings are excluded.
 - **Events Tasks**:
   ```bash
   python3 scripts/agent_events_tasks.py --action generate --city <CITY> --trace-id <CONVERSATION_ID>

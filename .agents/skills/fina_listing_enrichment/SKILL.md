@@ -221,6 +221,7 @@ The payload must include:
 - `id`: The listing's UUID from the task.
 - `description`: The newly synthesised description from Step 5.
 - `operatingHours`: The parsed/merged JSON string from Step 3 Round 1 and/or Step 3.5. **Always include this field when hours were extracted from any source** (Maps, description, or both merged) — even if the listing already has operating hours, overwrite with the latest value. **Omit this field entirely** if no hours were found in any source (do NOT pass `null`, as the GraphQL mutation would clear existing hours).
+- `lastEnrichedAt`: The current UTC timestamp in ISO 8601 format (e.g. `2026-06-26T08:30:00Z`). **Always include this field** — it tracks when the listing was last processed by the enrichment agent and drives task prioritisation for future runs.
 
 Additionally, include any newly-discovered social URLs and follower counts (only for fields that were previously empty/null on the listing):
 - `facebookUrl`, `instagramUrl`, `tiktokUrl`: New social URLs discovered during Step 3.

@@ -5,6 +5,7 @@ Provides enrichment-specific metric constants and task building.
 Lifecycle functions are imported from task_lifecycle.
 """
 
+from datetime import datetime, timedelta, timezone
 from typing import Any, Dict, List, Sequence, Set
 
 
@@ -45,6 +46,50 @@ ENRICHMENT_MUTABLE_FIELDS: Sequence[str] = (
     "listings_flagged",
     "errors",
 )
+
+
+def filter_enrichable_listings(
+    listings: List[Dict[str, Any]],
+    stale_days: int = 31,
+) -> List[Dict[str, Any]]:
+    """Filter and sort listings that need enrichment.
+
+    Returns listings that have never been enriched or whose last enrichment
+    is older than ``stale_days`` days. Results are sorted by priority:
+
+    1. Never enriched (``lastEnrichedAt`` is None) — sorted by name ASC.
+    2. Stale enrichment (``lastEnrichedAt`` older than threshold) — sorted
+       by oldest first.
+
+    Listings enriched within the last ``stale_days`` days are excluded.
+
+    Args:
+        listings: Listing dicts as returned by ``ListAdminListings``.
+        stale_days: Number of days after which a listing is considered
+            stale and eligible for re-enrichment.
+
+    Returns:
+        A filtered and priority-sorted list of listing dicts.
+    """
+    cutoff = datetime.now(timezone.utc) - timedelta(days=stale_days)
+
+    never_enriched: List[Dict[str, Any]] = []
+    stale: List[Dict[str, Any]] = []
+
+    for listing in listings:
+        last_enriched = listing.get("lastEnrichedAt")
+        if last_enriched is None:
+            never_enriched.append(listing)
+        else:
+            enriched_dt = datetime.fromisoformat(last_enriched)
+            if enriched_dt <= cutoff:
+                stale.append(listing)
+            # else: recently enriched — skip
+
+    never_enriched.sort(key=lambda l: l.get("name", ""))
+    stale.sort(key=lambda l: l.get("lastEnrichedAt", ""))
+
+    return never_enriched + stale
 
 
 def generate_enrichment_tasks(
@@ -109,6 +154,8 @@ def _build_enrichment_task(listing: Dict[str, Any]) -> Dict[str, Any]:
         "listing_status": listing.get("status", "OPERATIONAL"),
         # Current verification status (for affiliation assessment)
         "verification_status": listing.get("verificationStatus", "UNVERIFIED"),
+        # Last enrichment timestamp (for staleness tracking)
+        "last_enriched_at": listing.get("lastEnrichedAt"),
         # Task lifecycle state
         "status": "PENDING",
         "started_at": None,

@@ -70,6 +70,10 @@
 
 ## Enrichment Patterns
 <!-- Techniques and observations from the listing enrichment workflow -->
+- Instagram profiles for alcohol/liquor brands are age-restricted (18+) and cannot be viewed without login; follower counts and posts are inaccessible to unauthenticated Chrome DevTools sessions.
+- Facebook pages for some businesses return "This content isn't available at the moment" when accessed without login; this is not a closure signal — the page may be restricted, renamed, or set to require authentication.
+- When Google Maps does not display social media links in the business info panel, the business's own website footer often contains Facebook, Instagram, TikTok, YouTube, and LinkedIn links — always check the website as a fallback discovery source for social URLs.
+- TikTok profiles may present a CAPTCHA challenge on first load in Chrome DevTools, blocking follower count extraction; this is an anti-bot measure that cannot be bypassed without human intervention.
 
 ## Events Patterns
 <!-- Event discovery insights: date parsing quirks, platform event formats, classification edge cases -->

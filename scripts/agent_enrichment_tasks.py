@@ -24,6 +24,7 @@ sys.path.insert(
 from features.shared.observability import BackendObservability
 from features.scanning.enrichment_tasks import (
     generate_enrichment_tasks,
+    filter_enrichable_listings,
     ENRICHMENT_MUTABLE_FIELDS,
     ENRICHMENT_METRIC_FIELDS,
     ENRICHMENT_ALLOWED_METRICS,
@@ -66,7 +67,15 @@ async def async_generate(args: argparse.Namespace, tasks_path: str) -> None:
     )
 
     listings = await fetch_city_listings(args.city, args.trace_id)
-    new_tasks = generate_enrichment_tasks(listings)
+    enrichable = filter_enrichable_listings(listings, stale_days=args.stale_days)
+
+    BackendObservability.info(
+        f"Filtered {len(listings)} listings → {len(enrichable)} enrichable "
+        f"(stale_days={args.stale_days})",
+        conversation_id=args.trace_id,
+    )
+
+    new_tasks = generate_enrichment_tasks(enrichable)
     merge_result = merge_existing_state(new_tasks, existing_tasks, ENRICHMENT_MUTABLE_FIELDS)
 
     save_tasks(tasks_path, new_tasks)
@@ -119,6 +128,12 @@ def main() -> None:
         action="store_true",
         default=False,
         help="Force regeneration of tasks, merging existing state into the new file.",
+    )
+    parser.add_argument(
+        "--stale-days",
+        type=int,
+        default=31,
+        help="Number of days after which a listing is considered stale for re-enrichment (default: 31).",
     )
 
     # Arguments for action="complete"

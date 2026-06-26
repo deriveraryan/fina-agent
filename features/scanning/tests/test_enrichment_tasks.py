@@ -8,6 +8,7 @@ state machine.
 import unittest
 from features.scanning.enrichment_tasks import (
     generate_enrichment_tasks,
+    filter_enrichable_listings,
     ENRICHMENT_ALLOWED_METRICS,
     ENRICHMENT_METRIC_FIELDS,
     ENRICHMENT_MUTABLE_FIELDS,
@@ -290,6 +291,157 @@ class TestForceRegenerationMergesState(unittest.TestCase):
         # uuid-2 should remain PENDING
         self.assertEqual(new_tasks[1]["status"], "PENDING")
         self.assertEqual(new_tasks[1]["listings_enriched"], 0)
+
+
+class TestFilterEnrichableListings(unittest.TestCase):
+    """Tests for filter_enrichable_listings() — pure function filtering and sorting."""
+
+    def _make_listing(self, **overrides) -> dict:
+        """Helper to create a listing dict with sensible defaults."""
+        listing = {
+            "id": "aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee",
+            "name": "Test Business",
+            "city": "SYDNEY",
+            "categories": ["RESTAURANT"],
+            "lastEnrichedAt": None,
+        }
+        listing.update(overrides)
+        return listing
+
+    def _days_ago_iso(self, days: int) -> str:
+        """Return an ISO 8601 UTC timestamp for N days ago."""
+        from datetime import datetime, timedelta, timezone
+        dt = datetime.now(timezone.utc) - timedelta(days=days)
+        return dt.isoformat()
+
+    def test_never_enriched_listings_included(self):
+        """Listings with lastEnrichedAt=None are included."""
+        listings = [self._make_listing(id="uuid-1", lastEnrichedAt=None)]
+        result = filter_enrichable_listings(listings)
+        self.assertEqual(len(result), 1)
+        self.assertEqual(result[0]["id"], "uuid-1")
+
+    def test_stale_listings_included(self):
+        """Listings with lastEnrichedAt >31 days ago are included."""
+        listings = [
+            self._make_listing(id="uuid-stale", lastEnrichedAt=self._days_ago_iso(45)),
+        ]
+        result = filter_enrichable_listings(listings)
+        self.assertEqual(len(result), 1)
+        self.assertEqual(result[0]["id"], "uuid-stale")
+
+    def test_recently_enriched_listings_excluded(self):
+        """Listings with lastEnrichedAt <31 days ago are excluded."""
+        listings = [
+            self._make_listing(id="uuid-recent", lastEnrichedAt=self._days_ago_iso(5)),
+        ]
+        result = filter_enrichable_listings(listings)
+        self.assertEqual(len(result), 0)
+
+    def test_priority_order_never_enriched_first(self):
+        """Never-enriched listings appear before stale listings."""
+        listings = [
+            self._make_listing(id="uuid-stale", name="Stale Biz", lastEnrichedAt=self._days_ago_iso(60)),
+            self._make_listing(id="uuid-never", name="Never Enriched", lastEnrichedAt=None),
+        ]
+        result = filter_enrichable_listings(listings)
+        self.assertEqual(len(result), 2)
+        self.assertEqual(result[0]["id"], "uuid-never")
+        self.assertEqual(result[1]["id"], "uuid-stale")
+
+    def test_stale_listings_sorted_oldest_first(self):
+        """Among stale listings, oldest lastEnrichedAt comes first."""
+        listings = [
+            self._make_listing(id="uuid-40d", name="B", lastEnrichedAt=self._days_ago_iso(40)),
+            self._make_listing(id="uuid-90d", name="A", lastEnrichedAt=self._days_ago_iso(90)),
+        ]
+        result = filter_enrichable_listings(listings)
+        self.assertEqual(len(result), 2)
+        self.assertEqual(result[0]["id"], "uuid-90d")
+        self.assertEqual(result[1]["id"], "uuid-40d")
+
+    def test_never_enriched_sorted_by_name(self):
+        """Among never-enriched listings, sorted by name ASC."""
+        listings = [
+            self._make_listing(id="uuid-z", name="Zesty Filipino", lastEnrichedAt=None),
+            self._make_listing(id="uuid-a", name="Adobo House", lastEnrichedAt=None),
+            self._make_listing(id="uuid-m", name="Manila Grill", lastEnrichedAt=None),
+        ]
+        result = filter_enrichable_listings(listings)
+        self.assertEqual(len(result), 3)
+        self.assertEqual(result[0]["name"], "Adobo House")
+        self.assertEqual(result[1]["name"], "Manila Grill")
+        self.assertEqual(result[2]["name"], "Zesty Filipino")
+
+    def test_custom_stale_days(self):
+        """stale_days=7 filters at 7-day threshold."""
+        listings = [
+            self._make_listing(id="uuid-10d", lastEnrichedAt=self._days_ago_iso(10)),
+            self._make_listing(id="uuid-3d", lastEnrichedAt=self._days_ago_iso(3)),
+        ]
+        result = filter_enrichable_listings(listings, stale_days=7)
+        self.assertEqual(len(result), 1)
+        self.assertEqual(result[0]["id"], "uuid-10d")
+
+    def test_all_recently_enriched_returns_empty(self):
+        """When all listings are recently enriched, returns empty list."""
+        listings = [
+            self._make_listing(id="uuid-1", lastEnrichedAt=self._days_ago_iso(2)),
+            self._make_listing(id="uuid-2", lastEnrichedAt=self._days_ago_iso(15)),
+            self._make_listing(id="uuid-3", lastEnrichedAt=self._days_ago_iso(29)),
+        ]
+        result = filter_enrichable_listings(listings)
+        self.assertEqual(len(result), 0)
+
+    def test_boundary_exactly_31_days(self):
+        """Listing at exactly 31 days old is included (stale)."""
+        listings = [
+            self._make_listing(id="uuid-boundary", lastEnrichedAt=self._days_ago_iso(31)),
+        ]
+        result = filter_enrichable_listings(listings)
+        self.assertEqual(len(result), 1)
+        self.assertEqual(result[0]["id"], "uuid-boundary")
+
+
+class TestTaskIncludesLastEnrichedAt(unittest.TestCase):
+    """Tests that task dict includes last_enriched_at from listing data."""
+
+    def _make_listing(self, **overrides) -> dict:
+        """Helper to create a listing dict with sensible defaults."""
+        listing = {
+            "id": "aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee",
+            "name": "Test Business",
+            "city": "SYDNEY",
+            "categories": ["RESTAURANT"],
+            "description": "A test business.",
+            "address": "123 Test St",
+            "sourceUrl": None,
+            "facebookUrl": None,
+            "instagramUrl": None,
+            "tiktokUrl": None,
+            "facebookFollowers": None,
+            "instagramFollowers": None,
+            "tiktokFollowers": None,
+            "verificationStatus": "UNVERIFIED",
+            "status": "OPERATIONAL",
+            "lastEnrichedAt": None,
+        }
+        listing.update(overrides)
+        return listing
+
+    def test_task_includes_last_enriched_at_none(self):
+        """Task dict includes last_enriched_at=None for never-enriched listings."""
+        listing = self._make_listing(id="uuid-none", lastEnrichedAt=None)
+        tasks = generate_enrichment_tasks([listing])
+        self.assertIn("last_enriched_at", tasks[0])
+        self.assertIsNone(tasks[0]["last_enriched_at"])
+
+    def test_task_includes_last_enriched_at_timestamp(self):
+        """Task dict includes last_enriched_at with the listing's timestamp value."""
+        ts = "2026-05-15T10:30:00+00:00"
+        listing = self._make_listing(id="uuid-ts", lastEnrichedAt=ts)
+        tasks = generate_enrichment_tasks([listing])
+        self.assertEqual(tasks[0]["last_enriched_at"], ts)
 
 
 if __name__ == "__main__":
