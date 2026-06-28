@@ -191,7 +191,7 @@ async def check_duplicate(
             operation_name="ListAdminListings",
             variables={
                 "city": city,
-                "limit": 1000,
+                "limit": 2000,
                 "verificationStatuses": ["VERIFIED", "UNVERIFIED"]
             },
         )

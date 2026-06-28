@@ -113,7 +113,7 @@ class TestDeduplication(unittest.IsolatedAsyncioTestCase):
             operation_name="ListAdminListings",
             variables={
                 "city": "SYDNEY",
-                "limit": 1000,
+                "limit": 2000,
                 "verificationStatuses": ["VERIFIED", "UNVERIFIED"]
             },
         )

@@ -42,12 +42,12 @@ async def main() -> None:
         if not args.city:
             BackendObservability.fatal("Validation Error: --city is required for business-socials", conversation_id=args.trace_id)
             sys.exit(1)
-        BackendObservability.trace(f"Executing GraphQL operation ListAdminListings with variables: {{'city': '{args.city}', 'limit': 1000}}", conversation_id=args.trace_id)
+        BackendObservability.trace(f"Executing GraphQL operation ListAdminListings with variables: {{'city': '{args.city}', 'limit': 2000}}", conversation_id=args.trace_id)
         result = await execute_graphql_operation(
             operation_name="ListAdminListings",
             variables={
                 "city": args.city,
-                "limit": 1000,
+                "limit": 2000,
                 "verificationStatuses": ["VERIFIED", "UNVERIFIED"]
             }
         )
@@ -66,12 +66,12 @@ async def main() -> None:
         if not args.city:
             BackendObservability.fatal("Validation Error: --city is required for city-listings", conversation_id=args.trace_id)
             sys.exit(1)
-        BackendObservability.trace(f"Executing GraphQL operation ListAdminListings with variables: {{'city': '{args.city}', 'limit': 1000}}", conversation_id=args.trace_id)
+        BackendObservability.trace(f"Executing GraphQL operation ListAdminListings with variables: {{'city': '{args.city}', 'limit': 2000}}", conversation_id=args.trace_id)
         result = await execute_graphql_operation(
             operation_name="ListAdminListings",
             variables={
                 "city": args.city,
-                "limit": 1000,
+                "limit": 2000,
                 "verificationStatuses": ["VERIFIED", "UNVERIFIED"]
             }
         )

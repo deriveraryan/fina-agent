@@ -90,7 +90,7 @@ class TestAgentScripts(unittest.IsolatedAsyncioTestCase):
             operation_name="ListAdminListings",
             variables={
                 "city": "SYDNEY",
-                "limit": 1000,
+                "limit": 2000,
                 "verificationStatuses": ["VERIFIED", "UNVERIFIED"]
             }
         )
@@ -299,7 +299,7 @@ class TestAgentScripts(unittest.IsolatedAsyncioTestCase):
             operation_name="ListAdminListings",
             variables={
                 "city": "SYDNEY",
-                "limit": 1000,
+                "limit": 2000,
                 "verificationStatuses": ["VERIFIED", "UNVERIFIED"]
             }
         )
@@ -1126,7 +1126,7 @@ class TestAgentScripts(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(cm.exception.code, 1)
 
     @patch("os.path.exists")
-    @patch("builtins.open")
+    @patch("agent_graphql_push.open")
     @patch("sys.stderr")
     async def test_graphql_push_main_exits_when_categories_file_corrupted(self, mock_stderr: MagicMock, mock_open: MagicMock, mock_exists: MagicMock) -> None:
         """Tests that agent_graphql_push.py main() exits with code 1 when categories file is corrupted."""

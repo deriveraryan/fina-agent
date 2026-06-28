@@ -29,7 +29,7 @@ async def fetch_city_listings(city: str, trace_id: str | None = None) -> list[di
         operation_name="ListAdminListings",
         variables={
             "city": city,
-            "limit": 1000,
+            "limit": 2000,
             "verificationStatuses": ["VERIFIED", "UNVERIFIED"],
         },
     )
