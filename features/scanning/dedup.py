@@ -10,6 +10,11 @@ from rapidfuzz import fuzz
 from features.shared.observability import BackendObservability
 
 
+# Minimum fuzzy name similarity score to consider a match.
+# Shared by dedup.py and dedup_blocking.py to prevent threshold drift.
+FUZZY_NAME_THRESHOLD: int = 85
+
+
 def normalize_name(name: str) -> str:
     """Normalizes business names for duplicate comparison.
 
@@ -34,7 +39,7 @@ def normalize_name(name: str) -> str:
 def fuzzy_name_match(
     name_a: str,
     name_b: str,
-    threshold: int = 85,
+    threshold: int = FUZZY_NAME_THRESHOLD,
 ) -> tuple[bool, float]:
     """Fuzzy name comparison using rapidfuzz token_set_ratio.
 

@@ -14,7 +14,7 @@ from typing import Any
 
 from rapidfuzz import fuzz
 
-from features.scanning.dedup import normalize_name
+from features.scanning.dedup import normalize_name, FUZZY_NAME_THRESHOLD
 
 
 # Common Australian address abbreviations → full forms.
@@ -46,8 +46,6 @@ PROTECTED_FIELDS: frozenset[str] = frozenset({
     "id", "createdAt", "updatedAt", "descriptionEmbedding",
 })
 
-# Minimum fuzzy name similarity score to consider a blocking pair.
-FUZZY_NAME_THRESHOLD: int = 85
 
 
 def normalize_address(address: str | None) -> str:

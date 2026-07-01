@@ -162,6 +162,7 @@ def check_duplicate_in_cache(
                 conversation_id=trace_id
             )
             return {"duplicate": True, "type": dup_type, "match": listing}
+
     # 3. Fuzzy Name Match — surface near-misses for agent review
     fuzzy_matches: list[dict[str, Any]] = []
     if norm_cand_name:

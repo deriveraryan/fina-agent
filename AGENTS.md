@@ -46,7 +46,7 @@ The following 5 agents are production-ready and actively executing tasks:
     3. Claims next pending task via `--action next` (atomic via `fcntl.flock()`).
     4. Fetches existing city listings to `tmp/existing_city_listings_<CONVERSATION_ID>.json` for dedup context.
     5. Runs four sequential search rounds: Facebook (`site:facebook.com`), Instagram (`site:instagram.com`), General Web (excludes social), and Google Maps browser. Per-round page limits: 10 for social/web, unlimited scroll for Maps.
-    6. Checks duplicates via `agent_check_duplicate.py`. Merge scenarios use `UpdateListingData`; new listings use `CreateListing`.
+    6. Checks duplicates via `agent_check_duplicate.py`. Merge scenarios use `UpdateListingData`; fuzzy near-misses are surfaced for agent review; new listings use `CreateListing`.
     7. Navigates to candidates via Chrome DevTools, extracting visible text/selectors only.
     8. For Rounds 1-3 candidates, enriches from Google Maps (lat/lng, address, hours, phone, Place ID, website). Falls back to description-based schedule extraction when Maps hours are absent (tagged `description-hours`). Adds `google-maps` tag on success.
     9. Pushes verified listings via `agent_graphql_push.py --operation CreateListing` (without `--generate-embeddings`) with self-correction on validation failure. Listings are assigned the best-fit category from `categories.json` based on actual business type, which may differ from the task's search category.
@@ -96,7 +96,7 @@ The following 5 agents are production-ready and actively executing tasks:
     3. Claims next pending task via `--action next` (atomic via `fcntl.flock()`).
     4. Fetches existing city listings to `tmp/existing_city_listings_<CONVERSATION_ID>.json` for dedup context.
     5. Executes a single Google Places API Text Search call via `agent_places_api_fetch.py`.
-    6. Checks duplicates via `agent_check_duplicate.py`. Merge scenarios use `UpdateListingData`; new listings use `CreateListing`.
+    6. Checks duplicates via `agent_check_duplicate.py`. Merge scenarios use `UpdateListingData`; fuzzy near-misses are surfaced for agent review; new listings use `CreateListing`.
     7. Evaluates Filipino affiliation using structured API data (name, description, types). Rejects non-affiliated candidates. Listings are assigned the best-fit category from `categories.json` based on actual business type, which may differ from the task's search category.
     8. Pushes verified listings via `agent_graphql_push.py --operation CreateListing` (without `--generate-embeddings`) with self-correction on validation failure (up to 2 retries). Tags all listings with `google-places-api`. Adopts `businessStatus` from the API directly.
     9. Marks task `COMPLETED` with metrics via `--action complete`.
