@@ -28,12 +28,12 @@ Follow these steps exactly:
    - Identify its arguments (using `argparse` definitions or help outputs).
    - Verify that CLI usage examples in `README.md` and `docs/` exactly match these arguments.
 2. Verify that the agent roles and workflows described in `AGENTS.md` and `docs/guides/ide_agent_architecture.md` are aligned:
-   - Ensure only the 3 production agents (`fina_listing_web_search`, `fina_listing_enrichment`, `fina_events_listing`) are listed as active in registries and architecture diagrams.
+   - Ensure only the 5 production agents (`fina_listing_web_search`, `fina_listing_enrichment`, `fina_events_listing`, `fina_listing_places_api_search`, `fina_listing_dedup`) are listed as active in registries and architecture diagrams.
    - Ensure planned agents are documented separately and not presented as production-ready.
    - Check if any documented CLI triggers refer to scripts that do not exist.
 3. Verify the shared agent memory protocol:
    - `data/fina_agent_memory.md` exists and has the correct 500-line budget in its header.
-   - Both production agent SKILL.md files have Step 0.7 (Read Memory) and Step 7.5 (Retrospective).
+   - All five production agent SKILL.md files have Step 0.7 (Read Memory) and a Retrospective step.
    - Rule 1.15 in `AGENTS.md` matches the memory file's declared budget.
 4. Review the list of categories in `data/categories.json` and ensure all documentation referring to category choices matches this list.
 5. If any gaps are found, perform the necessary documentation updates.

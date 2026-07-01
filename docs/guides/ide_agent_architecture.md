@@ -1,6 +1,6 @@
 # Fina Native IDE Agent Architecture & Runbook
 
-This reference document provides a comprehensive overview of the design, logic, and operational execution flow of the Fina Native IDE Agent pipeline. It details how the production agents (`fina_listing_web_search`, `fina_listing_enrichment`, `fina_events_listing`, and `fina_listing_places_api_search`) interact with Google Maps, social platforms, the Google Places API, and the Firebase SQL Connect database (hosted in the core `fina` repository) to automate discovery, enrichment, and event extraction tasks.
+This reference document provides a comprehensive overview of the design, logic, and operational execution flow of the Fina Native IDE Agent pipeline. It details how the production agents (`fina_listing_web_search`, `fina_listing_enrichment`, `fina_events_listing`, `fina_listing_places_api_search`, and `fina_listing_dedup`) interact with Google Maps, social platforms, the Google Places API, and the Firebase SQL Connect database (hosted in the core `fina` repository) to automate discovery, enrichment, and event extraction tasks.
 
 ---
 
@@ -69,6 +69,22 @@ flowchart TD
     DBTransactionEvents --> CompleteEventsTask["Execute: python3 scripts/agent_events_tasks.py<br>--action complete --task-id ID"]
     CompleteEventsTask --> RetroEV["Post-Execution Retrospective<br>(Update fina_agent_memory.md if new insights)"]
     RetroEV --> FinishEvents(["Task Completed — Agent Stops"])
+
+    %% ════════ 4. PLACES API SEARCH FLOW ════════
+    SelectSubagent -->|Places API Search| InvokePlacesAPI["IDE Invokes fina_listing_places_api_search Subagent"]
+    InvokePlacesAPI --> ReadMemoryPA["Read data/fina_agent_memory.md"]
+    ReadMemoryPA --> GeneratePlacesTasks["Execute: python3 scripts/agent_places_api_search_tasks.py<br>--action generate --city C (idempotent)"]
+    GeneratePlacesTasks --> GetNextPlacesTask["Execute: python3 scripts/agent_places_api_search_tasks.py<br>--action next --city C"]
+    GetNextPlacesTask --> FetchCityListingsPA["Execute: python3 scripts/agent_fetch_targets.py --type city-listings<br>--city C > tmp/existing_city_listings.json"]
+    FetchCityListingsPA --> PlacesAPIFetch["Execute: python3 scripts/agent_places_api_fetch.py<br>--query QUERY --city C --category CAT"]
+    PlacesAPIFetch --> EvalCandidatesPA["Evaluate candidates:<br>Dedup via agent_check_duplicate.py,<br>Filipino affiliation heuristics,<br>Category assignment from categories.json"]
+    EvalCandidatesPA -->|Verified| PushPlacesListing["Execute: python3 scripts/agent_graphql_push.py<br>--operation CreateListing"]
+    PushPlacesListing --> DBTransactionPlaces[("PostgreSQL Database")]
+    EvalCandidatesPA -->|Not Affiliated| SkipPA["Skip candidate"]
+    DBTransactionPlaces --> CompletePlacesTask["Execute: python3 scripts/agent_places_api_search_tasks.py<br>--action complete --task-id ID"]
+    SkipPA --> CompletePlacesTask
+    CompletePlacesTask --> RetroPA["Post-Execution Retrospective<br>(Update fina_agent_memory.md if new insights)"]
+    RetroPA --> FinishPlaces(["Task Completed — Agent Stops"])
 ```
 
 ---
@@ -118,8 +134,11 @@ To maintain security and ensure all data mutations pass through the authorized G
 *   `scripts/agent_web_search_tasks.py`: Manages the task-based state machine for `fina_listing_web_search` (`generate`, `next`, `complete`, `summary`).
 *   `scripts/agent_enrichment_tasks.py`: Manages the task-based state machine for `fina_listing_enrichment` (`generate`, `next`, `complete`, `summary`).
 *   `scripts/agent_events_tasks.py`: Manages the task-based state machine for `fina_events_listing` (`generate`, `next`, `complete`, `summary`). Only generates tasks for listings with social URLs.
+*   `scripts/agent_places_api_search_tasks.py`: Manages the task-based state machine for `fina_listing_places_api_search` (`generate`, `next`, `complete`, `summary`). City-level tasks by default; pass `--include-suburbs` for suburb-level tasks.
+*   `scripts/agent_places_api_fetch.py`: Executes a single Google Places API (New) text search query and returns formatted place results as JSON.
+*   `scripts/agent_dedup_scan.py`: Manages the task-based state machine for `fina_listing_dedup` (`scan`, `plan`, `verdict`, `execute`, `summary`).
 
-### 5. Synchronous Geocoding & Deduplication
+### 6. Synchronous Geocoding & Deduplication
 To simplify the architecture and reduce cloud function dependencies, heavy transactional logic is handled synchronously by `agent_graphql_push.py` before inserting data into the database:
 *   **Geocoding**: Uses the Google Maps Geocoding API to resolve coordinates if missing prior to insertion.
 *   **Deduplication**: Resolves matches using name normalization, `pgvector` semantic embedding similarity, and Jaccard word-overlap coefficient (>0.7). If a duplicate is found, it merges missing fields via `UpdateListingData` and `UpdateListingStatus` mutations instead of creating a new duplicate record.
@@ -212,11 +231,11 @@ The memory file has a fixed five-section structure, each serving a distinct know
 
 | Section | Written by | Example entries |
 |---|---|---|
-| Platform & Browser Insights | All 3 production agents | "Facebook requires login to view follower counts as of 2026-06" |
+| Platform & Browser Insights | All 5 production agents | "Facebook requires login to view follower counts as of 2026-06" |
 | Discovery Patterns | `fina_listing_web_search` | "RESTAURANT category in Sydney CBD yields >80% duplicates — consider skipping" |
 | Enrichment Patterns | `fina_listing_enrichment` | "Google Maps reviews section now uses `div[data-review-id]` selector" |
-| City Intelligence | All 3 production agents | "Melbourne: Dandenong and Footscray are highest-density Filipino suburbs" |
-| Known Pitfalls | All 3 production agents | "`CreateListing` rejects `openingHours` with trailing whitespace in day names" |
+| City Intelligence | All 5 production agents | "Melbourne: Dandenong and Footscray are highest-density Filipino suburbs" |
+| Known Pitfalls | All 5 production agents | "`CreateListing` rejects `openingHours` with trailing whitespace in day names" |
 
 ### Budget Management
 
@@ -258,7 +277,7 @@ The current implementation uses a **last-writer-wins** strategy:
 
 ### Participating Agents
 
-The memory protocol is currently implemented for the 3 production-ready agents:
+The memory protocol is currently implemented for the 5 production-ready agents:
 
 | Agent | Read Step | Retro Step | Typical insights |
 |---|---|---|---|
@@ -266,6 +285,7 @@ The memory protocol is currently implemented for the 3 production-ready agents:
 | `fina_listing_enrichment` | Step 0.7 | Step 7.5 | Maps UI selectors, review extraction techniques, hours parsing edge cases |
 | `fina_events_listing` | Step 0.7 | Step 5.5 | Date parsing quirks, event classification patterns, platform post format changes |
 | `fina_listing_places_api_search` | Step 0.7 | Step 7.5 | Places API field coverage, affiliation heuristic accuracy, template effectiveness |
+| `fina_listing_dedup` | Step 0.5 | Step 5 | Fuzzy matching heuristics, duplicate patterns |
 
 Planned agents (`fina_listing_embedder`) are not yet released but can be onboarded by adding the same Step 0.7/retro pattern to their SKILL.md files.
 
@@ -291,5 +311,5 @@ This makes Git the de-facto "episodic memory" layer — the live file is working
 
 ## 💻 Operational Runbook
 
-For instructions on how to trigger or schedule the `fina_listing_web_search`, `fina_listing_enrichment`, and `fina_events_listing` agents, refer to the Operational Guide in the main repository `README.md`.
+For instructions on how to trigger or schedule the `fina_listing_web_search`, `fina_listing_enrichment`, `fina_events_listing`, `fina_listing_places_api_search`, and `fina_listing_dedup` agents, refer to the Operational Guide in the main repository `README.md`.
 
