@@ -69,6 +69,24 @@ class TestAgentCheckDuplicate(unittest.TestCase):
                 "facebookFollowers": None,
                 "instagramFollowers": None,
                 "tiktokFollowers": None
+            },
+            {
+                "id": "3",
+                "name": "CJ Migration",
+                "facebookUrl": "https://www.facebook.com/cjmigration",
+                "instagramUrl": None,
+                "tiktokUrl": None,
+                "phone": "+61 2 8888 1234",
+                "website": "https://cjmigration.com.au",
+                "operatingHours": None,
+                "description": "Filipino migration services",
+                "categories": ["SERVICES"],
+                "address": "123 Anzac Parade, Kensington NSW 2033",
+                "latitude": -33.9173,
+                "longitude": 151.2260,
+                "facebookFollowers": None,
+                "instagramFollowers": None,
+                "tiktokFollowers": None
             }
         ]
         with open(self.temp_file_path, "w") as f:
@@ -463,6 +481,86 @@ class TestAgentCheckDuplicate(unittest.TestCase):
         result = self._extract_json_result(mock_stdout)
         self.assertFalse(result["duplicate"])
         self.assertTrue(result["should_merge"])
+
+    @patch("sys.stdout")
+    @patch("sys.stderr")
+    def test_fuzzy_match_concatenated_name(self, mock_stderr: MagicMock, mock_stdout: MagicMock) -> None:
+        """Should return fuzzy_matches when name is a fuzzy match but not exact (CJMigration vs CJ Migration)."""
+        import agent_check_duplicate
+
+        sys.argv = [
+            "agent_check_duplicate.py",
+            "--file", self.temp_file_path,
+            "--name", "CJMigration",
+        ]
+
+        agent_check_duplicate.main()
+
+        result = self._extract_json_result(mock_stdout)
+        self.assertFalse(result["duplicate"])
+        self.assertIn("fuzzy_matches", result)
+        self.assertTrue(len(result["fuzzy_matches"]) > 0)
+        match_names = [m["name"] for m in result["fuzzy_matches"]]
+        self.assertIn("CJ Migration", match_names)
+
+    @patch("sys.stdout")
+    @patch("sys.stderr")
+    def test_no_fuzzy_match_for_completely_different_name(self, mock_stderr: MagicMock, mock_stdout: MagicMock) -> None:
+        """Should NOT return fuzzy_matches for a completely different business name."""
+        import agent_check_duplicate
+
+        sys.argv = [
+            "agent_check_duplicate.py",
+            "--file", self.temp_file_path,
+            "--name", "Totally Different Business XYZ",
+        ]
+
+        agent_check_duplicate.main()
+
+        result = self._extract_json_result(mock_stdout)
+        self.assertFalse(result["duplicate"])
+        self.assertNotIn("fuzzy_matches", result)
+
+    @patch("sys.stdout")
+    @patch("sys.stderr")
+    def test_fuzzy_match_includes_score_and_address(self, mock_stderr: MagicMock, mock_stdout: MagicMock) -> None:
+        """Fuzzy match results should include score and address for agent review."""
+        import agent_check_duplicate
+
+        sys.argv = [
+            "agent_check_duplicate.py",
+            "--file", self.temp_file_path,
+            "--name", "CJMigration",
+        ]
+
+        agent_check_duplicate.main()
+
+        result = self._extract_json_result(mock_stdout)
+        self.assertIn("fuzzy_matches", result)
+        match = result["fuzzy_matches"][0]
+        self.assertIn("score", match)
+        self.assertIn("address", match)
+        self.assertIn("id", match)
+        self.assertIn("name", match)
+        self.assertGreater(match["score"], 85)
+
+    @patch("sys.stdout")
+    @patch("sys.stderr")
+    def test_exact_match_takes_priority_over_fuzzy(self, mock_stderr: MagicMock, mock_stdout: MagicMock) -> None:
+        """When exact name match is found, should return duplicate=True, not fuzzy_matches."""
+        import agent_check_duplicate
+
+        sys.argv = [
+            "agent_check_duplicate.py",
+            "--file", self.temp_file_path,
+            "--name", "CJ Migration",
+        ]
+
+        agent_check_duplicate.main()
+
+        result = self._extract_json_result(mock_stdout)
+        self.assertTrue(result["duplicate"])
+        self.assertNotIn("fuzzy_matches", result)
 
 
 if __name__ == "__main__":

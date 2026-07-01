@@ -4,6 +4,9 @@
 import json
 import re
 from typing import Any
+
+from rapidfuzz import fuzz
+
 from features.shared.observability import BackendObservability
 
 
@@ -26,6 +29,33 @@ def normalize_name(name: str) -> str:
     # Collapse whitespace and clean up trailing punctuation
     val = re.sub(r"\s+", " ", val).strip().rstrip("., ")
     return val
+
+
+def fuzzy_name_match(
+    name_a: str,
+    name_b: str,
+    threshold: int = 85,
+) -> tuple[bool, float]:
+    """Fuzzy name comparison using rapidfuzz token_set_ratio.
+
+    Normalizes both names (lowercase, strip corporate suffixes) before
+    comparison. Catches spacing/concatenation variations like
+    'CJ Migration' vs 'CJMigration' that exact matching misses.
+
+    Args:
+        name_a: First business name.
+        name_b: Second business name.
+        threshold: Minimum score to consider a match (0-100).
+
+    Returns:
+        (is_match, score) tuple where score is 0-100.
+    """
+    norm_a = normalize_name(name_a)
+    norm_b = normalize_name(name_b)
+    if not norm_a or not norm_b:
+        return False, 0.0
+    score = fuzz.token_set_ratio(norm_a, norm_b)
+    return score > threshold, float(score)
 
 
 def merge_listing_data(
@@ -261,19 +291,15 @@ async def check_duplicate(
                 )
                 return result
 
-            # Jaccard word-overlap check for fuzzy matching
-            words_new = set(normalized_new.split())
-            words_existing = set(normalize_name(result_name).split())
-            if words_new and words_existing:
-                intersection = words_new.intersection(words_existing)
-                union = words_new.union(words_existing)
-                jaccard = len(intersection) / len(union)
-                if jaccard > 0.7:
-                    BackendObservability.info(
-                        f"Duplicate found via fuzzy name overlap ({jaccard:.2f}): '{result_name}' (ID: {result.get('id')})",
-                        conversation_id=trace_id
-                    )
-                    return result
+            # Fuzzy name match via rapidfuzz (replaces Jaccard word-overlap
+            # which missed concatenated-word variations like CJMigration)
+            is_fuzzy, fuzzy_score = fuzzy_name_match(result_name, name)
+            if is_fuzzy:
+                BackendObservability.info(
+                    f"Duplicate found via fuzzy name match (score={fuzzy_score:.0f}): '{result_name}' (ID: {result.get('id')})",
+                    conversation_id=trace_id
+                )
+                return result
     except Exception as exc:
         BackendObservability.error(
             "Error during semantic deduplication check.",

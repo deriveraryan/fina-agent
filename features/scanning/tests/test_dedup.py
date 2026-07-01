@@ -5,7 +5,7 @@ Runs completely offline using unittest mocks.
 
 import unittest
 from unittest.mock import patch, AsyncMock, MagicMock
-from features.scanning.dedup import normalize_name, merge_listing_data, check_duplicate
+from features.scanning.dedup import normalize_name, merge_listing_data, check_duplicate, fuzzy_name_match
 
 
 class TestDeduplication(unittest.IsolatedAsyncioTestCase):
@@ -178,6 +178,77 @@ class TestDeduplication(unittest.IsolatedAsyncioTestCase):
 
         self.assertIsNone(result)
         self.assertEqual(mock_execute.call_count, 2)
+
+    def test_fuzzy_name_match_concatenated_words(self) -> None:
+        """CJMigration vs CJ Migration — the original root cause duplicate."""
+        is_match, score = fuzzy_name_match("CJ Migration", "CJMigration")
+        self.assertTrue(is_match)
+        self.assertGreater(score, 85)
+
+    def test_fuzzy_name_match_with_hyphen_spacing(self) -> None:
+        """Jollibee Parramatta vs Jollibee - Parramatta."""
+        is_match, score = fuzzy_name_match("Jollibee Parramatta", "Jollibee - Parramatta")
+        self.assertTrue(is_match)
+        self.assertGreater(score, 85)
+
+    def test_fuzzy_name_match_subset_name(self) -> None:
+        """Pinoy Stop vs Pinoy Stop Ashfield — subset should match."""
+        is_match, score = fuzzy_name_match("Pinoy Stop", "Pinoy Stop Ashfield")
+        self.assertTrue(is_match)
+        self.assertGreater(score, 85)
+
+    def test_fuzzy_name_match_completely_different(self) -> None:
+        """Completely different businesses should not match."""
+        is_match, score = fuzzy_name_match("Manila Grill", "Tindahan Filipino")
+        self.assertFalse(is_match)
+        self.assertLess(score, 85)
+
+    def test_fuzzy_name_match_empty_inputs(self) -> None:
+        """Empty or None-like inputs should not match."""
+        is_match, score = fuzzy_name_match("", "CJ Migration")
+        self.assertFalse(is_match)
+        self.assertEqual(score, 0.0)
+
+        is_match2, score2 = fuzzy_name_match("CJ Migration", "")
+        self.assertFalse(is_match2)
+        self.assertEqual(score2, 0.0)
+
+    def test_fuzzy_name_match_corporate_suffix_stripped(self) -> None:
+        """Corporate suffixes should be stripped before fuzzy comparison."""
+        is_match, score = fuzzy_name_match("Manila Grill Pty Ltd", "Manila Grill")
+        self.assertTrue(is_match)
+        self.assertGreater(score, 95)
+
+    @patch("features.shared.embeddings.get_embedding")
+    @patch("features.shared.graphql_client.execute_graphql_operation")
+    async def test_check_duplicate_semantic_fuzzy_match(self, mock_execute: AsyncMock, mock_get_embedding: MagicMock) -> None:
+        """Tests that check_duplicate catches 'CJMigration' vs 'CJ Migration' via fuzzy match in semantic tier."""
+        mock_get_embedding.return_value = [0.1] * 768
+        mock_execute.side_effect = [
+            {"data": {"listings": []}},  # ListAdminListings — no exact match
+            {
+                "data": {
+                    "listings_descriptionEmbedding_similarity": [
+                        {
+                            "id": "dup-fuzzy-1",
+                            "name": "CJ Migration",
+                            "city": "SYDNEY",
+                        }
+                    ]
+                }
+            },  # SemanticSearchListings
+        ]
+
+        result = await check_duplicate(
+            "CJMigration",
+            "SYDNEY",
+            description="Migration services",
+            categories=["SERVICES"],
+            generate_embeddings=True,
+        )
+
+        self.assertIsNotNone(result)
+        self.assertEqual(result["id"], "dup-fuzzy-1")
 
 
 if __name__ == "__main__":

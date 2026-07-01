@@ -118,10 +118,11 @@ For each candidate URL discovered in the search results:
 ```bash
 python3 scripts/agent_check_duplicate.py --file tmp/existing_city_listings_<CONVERSATION_ID>.json --name "<Candidate Name>" --url "<Candidate Social URL>" --trace-id <CONVERSATION_ID>
 ```
-The check returns one of three outcomes:
+The check returns one of four outcomes:
 - `{"duplicate": true}` — exact match with no new info. **Skip** and increment the `candidates_duplicate` counter.
 - `{"duplicate": false, "should_merge": true, "match": {...}}` — name/URL matches an existing listing but candidate has new fields (e.g., a missing social URL, phone, or address). **Push the new fields** via `UpdateListingData` mutation (not `CreateListing`) using the matched listing's `id`. Increment the `candidates_merged` counter.
   > **Implementation note:** While `CreateListing` has built-in server-side dedup that would also handle merges transparently, you **MUST** use `UpdateListingData` for `should_merge` scenarios to avoid redundant server-side dedup work and ensure explicit, auditable merge operations. Build the `UpdateListingData` payload with the matched listing's `id` and only the new/updated fields.
+- `{"duplicate": false, "fuzzy_matches": [...]}` — no exact match, but **near-miss fuzzy matches** were found. Each fuzzy match includes `id`, `name`, `score`, and `address`. **You must review the matches**: if the candidate is clearly the same business as a fuzzy match (same name with different spacing/formatting + same or nearby address), treat it as a duplicate and push via `UpdateListingData` using the matched listing's `id`. If the fuzzy match is a different business (different address, different type), proceed with the candidate as new. Increment `candidates_duplicate` or `candidates_merged` accordingly.
 - `{"duplicate": false}` — no match. Proceed with full evaluation as a new candidate.
 
 **b. Browser Verification:** Use the `chrome-devtools` skill to navigate to the candidate's page (Facebook, Instagram, TikTok, or website). To prevent context bloat, **do NOT** read or print the full raw HTML. Only extract visible text, target DOM selectors, or accessibility tree. For independent websites, also navigate to "About Us" or "Contact" pages and extract any social media links.

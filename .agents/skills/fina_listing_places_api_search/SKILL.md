@@ -65,9 +65,10 @@ For each candidate place returned from the Places API fetch:
 ```bash
 python3 scripts/agent_check_duplicate.py --file tmp/existing_city_listings_<CONVERSATION_ID>.json --name "<Candidate Name>" --url "<Candidate Website URL>" --trace-id <CONVERSATION_ID>
 ```
-Three outcomes:
+Four outcomes:
 - `{"duplicate": true}` → Skip. Increment duplicate counter.
 - `{"should_merge": true, "matched_listing": {...}}` → This listing already exists but the Places API data can improve it. Push via `UpdateListingData` using the matched listing's `id`. Increment merged counter.
+- `{"duplicate": false, "fuzzy_matches": [...]}` → No exact match, but **near-miss fuzzy matches** were found. Each fuzzy match includes `id`, `name`, `score`, and `address`. **You must review the matches**: if the candidate is clearly the same business as a fuzzy match (same name with different spacing/formatting + same or nearby address), treat it as a duplicate and push via `UpdateListingData` using the matched listing's `id`. If the fuzzy match is a different business, proceed with the candidate as new.
 - `{"duplicate": false}` → New candidate. Proceed to full evaluation.
 
 **b. Authenticity & Affiliation Heuristics:** Verify authentic Filipino affiliation by checking for:

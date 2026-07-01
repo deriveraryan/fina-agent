@@ -15,7 +15,7 @@ sys.path.insert(
     ),
 )
 
-from features.scanning.dedup import normalize_name, detect_merge_updates
+from features.scanning.dedup import normalize_name, detect_merge_updates, fuzzy_name_match
 from features.shared.observability import BackendObservability
 from features.scanning.url_normalization import (
     normalize_facebook_url,
@@ -162,6 +162,29 @@ def check_duplicate_in_cache(
                 conversation_id=trace_id
             )
             return {"duplicate": True, "type": dup_type, "match": listing}
+    # 3. Fuzzy Name Match — surface near-misses for agent review
+    fuzzy_matches: list[dict[str, Any]] = []
+    if norm_cand_name:
+        for listing in listings:
+            listing_name = listing.get("name") or ""
+            is_match, score = fuzzy_name_match(candidate_name or "", listing_name)
+            if is_match:
+                fuzzy_matches.append({
+                    "id": listing.get("id"),
+                    "name": listing_name,
+                    "score": round(score, 1),
+                    "address": listing.get("address"),
+                })
+
+    if fuzzy_matches:
+        # Sort by score descending
+        fuzzy_matches.sort(key=lambda m: m["score"], reverse=True)
+        BackendObservability.info(
+            f"No exact duplicate, but {len(fuzzy_matches)} fuzzy match(es) found for '{candidate_name}'. "
+            f"Top match: '{fuzzy_matches[0]['name']}' (score={fuzzy_matches[0]['score']})",
+            conversation_id=trace_id
+        )
+        return {"duplicate": False, "fuzzy_matches": fuzzy_matches}
 
     BackendObservability.info(
         "No local duplicate found in cache.",
