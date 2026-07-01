@@ -155,3 +155,7 @@
 - A business relocation that subsequently has its Google Maps page marked "Permanently closed" along with all domains returning 404 signals a final permanent closure; update status to CLOSED_PERMANENTLY.
 - A cancelled ABN registry entry does not necessarily mean a business is closed; cross-reference active reviews and operational status on Google Maps or social media before assuming closure.
 - Google Maps search results for service providers with no physical address can return multiple candidate pins mapped to the exact same suburb centroid coordinates; verify and reject if they lack distinct addresses or websites.
+- Fuzzy name matching (token_set_ratio > 85) can transitively group distinct brand branches (e.g. ALiN Cargo vs LBC Express) in the same suburb due to shared descriptors like "Express", "Cargo", or "Branch"; filter out suburb and common generic descriptors before brand name similarity checks.
+- Naive suburb extraction regexes can fail when addresses contain commas before the state (e.g., "Blacktown, NSW"); normalize or strip commas before identifying the suburb name.
+- Standard street address comparisons must filter out city names (e.g. "Sydney") and check length bounds to prevent empty or generic address fields from triggering false-positive duplicate matches.
+
