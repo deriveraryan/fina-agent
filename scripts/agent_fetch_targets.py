@@ -20,7 +20,7 @@ from features.shared.observability import BackendObservability
 
 async def main() -> None:
     parser = argparse.ArgumentParser(description="Fetch Fina target listings from DB.")
-    parser.add_argument("--type", choices=["missing-social", "business-socials", "city-listings", "social-post-tracker"], required=True)
+    parser.add_argument("--type", choices=["missing-social", "business-socials", "city-listings", "all-city-listings", "social-post-tracker"], required=True)
     parser.add_argument("--city", type=str, default=None)
     parser.add_argument("--listing-id", type=str, default=None, help="Listing UUID for social-post-tracker query.")
     parser.add_argument("--platform", choices=["facebook", "instagram", "tiktok", "FACEBOOK", "INSTAGRAM", "TIKTOK"], type=str, default=None, help="Platform for social-post-tracker query.")
@@ -77,6 +77,22 @@ async def main() -> None:
         )
         listings = result.get("data", {}).get("listings", [])
         BackendObservability.info(f"Retrieved {len(listings)} listings for {args.city} deduplication context.", conversation_id=args.trace_id)
+        sys.stdout.write(json.dumps(listings))
+    elif args.type == "all-city-listings":
+        if not args.city:
+            BackendObservability.fatal("Validation Error: --city is required for all-city-listings", conversation_id=args.trace_id)
+            sys.exit(1)
+        BackendObservability.trace(f"Executing GraphQL operation ListAdminListings (all statuses) with variables: {{'city': '{args.city}', 'limit': 2000}}", conversation_id=args.trace_id)
+        result = await execute_graphql_operation(
+            operation_name="ListAdminListings",
+            variables={
+                "city": args.city,
+                "limit": 2000,
+                "verificationStatuses": ["VERIFIED", "UNVERIFIED", "FLAGGED"]
+            }
+        )
+        listings = result.get("data", {}).get("listings", [])
+        BackendObservability.info(f"Retrieved {len(listings)} listings (all statuses) for {args.city} deduplication context.", conversation_id=args.trace_id)
         sys.stdout.write(json.dumps(listings))
     elif args.type == "social-post-tracker":
         if not args.listing_id or not args.platform:

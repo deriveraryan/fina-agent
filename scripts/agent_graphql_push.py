@@ -57,6 +57,18 @@ async def process_single_item(operation: str, item_dict: dict, trace_id: str, ge
         BackendObservability.error("Validation Error: 'tiktokFollowers' must be an integer if provided.", conversation_id=trace_id)
         return {"error": "Validation Error: 'tiktokFollowers' must be an integer"}
 
+    if operation == "DeleteListing":
+        listing_id = item_dict.get("id")
+        if not listing_id:
+            BackendObservability.error("Validation Error: 'id' is required for DeleteListing.", conversation_id=trace_id)
+            return {"error": "Validation Error: 'id' is required for DeleteListing"}
+        BackendObservability.info(f"Deleting listing {listing_id}.", conversation_id=trace_id)
+        result = await execute_graphql_operation(
+            operation_name="DeleteListing",
+            variables={"id": listing_id}
+        )
+        return result
+
     if operation == "UpdateListingSocialUrls":
         listing_id = item_dict.get("id")
         if not listing_id:

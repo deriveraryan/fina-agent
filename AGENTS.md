@@ -16,8 +16,9 @@ flowchart TD
     AgentSelect -->|fina_listing_enrichment| EnrichFlow["Listing Enrichment Pipeline"]
     AgentSelect -->|fina_events_listing| EventsFlow["Events Discovery Pipeline"]
     AgentSelect -->|fina_listing_places_api_search| PlacesFlow["Places API Discovery"]
+    AgentSelect -->|fina_listing_dedup| DedupFlow["Duplicate Resolution Pipeline"]
 
-    WebFlow & EnrichFlow & EventsFlow & PlacesFlow --> ReadMemory["Read data/fina_agent_memory.md"]
+    WebFlow & EnrichFlow & EventsFlow & PlacesFlow & DedupFlow --> ReadMemory["Read data/fina_agent_memory.md"]
     ReadMemory --> PythonCLI["Execute Python CLI Scripts"]
     PythonCLI --> Verification{"Authenticity Heuristic / Web Verification"}
     Verification -->|Verified| GQLPush["Execute agent_graphql_push.py"]
@@ -34,7 +35,7 @@ flowchart TD
 
 ### Production Agents
 
-The following 4 agents are production-ready and actively executing tasks:
+The following 5 agents are production-ready and actively executing tasks:
 
 #### 1. `fina_listing_web_search`
 *   **Role**: Discovers new listing candidates on Facebook, Instagram, TikTok, web platforms, and Google Maps (via browser). Scoped to a **single task** (1 location × 1 category × 1 search template) with a limit of 30 new listings. **Single-task-per-session**: processes exactly one task, then stops.
@@ -102,6 +103,18 @@ The following 4 agents are production-ready and actively executing tasks:
     10. Runs post-execution retrospective against `data/fina_agent_memory.md`. Updates within the 500-line budget if new insights were surfaced; skips otherwise.
     11. **Stops.** Does not claim the next task.
 
+#### 5. `fina_listing_dedup`
+*   **Role**: Detects and resolves duplicate listings using two-stage detection (deterministic fuzzy blocking + agent LLM verdict) and three-phase execution (scan, plan, execute). Pure CLI agent (no browser dependency). Scoped to a **single city** per session. **Single-city-per-session**: processes exactly one city, then stops.
+*   **CLI Trigger**: `python3 scripts/agent_dedup_scan.py --action plan --city <CITY> --trace-id <CONVERSATION_ID>`
+*   **Logic**:
+    1. Reads shared agent memory from `data/fina_agent_memory.md`.
+    2. Generates dedup plan via `--action plan`, fetching all city listings (VERIFIED, UNVERIFIED, FLAGGED) and running deterministic blocking (exact normalized name, fuzzy `token_set_ratio > 85` via `rapidfuzz`, shared `sourceUrl`).
+    3. Agent reviews each candidate group using its own reasoning. Records verdicts (`CONFIRMED_DUPLICATE` or `FALSE_POSITIVE`) via `--action verdict`.
+    4. Reviews summary via `--action summary`.
+    5. Executes confirmed duplicates via `--action execute`: merges non-null fields from duplicates into survivor (oldest `createdAt`) via `UpdateListingData`, then deletes duplicates via `DeleteListing` (cascading Reviews, Events, SocialPostTrackers).
+    6. Runs post-execution retrospective against `data/fina_agent_memory.md`. Updates within the 500-line budget if new insights were surfaced; skips otherwise.
+    7. **Stops.** Does not process the next city.
+
 ### Planned Agents (Not Yet Released)
 
 The following agents exist as skills/scripts but are not yet production-ready. Their supporting CLI scripts are available in `scripts/` for future activation.
@@ -158,6 +171,14 @@ pip install -r requirements.txt
   python3 scripts/agent_places_api_search_tasks.py --action next --city <CITY> --trace-id <CONVERSATION_ID>
   python3 scripts/agent_places_api_search_tasks.py --action complete --city <CITY> --task-id <ID> --listings-created N --places-fetched N --candidates-evaluated N --candidates-rejected N --candidates-duplicate N --candidates-merged N --trace-id <CONVERSATION_ID>
   python3 scripts/agent_places_api_search_tasks.py --action summary --city <CITY> --trace-id <CONVERSATION_ID>
+  ```
+- **Dedup Tasks**:
+  ```bash
+  python3 scripts/agent_dedup_scan.py --action scan --city <CITY> --trace-id <CONVERSATION_ID>
+  python3 scripts/agent_dedup_scan.py --action plan --city <CITY> --trace-id <CONVERSATION_ID>
+  python3 scripts/agent_dedup_scan.py --action verdict --city <CITY> --group-id <ID> --verdict <CONFIRMED_DUPLICATE|FALSE_POSITIVE> --survivor-id <UUID> --reasoning "<REASON>" --trace-id <CONVERSATION_ID>
+  python3 scripts/agent_dedup_scan.py --action execute --city <CITY> --trace-id <CONVERSATION_ID>
+  python3 scripts/agent_dedup_scan.py --action summary --city <CITY> --trace-id <CONVERSATION_ID>
   ```
 - **Shared Utilities**:
   ```bash
