@@ -8,6 +8,7 @@
 
 ## Platform & Browser Insights
 <!-- Reusable facts about platforms, anti-bot patterns, and browser behaviour -->
+- On Facebook profile pages, the contact/about directory sub-page sk=directory_privacy_and_legal_info (Privacy and legal info) often contains a detailed 'Service Description' text block, which is a prime source for synthesising community group descriptions.
 - Google Maps `evaluate_script` requires arrow function syntax `() => expr` (not bare expressions or statements with semicolons).
 - The Chrome DevTools `evaluate_script` MCP tool expects the JavaScript payload in the parameter named `function` (not `script`).
 - Active page focus can change dynamically if other agent sessions are running in parallel; verify selection or re-select the target page context via select_page before executing scripts.
@@ -20,12 +21,14 @@
 - In Google Maps browser scraping, search result cards in the left sidebar can be reliably identified and clicked using the `a.hfpxzc` CSS selector.
 - In Google Maps browser scraping, direct calls to `element.click()` on `a.hfpxzc` might fail to open the detail panel; scroll the card into view and dispatch `mousedown`, `mouseup`, and `click` events sequentially to trigger the navigation.
 - Linktree Profile Pages: Social media profile URLs are often embedded in interactive icon buttons or JSON script blocks (such as schema.org ld+json script blocks or NEXT_DATA) rather than standard href links. Extract Facebook, Instagram, TikTok, Discord, and Email links by querying the script block for the sameAs array or socialLinks.
+- When an Instagram profile contains multiple bio links (indicated by "and 1 more" or similar text), clicking the links button opens a modal dialog listing all the URLs; extract the additional URLs (e.g. websites, contact forms) from this modal snapshot.
 - Candidate websites using Cloudflare security verification or Turnstile challenges will block browser automation; fallback to already loaded homepage content or other social media profiles to extract contact information.
 - The Google Maps search input ID can be dynamic; use document.querySelector('input[name="q"]') as a robust fallback selector to focus and clear the input before typing.
 - In Google Maps browser scraping, operating hours can be reliably extracted day-by-day by querying buttons with an aria-label containing "Copy open hours" and removing the copy suffix.
 - Navigating the primary browser page away from a Google Maps search results view resets the loaded results list, requiring re-running the scroll container logic to rebuild the candidate queue upon returning.
 - In Google Maps detail panel, the phone number button's data-item-id attribute contains the phone number itself (e.g. phone:tel:0430373884); use the prefix selector button[data-item-id^="phone:tel:"] to locate and extract it.
 - Business websites can contain social media buttons with empty/placeholder `href` attributes (""); verify profile existence via search if links are blank.
+- Business website social links may point to template placeholder paths (e.g. /website/social/facebook) that redirect to the platform's generic homepage instead of a specific business profile; verify profile handles before extracting follower counts.
 - When a business found via web search does not have a dedicated Google Maps listing under its name, search Google Maps for its physical street address to resolve coordinates.
 - In Google Maps details panel, if the "Copy open hours" button is absent, the weekly hours table can be extracted by querying the first `table` element and mapping cell values of each `tr` row to standard day abbreviations.
 - When extracting Google Maps opening hours from the weekly table element, join the row text values using newlines (\n) instead of commas to ensure the day parser correctly splits and identifies the day name prefixes.
@@ -33,10 +36,20 @@
 - When `evaluate_script` is denied by security/permission policies, scroll the Google Maps search results feed by clicking the Results heading and issuing multiple "PageDown" keyboard events via the `press_key` tool.
 - When `evaluate_script` is denied by security/permission policies, the redirected/current Google Maps URL can be retrieved via `list_pages` to inspect the URL of the selected tab.
 - When `evaluate_script` is denied by security/permission policies, use the `take_snapshot` tool to retrieve the page elements from the Google Maps details panel.
+- When `evaluate_script` is denied by security/permission policies, elements can be clicked by taking a snapshot via `take_snapshot` to obtain their `uid` and then using the `click` tool with that `uid`.
 - A business listing showing 'Closed' on all days in Google Maps weekly hours may be undergoing a scheduled temporary closure; check their social media profiles for temporary closure notices before marking them permanently closed.
 - Google Maps Place ID query (`place_id:ChIJ...`) can resolve to the main commercial building instead of the tenant business when the tenant does not have a dedicated Maps pin. Fallback to independent web search and directory registries.
 - Google Maps search query for a business with no pin or listing can redirect to a completely unrelated business name; always verify the loaded panel's heading to prevent extracting incorrect information.
-
+- Facebook and Instagram web page views may present a login overlay dialog modal when browsed without a login; click the Close button on the modal to dismiss it and view the profile page and follower counts.
+- Facebook profile URLs using a slug-to-ID structure (e.g. /people/Slug-Name/ProfileID) will resolve to the page associated with the ProfileID even if the Slug-Name belongs to a completely different organization; verify the loaded page's heading and branding to confirm identity.
+- Targeting the virtual environment executable (e.g. ./.venv/bin/python3) inside nested python subprocess calls ensures installed packages such as httpx are resolved correctly.
+- When Google Maps search suggestions/autocomplete dropdown is active, pressing Enter on the search input may select a suggestion from history instead of searching the typed query; clear the input via the Close button first and execute by clicking Search directly.
+- When executing python code containing emojis or special character surrogates on macOS, passing them directly via command-line arguments can raise UnicodeEncodeError; write the payload to a JSON/text file first and load it within python to bypass shell encoding limitations.
+- Targeting Facebook's native page search directory (e.g. facebook.com/search/pages/?q=<name>) via browser navigation is highly effective for discovering business profiles that do not rank in external search engines or use numeric IDs.
+- In the Google Maps details panel reviews tab, if keyboard navigation or scrolling fails to load more reviews, click on a visible review text body element to focus the scrollable pane, then press PageDown sequentially to trigger the lazy loading of additional reviews.
+- In Chrome DevTools MCP, clicking on interactive elements that trigger heavy page navigation or panel updates on Google Maps with includeSnapshot set to true can cause the page to reset to about:blank; call click with includeSnapshot set to false instead, followed by a separate take_snapshot call.
+- Facebook reviews can be extracted from the /reviews tab or URL of the page, where they appear as user recommendation posts rather than standard numbered star ratings.
+- WordPress Elementor websites may have content hidden or delayed in the Chrome DevTools accessibility tree snapshot; fetching and inspecting the raw HTML via read_url_content is a reliable fallback to retrieve footer social links and contact details.
 
 ## Discovery Patterns
 <!-- What works and what doesn't when searching for Filipino businesses -->
@@ -52,12 +65,16 @@
 - Business names containing "Pacific" (e.g. AK Pacific Repairs) often refer to Pacific Islander/Oceania communities rather than Filipino, requiring active verification of ownership.
 - Business owners addressing reviewers with titles like 'Sis.' or 'Bro.' (e.g., 'Thank you Sis. Nette') in Google Maps review replies is a strong cultural signal for Filipino/Pinoy community or church affiliation.
 - A candidate business website or social page may list a telephone number with a +63 (Philippines) country code prefix despite having an Australian address; this is a strong positive signal for Filipino affiliation.
+- Facebook pages displaying language support details (e.g., 'English' and 'Filipino language') under profile details is a highly reliable positive signal for confirming Filipino community or business affiliation.
+- Google Maps or third-party reviews containing explicit community or ethnic statements (e.g., 'You need to be a Filo' or references to 'kabayan'/'kababayan') are highly reliable positive signals for confirming Filipino affiliation.
 - Inspecting owner/founder names on website 'About Us' pages, ABN registries, or linked personal socials (e.g., LinkedIn) is highly effective for verifying Filipino ownership or filtering non-Filipino false positives.
 - Third-party business directories or quoting platforms (e.g. Oneflare) can contain explicit Filipino affiliation statements even if the official website is generic.
 - Business directories (like Cybo) listing 'Filipino' under supported languages can be auto-generated or inaccurate; verify via official social pages, websites, or reviews.
 - Verifying generic trading names on local directories such as everythingindian.com.au helps identify South Asian or other non-Filipino false positives.
 - The "Support Pinoy's in Australia" directory (supportpinoys.com.au) lists several non-Filipino businesses; always verify ABN registration and owner names.
 - Web search queries combining "Filipino" or "Pinoy" with "Sydney" can return false-positive candidates located in Sydney, Nova Scotia, Canada; verify the country/state and address.
+- Spanish tapas bars or venues (e.g. named "Una Más" or serving "tapas") can be false positives due to historical naming and culinary overlaps, despite serving strictly Spanish or Mediterranean cuisine.
+
 
 ### Church & Religious Search Patterns
 - Sydney church searches near multicultural hubs return South Asian (Tamil, Malayalam, Hindi, Sinhala), Croatian, Indonesian, African, Hispanic, and general charismatic groups as false positives; verify congregation language and leadership.
@@ -69,6 +86,7 @@
 - The Feast (Light of Jesus Family) prayer groups typically meet inside existing Catholic parishes, sharing the same physical address/place ID and merging during ingestion.
 - Uniting Churches can host distinct, long-standing Filipino congregations, identifiable by dedicated 'Filipino Service' Facebook groups.
 - Missionary and 'Partners in Missions' pages on local independent church websites are high-yield sources for confirming Filipino affiliation.
+- Catholic diocesan directories and multicultural ministry records are highly reliable sources for retrieving specific Filipino Mass schedules and service times for churches or convents lacking Google Maps hours.
 
 ### Business & Services Search Patterns
 - Independent websites are critical for discovering social media profiles of businesses that use numeric profile IDs (e.g., profile.php?id=...) which do not rank well in search queries.
@@ -90,8 +108,26 @@
 - When Google Maps does not display social media links in the business info panel, the business's own website footer often contains Facebook, Instagram, TikTok, YouTube, and LinkedIn links — always check the website as a fallback.
 - TikTok profiles may present a CAPTCHA challenge on first load in Chrome DevTools, blocking follower count extraction; this is an anti-bot measure that cannot be bypassed without human intervention.
 - When a business has global or regional social media pages under the same brand, verify page location/contact details before extracting follower counts to prevent incorrect data associations.
+- Stored social media URLs in task data can sometimes point to a business with the exact same name but located in another country (e.g. Chicago, USA instead of Sydney, Australia); cross-reference location details and address to confirm, and retrieve the correct URL from the official local website footer.
 - When a stored social media URL returns "Page not found" or "Content not available", check for handle suffix variations (e.g., .sydney vs .syd) or typos to locate the correct active page.
-
+- When a stored social media profile returns a 404 or not found page, cross-referencing the official business website footer or contact links is highly effective for discovering the correct active social media handles.
+- For Filipino non-profit or community associations with no Google Maps pin, local ethnic news publications (e.g., Munting Nayon) are high-yield sources for historical facts and activities needed to synthesise descriptions.
+- For community and religious associations with no commercial reviews, public community news (e.g., Catholic Outlook) and local/state parliament recognition statements serve as high-quality sources for web reviews and testimonials.
+- Instagram profiles can contain direct links to the Facebook page in the link or bio section; checking these links is highly effective for discovering the business's Facebook page when standard web search fails to return it.
+- Stored business social URLs can sometimes match a case-insensitive handle that belongs to a personal profile instead of the official page (e.g., `/Ausphin` vs `/AusphinGroup`); verify page contents or check their Linktree/website for the correct corporate handle.
+- Stored social media URLs may redirect to or load the profile of a collaborating partner, sponsor, or host organisation; verify the page identity and branding before extracting metrics like follower counts or reviews to avoid mixing distinct entities.
+- Hostinger or Astro-based business websites may pack their official social links and metadata inside `<script type="application/ld+json">` or `astro-island` component properties; extract these using regular expressions or JSON parsing when standard DOM selectors fail.
+- WordPress Divi theme websites may store social/external link destinations in a JavaScript configuration array named `et_link_options_data`; run `grep_search` on the page source to extract the URLs.
+- When an affiliated business listing lacks reviews or hours on its own Google Maps listing, check if it operates under or shares a physical space with an umbrella/parent brand (e.g. Power Core MMA for Bakbakan Martial Arts); extracting from the parent's panel is a valid and robust fallback if the relationship is confirmed.
+- Food trucks and market vendors (e.g. Bar-B-Skew) often lack a permanent Google Maps pin or fixed operating hours; extract descriptions, contact details, reviews, and follower counts directly from their Facebook and Instagram profiles.
+- When Google Maps hours show a business is closed on certain days or has shorter hours, cross-reference their official website's hours section, which may list more extensive active operating hours.
+- When a business website returns a Cloudflare block page or Turnstile challenge and ASIC registry records indicate historical voluntary deregistration from previous years, classify the business status as CLOSED_PERMANENTLY.
+- Squarespace-based business websites often embed structured `ld+json` schema blocks for `LocalBusiness` and `Organization` containing precise `openingHours` and `sameAs` social media links, serving as an excellent source of schedule and contact details.
+- GoDaddy Website Builder (GoCentral) sites render structured widgets with unique `data-ux` attributes; extracting all readable text nodes while filtering stylesheet and script tags is highly effective for locating hidden weekly service schedules and contact details.
+- A business marked 'Permanently closed' on Google Maps may still list active hours and locations on its official website; trust the Google Maps closure banner as the strongest status signal.
+- When a listing's sourceUrl points to a multi-purpose venue (e.g. The Epping Club) rather than a dedicated business pin, extract reviews and contact details from the business's social profiles or search for the specific business name on Google Maps to avoid capturing the venue's reviews and opening hours.
+- When a business website obfuscates its official email address on contact pages (e.g., using asterisks or Javascript protection), performing a web search for the domain name combined with 'email' is highly effective for retrieving the plain email address.
+- For businesses operating within a host clinic or venue (e.g., 'Operating within Allied Health Clinic'), the host clinic's Google Maps weekly hours can serve as a proxy/bound for the business's schedule when its own listing lacks hours.
 
 ## Events Patterns
 <!-- Event discovery insights: date parsing quirks, platform event formats, classification edge cases -->
@@ -158,4 +194,6 @@
 - Fuzzy name matching (token_set_ratio > 85) can transitively group distinct brand branches (e.g. ALiN Cargo vs LBC Express) in the same suburb due to shared descriptors like "Express", "Cargo", or "Branch"; filter out suburb and common generic descriptors before brand name similarity checks.
 - Naive suburb extraction regexes can fail when addresses contain commas before the state (e.g., "Blacktown, NSW"); normalize or strip commas before identifying the suburb name.
 - Standard street address comparisons must filter out city names (e.g. "Sydney") and check length bounds to prevent empty or generic address fields from triggering false-positive duplicate matches.
+- When executing Python command-line code containing emoji or unicode escape sequences, avoid using UTF-16 surrogate pairs (such as \ud83c or \udf3a) which raise UnicodeEncodeError in standard Python 3 environments; use actual emoji characters or 32-bit escapes (such as \U0001f33a) instead.
+- Listings mistakenly generated under the wrong city (e.g. Brisbane business in Sydney tasks) can have their address, latitude, and longitude corrected via UpdateListingData, but the city property cannot be updated as it is not accepted by the mutation.
 
