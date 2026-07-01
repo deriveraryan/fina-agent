@@ -6,7 +6,7 @@ This repository houses the data discovery, verification, and enrichment agents f
 
 ## 🏛️ Repository Overview
 
-This project is decoupled from the main Fina application backend. It runs lightweight Python scripts locally inside the Antigravity IDE, with four production-ready agents:
+This project is decoupled from the main Fina application backend. It runs lightweight Python scripts locally inside the Antigravity IDE, with five production-ready agents:
 
 | Agent | Purpose |
 |---|---|
@@ -14,8 +14,9 @@ This project is decoupled from the main Fina application backend. It runs lightw
 | **`fina_listing_enrichment`** | Enriches existing listings by extracting reviews, synthesising descriptions, updating operating hours, and filling missing social URLs |
 | **`fina_events_listing`** | Crawls social media pages of verified businesses to discover and push temporal upcoming events |
 | **`fina_listing_places_api_search`** | Discovers new Filipino listing candidates via the Google Places API (New) Text Search endpoint |
+| **`fina_listing_dedup`** | Detects and resolves duplicate listings using two-stage detection and three-phase execution |
 
-All four agents participate in a [shared memory protocol](#-shared-agent-memory) that enables cross-session learning.
+All five production agents participate in a [shared memory protocol](#-shared-agent-memory) that enables cross-session learning.
 
 > [!NOTE]
 > Additional agents (`fina_listing_embedder`, `fina_docs_reviewer`) exist as skills/scripts but are **not yet production-ready**. Their supporting CLI scripts are available in `scripts/` for future activation. See the [Architecture Guide](docs/guides/ide_agent_architecture.md) for details.
@@ -108,6 +109,11 @@ Trigger agents directly in the Antigravity Chat UI. For long-running scans, pref
 >
 > "Use the `fina_listing_places_api_search` skill to discover new listings in SYDNEY."
 
+**Dedup Discovery:**
+> **Task-Based Queue System**: The `fina_listing_dedup` skill targets a **single city** and detects and resolves duplicates in the Fina database.
+>
+> "Use the `fina_listing_dedup` skill to detect and resolve duplicates in SYDNEY."
+
 ### 2. Running Scripts via CLI
 
 #### Web Search Task Manager
@@ -178,6 +184,22 @@ python3 scripts/agent_places_api_search_tasks.py --action complete --city SYDNEY
 python3 scripts/agent_places_api_search_tasks.py --action summary --city SYDNEY --trace-id <CONVERSATION_ID>
 ```
 
+#### Dedup Task Manager
+```bash
+# Scan a city to generate a deduplication plan
+python3 scripts/agent_dedup_scan.py --action plan --city SYDNEY --trace-id <CONVERSATION_ID>
+
+# Agent records verdict for a specific deduplication group
+python3 scripts/agent_dedup_scan.py --action verdict --city SYDNEY --group-id <ID> \
+  --verdict CONFIRMED_DUPLICATE --survivor-id <UUID> --reasoning "<REASON>" --trace-id <CONVERSATION_ID>
+
+# Execute confirmed deduplication actions (merge and delete)
+python3 scripts/agent_dedup_scan.py --action execute --city SYDNEY --trace-id <CONVERSATION_ID>
+
+# View aggregate deduplication progress
+python3 scripts/agent_dedup_scan.py --action summary --city SYDNEY --trace-id <CONVERSATION_ID>
+```
+
 #### Shared Utilities
 ```bash
 # Fetch existing city listings for deduplication context
@@ -208,6 +230,9 @@ Schedule agents to run periodic background scans using the `/schedule` slash com
 
 # Places API discovery — daily at 6pm
 /schedule CronExpression="0 18 * * *" Prompt="Use the fina_listing_places_api_search skill to discover new listings in SYDNEY."
+
+# Duplicate resolution — weekly on Sundays
+/schedule CronExpression="0 0 * * 0" Prompt="Use the fina_listing_dedup skill to resolve duplicates in SYDNEY."
 ```
 *(Note: The Antigravity IDE window must remain active for scheduled agents to execute.)*
 
@@ -215,7 +240,7 @@ Schedule agents to run periodic background scans using the `/schedule` slash com
 
 ## 🧠 Shared Agent Memory
 
-All four production agents participate in a shared, self-evolving memory protocol via [`data/fina_agent_memory.md`](data/fina_agent_memory.md). This enables agents to learn from their executions and share operational knowledge across sessions.
+All five production agents participate in a shared, self-evolving memory protocol via [`data/fina_agent_memory.md`](data/fina_agent_memory.md). This enables agents to learn from their executions and share operational knowledge across sessions.
 
 **How it works:**
 1. **Read Phase** — At session start, the agent reads the memory file and internalises relevant insights.
