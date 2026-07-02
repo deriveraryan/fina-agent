@@ -53,6 +53,7 @@ logs/
 
 # Temporary files
 tmp/
+scratch/
 .tmp.driveupload
 *.lock
 
