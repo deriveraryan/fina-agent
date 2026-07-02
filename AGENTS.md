@@ -257,6 +257,13 @@ pip install -r requirements.txt
 *   **Supersession Rule**: New insights that contradict existing entries **replace** them.
 *   **Content Invariant**: Not a changelog or execution diary. Only distilled, reusable operational knowledge.
 
+### 🚨 Rule 1.16: Signed-In Browser Session Enforcement
+*   **Rule**: All browser interactions **must** use the Chrome DevTools MCP server (`chrome_devtools`), which connects to the user's existing Chrome instance with their signed-in profile, cookies, and sessions.
+*   **Ban `browser_subagent`**: **NEVER** use the `browser_subagent` tool. It launches a separate sandboxed Chromium with no profile, no cookies, and no logged-in sessions. This breaks authentication-dependent workflows (Google Maps, Facebook, Instagram, etc.).
+*   **Ban `isolatedContext`**: **NEVER** pass the `isolatedContext` parameter when calling `new_page` on Chrome DevTools MCP. Isolated contexts create tabs with a separate cookie jar, bypassing the user's signed-in sessions.
+*   **Allowed tools**: `list_pages`, `select_page`, `navigate_page`, `new_page` (without `isolatedContext`), `close_page`, `take_snapshot`, `take_screenshot`, `click`, `fill`, `evaluate_script`, `wait_for`, `press_key`, `type_text`, `hover`, and other Chrome DevTools MCP tools.
+*   **Rationale**: The user's Chrome is pre-authenticated to Google, Facebook, and other platforms. Using any other browser mechanism loses these sessions, causing login walls, CAPTCHAs, and degraded data extraction.
+
 ---
 
 ## 2. Business Logic Architecture (Three-Tier Approach)
