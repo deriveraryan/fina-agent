@@ -14,7 +14,7 @@
 - Google Maps `evaluate_script` requires arrow function syntax `() => expr` (not bare expressions or statements with semicolons).
 - The Chrome DevTools `evaluate_script` MCP tool expects the JavaScript payload in the parameter named `function` (not `script`).
 - Active page focus can change dynamically if other agent sessions are running in parallel; verify selection or re-select the target page context via select_page immediately before every action, or fall back to direct HTTP/API queries (like the Google Places API details endpoint) if browser concurrency causes persistent race conditions.
-- Specifying a unique `isolatedContext` (such as the trace or conversation ID) when calling `new_page` allows parallel agent sessions to run in fully isolated browser environments, preventing cross-tab pollution and session interference.
+- NEVER use `isolatedContext` in `new_page` — it creates a separate cookie jar that bypasses the user's signed-in Chrome sessions (Rule 1.16). For parallel isolation, use `select_page` to verify focus before each action.
 - Google Maps search for a brand name with no local pin may redirect/zoom to coordinates in the Philippines; verify the location or search for the specific street address to confirm.
 - Google Maps search query for a suburb name shared across states (e.g. Epping in NSW and VIC) can return results from the wrong state; verify state/coordinates to filter out-of-bounds candidates.
 - Google Maps search query with a single dominant result redirects directly to its detail panel, bypassing the search results list, even if that result is geographically far from the queried suburb.
@@ -37,7 +37,7 @@
 - When a business found via web search does not have a dedicated Google Maps listing under its name, search Google Maps for its physical street address to resolve coordinates.
 - In Google Maps details panel, if the "Copy open hours" button is absent, the weekly hours table can be extracted by querying the first `table` element and mapping cell values of each `tr` row to standard day abbreviations.
 - When extracting Google Maps opening hours from the weekly table element, join the row text values using newlines (\n) instead of commas to ensure the day parser correctly splits and identifies the day name prefixes.
-- On macOS, the browser subagent (`open_browser_url`) fails with "local chrome mode is only supported on Linux". Use direct Chrome DevTools MCP tool calls instead.
+- NEVER use `browser_subagent` — it launches sandboxed Chromium without the user's signed-in profile/cookies (Rule 1.16). All browser work MUST go through Chrome DevTools MCP.
 - When `evaluate_script` is denied by security/permission policies, scroll the Google Maps search results feed by clicking the Results heading and issuing multiple "PageDown" keyboard events via the `press_key` tool.
 - When `evaluate_script` is denied by security/permission policies, the redirected/current Google Maps URL can be retrieved via `list_pages` to inspect the URL of the selected tab.
 - When `evaluate_script` is denied by security/permission policies, use the `take_snapshot` tool to retrieve the page elements from the Google Maps details panel.
@@ -83,10 +83,13 @@
 - RateMyAgent profile and sales pages can return a permission error page ("Sorry, looks like you don't have permission to perform this action") in unauthenticated Chrome DevTools sessions, blocking review extraction.
 - Google Maps church detail panels often include separate expandable section headers for 'Mass', 'Confession', and 'Adoration' schedules; click on each heading to expand and capture these specific timings to construct a comprehensive church schedule.
 - In the GraphQL UpdateListingData mutation, the variable for the listing's official website is named website (not websiteUrl).
-- In multi-agent parallel environments on macOS, the Chrome DevTools MCP server's `take_snapshot` and `take_screenshot` can snap incorrect tabs belonging to other active agents due to global active window focus conflicts; running an inline Python script via `python3 -c` using Playwright asynchronously in a headless Chromium instance provides a robust, fully isolated extraction alternative.
+- In the GraphQL UpdateListingData mutation, the variable for the listing's tags expects a comma-separated string, unlike CreateListing which automatically converts a list of tags.
+- In multi-agent parallel environments on macOS, the Chrome DevTools MCP server's `take_snapshot` and `take_screenshot` can snap incorrect tabs due to global active window focus conflicts; mitigate by calling `select_page` immediately before every snapshot action.
 - In Google Maps scraping, the rating count or stars element is inside the `.F7nice` class, but the reviews text/count is fetched asynchronously and may take several seconds to appear in the DOM after the page is loaded.
-- Connecting Playwright directly to the running Google Chrome debugging port via CDP (connect_over_cdp) allows running scripts in isolated page contexts without anti-bot blocks (like limited view on Google Maps) that target headless Chromium, while preventing cross-agent tab focus conflicts.
+- NEVER use Playwright or headless Chromium as a workaround — they bypass the user's signed-in Chrome profile (Rule 1.16). All browser interactions must use Chrome DevTools MCP tools.
 - On Facebook and Instagram profile pages, the follower count can be extracted by reading the `content` attribute of the `meta[name="description"]` tag, which contains the follower count string (e.g., "3,031 followers" or "4.3K followers") even when a login dialog or overlay is displayed.
+- Chrome DevTools MCP server connections to Chrome on port 9222 can return a 404 error if Chrome is not started with the --remote-allow-origins="*" CLI flag, as Google Chrome validates the Host header by default.
+
 
 
 
@@ -170,7 +173,7 @@
 - When a stored social media URL returns "Page not found" or "Content not available", check for handle suffix variations (e.g., .sydney vs .syd) or typos to locate the correct active page.
 - When a stored social media profile returns a 404 or not found page, cross-referencing the official business website footer or contact links is highly effective for discovering the correct active social media handles.
 - Direct navigation to a Google Maps place reviews URL can trigger a redirect to a limited/blank view panel. Navigating first to the Google Maps search query page (https://www.google.com/maps/search/<query>) to resolve the desktop view, and then appending !9m1!1b1 to the resolved page URL, reliably opens the reviews list in full desktop layout.
-- Active page focus conflicts in highly concurrent multi-agent environments can be avoided by launching and managing a private Playwright browser instance synchronously inside a Python subprocess instead of sharing the global Chrome DevTools MCP instance.
+- Active page focus conflicts in highly concurrent multi-agent environments should be mitigated by calling `select_page` before every MCP action — NEVER launch separate Playwright/headless browser instances (Rule 1.16).
 
 - When a stored Instagram profile URL is broken or unavailable, check the business's Facebook page intro or details section, which often contains the correct active Instagram handle.
 - If a business Facebook page returns 'This content isn't available' or shows a login wall, check the business's official website for an embedded Facebook page widget; the iframe DOM snapshot often displays the correct active page URL, recent post snippets, and follower counts without requiring login.
@@ -229,6 +232,9 @@
 - When a Google Maps listing has an obvious timing typo for a single day (e.g., 'Tuesday: 8:30 am–5 am' for a professional office), cross-reference their official website or surrounding days to normalise the hours to standard times (e.g., 5:00 pm) before parsing.
 - When Google Maps weekly hours table elements are ignored or fail to appear in accessibility tree snapshots after expanding the Hours panel, the business's official website serves as a highly reliable fallback to extract the full weekly schedule and contact email.
 - Government department or consular branch listings (e.g. Migrant Workers Office) that lack a distinct Google Maps pin can be verified and enriched using the main embassy or consulate's address, contact details, and opening hours.
+- Unofficial or auto-created Facebook Pages (often generated automatically via guest check-ins) display zero followers and lack standard reviews tabs; extract recent visitor posts from the Home/Posts tab for recommendations and treat follower count as zero.
+
+
 
 
 ## Events Patterns
