@@ -8,6 +8,8 @@
 
 ## Platform & Browser Insights
 <!-- Reusable facts about platforms, anti-bot patterns, and browser behaviour -->
+- In Google Maps browser navigation, the reviews panel feed may temporarily retain review cards from the previously visited place card if a snapshot is taken before the panel fully refreshes; verify review content details (such as names and locations) against the current business name to filter out stale cached elements.
+- Vite-based single-page application (SPA) websites (identifiable by Mantine/Vite resource bundles in page source) may fail to load their dynamic store views or render "Error loading products" in unauthenticated browser sessions; fallback to Google Maps details and reviews to verify and enrich.
 - When expanding multiple lazy-loaded "See more" buttons in a list (such as Google Maps reviews), clicking them in reverse order (bottom-to-top or last-to-first) is highly effective as it prevents expanded text boxes from shifting the DOM structure and changing the uids of unclicked buttons above.
 - Wix-based websites render content dynamically via client-side JavaScript, causing raw HTTP fetch tools like read_url_content to return empty or incomplete layouts; navigate directly via Chrome DevTools and take a text snapshot to capture the rendered text and Wix Table Master iframe elements reliably.
 - The Australian Charities and Not-for-profits Commission (ACNC) charity register pages (acnc.gov.au/charity/...) fail to render their dynamic main content in Chrome DevTools MCP sessions, leaving a blank viewport; extract organisation data via general search engine indexing snippets or ABN Lookup directories instead.
@@ -22,6 +24,8 @@
 - Google Maps search for a brand name with no local pin may redirect/zoom to coordinates in the Philippines; verify the location or search for the specific street address to confirm.
 - Google Maps search query for a suburb name shared across states (e.g. Epping in NSW and VIC) can return results from the wrong state; verify state/coordinates to filter out-of-bounds candidates.
 - Google Maps search query with a single dominant result redirects directly to its detail panel, bypassing the search results list, even if that result is geographically far from the queried suburb.
+- If a Google Maps search query with a single dominant result redirects directly to its detail panel, searching for a broader term (e.g. searching 'Filipino near <Location>' instead of '<Category> in <Location>') forces Google Maps to load the standard multi-result search sidebar feed list.
+- Google Maps search query for a specific business that lacks a local pin can redirect to a similarly named business in a completely different suburb of the same metropolitan area; always verify address and suburb before evaluating.
 - Navigating directly to a Google Maps place URL (e.g. /maps/place/...) in the browser can redirect to a blank location panel (e.g. /maps/place//@...); search for the venue name directly on Google Maps to load details reliably.
 - Searching Google Maps directly with the format '<business name> <suburb>' is highly effective at loading the single place card layout directly, bypassing the multi-result feed list which can cause page layout resets.
 - Google Maps operating hours for days with multiple slots (e.g. Sunday Masses) are wrapped in <ul>/<li> elements, requiring concatenating list item texts with commas before passing to the parser.
@@ -41,6 +45,8 @@
 - Business website social links can point directly to the current page itself as template placeholders (e.g., location sub-pages linking to their own URL for Facebook and Instagram); verify if links are self-referential before attempting to navigate or parse them.
 - Business websites designed using WordPress or other builder templates may contain default social media links pointing to the theme creator (e.g. AitThemes); verify that social media profile handles match the target business before extracting them.
 - Business website social links in footers can be outdated or broken (e.g. returning 404); verify handles on the target platforms and check for handle variations (like appending 'australia' or city names) to locate the correct, active profiles.
+- When extracting social handles, verify that the handle belongs to the target business's Australian presence (e.g. @burgerpointofficial with 66k followers), rather than unrelated foreign accounts with generic handles (e.g. @burgerpoint which belongs to an overseas entity).
+- White-label online ordering portals (such as order.<domain> powered by BiteHQ or Square) are highly reliable for resolving all active locations, phone numbers, and individual branch opening hours of multi-branch chains when the main brand website is unreachable.
 - When a business found via web search does not have a dedicated Google Maps listing under its name, search Google Maps for its physical street address to resolve coordinates.
 - In Google Maps details panel, if the "Copy open hours" button is absent, the weekly hours table can be extracted by querying the first `table` element and mapping cell values of each `tr` row to standard day abbreviations.
 - When extracting Google Maps opening hours from the weekly table element, join the row text values using newlines (\n) instead of commas to ensure the day parser correctly splits and identifies the day name prefixes.
@@ -74,6 +80,7 @@
 - Square Online websites store social links, emails, and store metadata in a global JavaScript object named window.__BOOTSTRAP_STATE__, which can be parsed when standard DOM selectors fail to find them.
 - In the Google Maps details panel, when the "Reviews" tab is absent, clicking on a review snippet under the "Review summary" section on the Overview tab redirects the browser to the reviewer's profile page containing the full review details, which can be extracted before returning via the "Back" button.
 - Touch2Success or Foodhub online ordering websites store restaurant metadata and platform social media placeholders (e.g. FoodhubUS, foodhub.usa) in a JSON-LD block with id takeaway_schema; extract local contact details and hours but ignore platform social placeholders.
+- Yumbo Jumbo online ordering storefront websites for active restaurants may show all operating hours as 'Closed' and display 'closed for online ordering' banners when online orders are disabled, even if the physical venue remains OPERATIONAL with active hours on Google Maps.
 - Facebook short URLs using the fb.me domain (e.g. fb.me/<handle>) redirect to the official Facebook page and can be resolved by navigating to them directly via the browser.
 - In Chrome DevTools MCP, the close_page tool fails with an error if called on the last remaining open tab; as a clean workaround, navigate the final tab to about:blank to keep the browser in a clean, reusable state.
 - In Chrome DevTools MCP, the close_page tool's pageId parameter expects an integer/number value, and passing it as a string will raise a parameter type validation error.
@@ -92,7 +99,10 @@
 - RateMyAgent profile and sales pages can return a permission error page ("Sorry, looks like you don't have permission to perform this action") in unauthenticated Chrome DevTools sessions, blocking review extraction.
 - Google Maps church detail panels often include separate expandable section headers for 'Mass', 'Confession', and 'Adoration' schedules; click on each heading to expand and capture these specific timings to construct a comprehensive church schedule.
 - In the GraphQL UpdateListingData mutation, the variable for the listing's official website is named website (not websiteUrl).
+- The duplicate checking utility `agent_check_duplicate.py` matches the candidate URL parameter (`--url`) only against social media profiles (`facebookUrl`, `instagramUrl`, `tiktokUrl`) and not the `website` field of cached listings. Candidates with website URLs instead of social links will be surfaced as fuzzy near-misses (if names match) rather than exact duplicates.
 - In the GraphQL UpdateListingData mutation, the variable for the listing's tags expects a comma-separated string, unlike CreateListing which automatically converts a list of tags.
+- In the GraphQL UpdateListingData mutation, variables such as name and city are not accepted; filter out any non-updatable or read-only listing fields from the payload before pushing.
+- The GraphQL CreateListing mutation requires the description variable to be explicitly provided as a string; omitting the description field from the payload raises a schema validation error.
 - In multi-agent parallel environments on macOS, the Chrome DevTools MCP server's `take_snapshot` and `take_screenshot` can snap incorrect tabs due to global active window focus conflicts; mitigate by calling `select_page` immediately before every snapshot action.
 - In Google Maps scraping, the rating count or stars element is inside the `.F7nice` class, but the reviews text/count is fetched asynchronously and may take several seconds to appear in the DOM after the page is loaded.
 - NEVER use Playwright or headless Chromium as a workaround — they bypass the user's signed-in Chrome profile (Rule 1.16). All browser interactions must use Chrome DevTools MCP tools.
@@ -100,6 +110,7 @@
 - When `evaluate_script` is denied by security/permission policies, Facebook, Instagram, and TikTok follower counts can be extracted from link, heading, or StaticText elements (e.g., "12K followers", "3948 Followers") in the `take_snapshot` output instead of querying the meta description tag.
 - Chrome DevTools MCP server connections to Chrome on port 9222 can return a 404 error if Chrome is not started with the --remote-allow-origins="*" CLI flag, as Google Chrome validates the Host header by default.
 - When a stored or scraped ABN returns an 'Invalid ABN' error on ABN Lookup, perform a name-based search on the ABN Lookup homepage to resolve potential typos or digit transpositions in source databases.
+- The `ListAdminListings` and search queries in `agent_fetch_targets.py` are case-sensitive regarding the `city` parameter; always pass the city name exactly in uppercase (e.g. `MELBOURNE` instead of `melbourne`) to ensure existing database listings are correctly returned and cached for deduplication.
 - Navigating Linktree profiles via Chrome DevTools and taking a text snapshot is a highly reliable way to extract social links directly, as they are fully rendered in the accessibility tree as standard links, making script-parsing extraction fallbacks unnecessary when the page loads successfully.
 - Business websites returning Cloudflare SSL errors (such as Error 526: Invalid SSL certificate) represent misconfigured or expired hosts; bypass website scraping and rely on active social media profiles (like Facebook) to extract contact details and reviews.
 - When searching within a multi-business building or industrial estate's Google Maps directory, click the 'View all' directory button, focus the 'Search for places' input element, and enter the business name to verify if a dedicated pin exists.
@@ -110,7 +121,14 @@
 - Navigating to a Google Maps place URL with a `place_id` parameter can redirect the browser to the street address details panel; clicking the business name under the 'At this place' section of the address panel is required to load the business's listing details.
 - When Chrome DevTools `evaluate_script` is blocked by permissions or security policies, fetching public Linktree pages via standard Python `urllib` and extracting the `__NEXT_DATA__` or generic `{"props":` JSON script blocks serves as a highly robust fallback to retrieve all embedded social and email URLs.
 - Emojis or special characters extracted from Chrome DevTools accessibility tree snapshots can contain surrogate pairs that raise UnicodeEncodeError ('surrogates not allowed') when encoding to UTF-8 in Python; encode with UTF-16 using surrogatepass and decode back to clean them before hashing or saving.
-
+- Google Maps Place Details API requests can fail with REQUEST_DENIED if the Google Maps API key lacks Place Details API enablement/authorization; fallback to searching and navigating the business name directly via Chrome DevTools Maps browser view to retrieve details.
+- Google Maps listings for moved/relocated entities may still show up at their former address and remain marked OPERATIONAL; check user reviews on the legacy listing for mentions of relocation or new addresses to flag/merge appropriately.
+- In Chrome DevTools snapshots, clicking on a child StaticText element inside a link or button element can fail to trigger interaction or time out; locate and click the parent link or button element's `uid` directly to ensure reliable navigation.
+- When browser navigation or read_url_content fails due to SSL/TLS certificate verification errors (e.g. hostname mismatch), a highly effective fallback is to fetch the HTML using a custom Python script that disables SSL validation (e.g. using ssl.CERT_NONE or verify=False), as this allows extracting structured social links and emails from site metadata and schema tags that are otherwise inaccessible.
+- Social media handles discovered in Google Maps web results snippets (such as Instagram `@handle`) might not rank in search engines; navigate directly to their profile URL (e.g. instagram.com/handle) to bypass search index limitations.
+- Google Maps website or social links for temporarily closed businesses can be outdated or broken (e.g., returning 404 on Instagram); check if they have active profiles via web search or rely on database records.
+- TuckerFox online ordering storefront websites store restaurant operating hours and delivery suburbs directly in the main page text (e.g., Days and Time cells under Operating Hours), which are highly reliable sources for opening hours when Google Maps hours are absent or conflict.
+- DoorDash store pages can return a 404 "Sorry, we couldn't find the page you're looking for" error in unauthenticated browser sessions if the session does not have a delivery address set, even if the store is active.
 
 
 
@@ -118,11 +136,19 @@
 <!-- What works and what doesn't when searching for Filipino businesses -->
 
 ### Search Effectiveness
+- The 'People also search for' section in the Google Maps place detail panel is a highly effective, high-yield discovery source for finding nearby similar businesses (e.g., other Filipino grocery stores in nearby suburbs) when the main search results are empty or dominated by out-of-state radius expansion.
 - Suburb-level searches for Filipino student associations consistently yield zero results, as student organizations in Sydney are strictly university-based (e.g. USYD, UNSW, UTS, Macquarie, WSU).
+- When discovering student organizations or cultural associations on Instagram, checking the tagged usernames or captions of posts by national or state-wide umbrella organizations (e.g., FASTCO) is highly effective for locating active campus-specific chapters.
 - `search_web` with `site:facebook.com` or `site:instagram.com` for niche suburb queries returns aggregated summaries rather than direct profile URLs — most candidates come from Round 4 (Google Maps browser).
 - Multi-branch organizations or churches often share a single national website or regional Facebook page; evaluate physical address and branch name rather than relying solely on URL matches to prevent incorrect duplicate detections.
+- Strict duplicate name checking (agent_check_duplicate.py) normalizes and flags exact brand name matches as duplicates even for different physical branches; rename the new branch to include the suburb name (e.g., 'Lutong Pinoy Footscray') before pushing to bypass the collision.
+- Multiple distinct community sports groups or leagues may share the exact same venue/stadium address (e.g. domestic/representative competitions sharing court hire); treat them as separate listings rather than duplicate branches if they have distinct names, websites, and follower bases.
 - Searches containing "Filipino" can return Sanfilippo Children's Foundation as a false positive due to substring similarity; Sanfilippo is a genetic disease charity.
 - Google Maps searches for community associations in low-density suburbs can return results from other states (e.g., VIC, QLD, NT); verify the state or telephone area code (e.g., (02) for NSW).
+- City-level and suburb-level Google Maps searches with city context (e.g., 'in MELBOURNE' or 'near Officer, MELBOURNE') can return prominent listings from other major cities (e.g., Sydney) in the results feed when local matches are absent; verify address state/postcode (e.g., VIC vs NSW) to filter out-of-bounds candidates.
+- Suburb-level Google Maps searches for restaurants in suburbs with zero Filipino density (e.g., Heidelberg) trigger broad radius expansion, returning established metropolitan-wide and interstate listings that lead to high duplicate rates.
+- Suburb-level searches for niche food/beverage categories (like CAFE or bakery) in suburbs with low Filipino business density (e.g., Caroline Springs) can trigger broad geographic radius expansion in Google Maps, returning established venues in neighbouring western suburbs (e.g., Deer Park, Braybrook, Laverton) and resulting in a high duplicate rate.
+
 
 ### False-Positive Filtering Heuristics
 - Business names containing "Pacific" (e.g. AK Pacific Repairs) often refer to Pacific Islander/Oceania communities rather than Filipino, requiring active verification of ownership.
@@ -143,6 +169,19 @@
 - Naming overlaps with the word "Tapsi" (commonly associated with the Filipino dish tapsilog) can also refer to traditional Middle Eastern (particularly Iraqi/Assyrian) tray dishes (Tepsi/Tapsi), so verify product range and customer reviews to distinguish Middle Eastern grocers from Filipino ones.
 - Greek bakeries and patisseries using the word "Filo" in their name (referencing Greek phyllo pastry sheets, e.g. "The Good Filo") are false positives; verify their menu (e.g., spanakopita, bougatsa, Greek custard pie) and social media handles to confirm.
 - Naming overlaps with the Persian suffix "yab" (meaning finder or seeker, e.g. "Visayab" meaning "Visa Finder") can be mistaken for the Visayas region of the Philippines; verify the owner's heritage (e.g., Iranian migration agents like Dr. Sirous Ahmadi) to identify and filter out these non-Filipino false positives.
+- Reviews referencing 'Filipino staff' or friendly service from Filipino employees at a general retail or dining business (e.g., Conway Fish Trading) do not indicate Filipino ownership or community affiliation; reject these as false positives unless there is clear cultural branding or Filipino-centric products.
+- Web search results or landing pages targeting a city (e.g., '/filipino-community-melbourne-australia/') may belong to international organizations (e.g., based in the US) with no local physical presence or active assembly in Australia; verify the physical address and contact phone number before evaluating.
+- Offshoring and staff-leasing (BPO) firms recruiting from the Philippines (e.g. ConnectOS, Prime Remote Group) frequently appear in 'Filipino recruitment' searches; filter these out as false positives unless they provide local community services (such as migration or education consultancy) specifically tailored to the local Filipino-Australian diaspora.
+- Californian or Mexican fusion restaurants led by a head chef with Filipino heritage (e.g. Marmont) but owned by non-Filipinos are false positives if they lack explicit Filipino branding, community alignment, or a predominantly Filipino menu.
+- Surnames like 'Erolin' or 'Erolini' (which genealogical databases associate with the Philippines) can also belong to Samoan or other Pacific Islander families; verify cultural menu items and owner responses (e.g. quoting Samoan proverbs) to filter out non-Filipino false positives.
+- Hybrid European-Filipino businesses (e.g., Filipino-Italian cafe 'Giu Giu') may adopt non-Filipino branding or naming conventions but serve distinct Filipino specialty ingredients like ube or pandan; verify menu highlights and owner heritage profiles to confirm affiliation.
+- Legacy listings of previous non-Filipino tenants (e.g. sharing the same address as a later Filipino business) can persist on Google Maps under the new tenant's business category, leading to false positives.
+- French bakeries (such as Bread Club or Ocab Bakery) incorporating popular Asian or Filipino ingredients (like ube, calamansi, or coconut) in specialty/fusion items are false positives if they are owned and operated by non-Filipinos (e.g. French/Persian owners) without predominantly Filipino branding.
+- Grand Laguna (with stores in Hawthorn, Southbank, etc.) is an Indonesian-focused supermarket chain in Victoria, not a Filipino business; reject as a non-Filipino false positive despite stocking some Filipino grocery lines.
+- General Asian supermarkets listed as partner stockists on distributor websites (e.g. Sarimanok) are not necessarily Filipino-owned or culturally branded; verify their specific business background and ownership (e.g. on forums like Yeeyi) before creating a listing.
+- Burmese and Karen/Kayah Asian groceries (often identifiable by naming elements like "Kayahli", "Htay", "Reh", or "Chin" / "Mara Chin") can be mistaken for Filipino due to general "Asian grocery" category expansion; verify sole trader names or language/product range to filter them out.
+
+
 
 
 ### Church & Religious Search Patterns
@@ -162,6 +201,7 @@
 - The official MCGI Australia portal (mcgi.org.au) features a detailed chapters index and a centralized events page showing Friday Zoom community prayers and Saturday worship/thanksgiving services, useful for constructing church schedules when Google Maps hours are absent.
 - For Jehovah's Witness congregations sharing a Kingdom Hall venue, the official JW Hub meeting finder (hub.jw.org/meetings) is highly reliable; if direct location navigation fails or returns location errors, select the "Congregation" search option by clicking its text label and search by congregation name (e.g. "Hinchinbrook Filipino") to extract Tagalog-language midweek/weekend schedules, phone, and GPS coordinates.
 - Catholic parishes hosting dedicated Filipino devotions, such as a Santo Niño Mass (often scheduled on the fourth Friday of the month) or the Santo Niño de Cebu festival, are highly authentic sources of Filipino Catholic community fellowship.
+- Catholic parishes hosting Simbang Gabi (traditional Filipino Christmas novena masses) or featuring dedicated Filipino choirs (e.g. Himig Filipino Choir) are highly authentic candidates for the Filipino church directory.
 - Parish websites often embed Google Calendars showing daily mass schedules, adoration, and sacrament availability, which serve as highly detailed sources for local timetables.
 - Catholic parishes (such as Holy Family Catholic Parish Ingleburn) can span multiple physical church locations (e.g., Ingleburn and Minto) under a single website; verify the specific location listed for each Mass time on their schedule page to prevent incorrect operating hours merging.
 
@@ -176,10 +216,17 @@
 - Service providers may advertise coverage in multiple states while being physically headquartered in another state; verify actual office address.
 - Google Maps search results can return mock cleaning service pages generated by Calso Pty Ltd (Starworks) for demo/SEO purposes; reject these.
 - Catering search templates in Google Maps return established restaurants across the entire metro area due to radius expansion, leading to high duplicate rates.
+- Food truck search templates in Google Maps (e.g. 'Filipino food truck') also trigger broad radius expansion or return brick-and-mortar restaurants, leading to high duplicate rates in suburb-level searches.
 - General food/catering candidates may be non-Filipino-owned (e.g., Vietnamese, Indian); verify registered business owner names or ABN/ASIC registry.
 - PanaDarna (Filipino bakery) is located inside The Kamayan in Rooty Hill — a hidden-within-another-business pattern to watch for.
 - Contemporary or modern Australian cafes located in major shopping centres can be Filipino-affiliated if they feature fusion menu items such as traditional Filipino pork adobo, reflecting the owners' heritage.
 - Education and student visa consultancies targeting the Filipino community in Australia frequently list their primary processing office or address in the Philippines (e.g. Bataan, Manila) on their website footer and social profiles, while operating under an active Australian company name and ABN registered in a local city like Sydney.
+- Official Philippine Government/Consular listings can be erroneously categorized as a CHURCH if automated tagging templates conflate general community services; verify and restrict consular entities strictly to the GOVERNMENT category.
+- Kids' play centres, private party venues, and indoor playgrounds owned or run by Filipino families are highly authentic community spaces that should be classified under the SERVICES category.
+- For professional services (like SERVICES/accountant), Google Maps search results can contain mostly generic local firms with no Filipino affiliation due to broad matching; general web search results (Round 3) are much more targeted for discovering specific professionals with Filipino background or heritage within larger firms.
+- General Practitioner (GP) listings for Filipino doctors practicing within larger general clinics should be named as 'Dr. [Name] - [Clinic Name]' to provide clear context and prevent duplicate name collisions with other practitioners.
+- Filipino dining or dessert spots operating as delivery-only or "ghost kitchen" concepts (e.g. listed on Uber Eats) may lack dedicated social media profiles or Google Maps pins; verify their physical commercial address and Filipino menu items before creating a new listing with geocoded coordinates.
+
 
 
 ## Enrichment Patterns
@@ -331,6 +378,15 @@
 - The Filipino Walkers community group has updated its meeting point from Jannawi Gardens, Nurragingy Reserve to the Dyanmila picnic shelter at Bungarribee Park, Western Sydney Parklands (Arndell Park).
 - St Michael’s Catholic Church in Blacktown hosts a regular Filipino Mass on the 4th Sunday of the month at 11:00 AM.
 
+### Melbourne — Notable Operational Facts
+- Barangay (barangay.com.au) is the sister catering/events brand of Palay (Fitzroy); they share the same physical address at 135 Greeves St but Barangay has no dine-in premises and belongs under SERVICES, not RESTAURANT.
+- Barkada (70 Speakmen St, Kensington) is a distinct restaurant from Barkada Pinoy (Level 1/6 Sutherland St, CBD); they share the "Barkada" name but are at different addresses and must not be merged.
+- The city-level RESTAURANT search for Melbourne yielded very high duplicate saturation (17/20 candidates already existed from prior Places API ingestion), indicating the Places API had already captured most mainstream Filipino restaurant listings.
+- Regional Victorian towns (like Warrnambool, 250km away) can appear in Melbourne-wide and suburb-level search result feeds; verify suburb/city boundaries to exclude regional candidates outside the metropolitan target area.
+- Suburbs in Melbourne's South-East (like Cranbourne) feature a dense growing cluster of Filipino storefronts, including restaurants (Banqueta, Esarza Kusina), bakeries (Alvin's Creations), and grocers (Manila's Best Groceries).
+- Dirty Ice Cream Desserts is an active physical Filipino storefront at 87 Willsmere Rd, Kew VIC 3101, celebrating traditional Filipino street ice cream (sorbetes) with unique nostalgic flavours like ube, coconut sorbet, and pili nut brown butter; it occupies the same premises that historically hosted Lui Jon Gelato.
+
+
 ## Known Pitfalls
 <!-- Failure modes, validation errors, and how to avoid them -->
 - City Casing Case-Sensitivity: Firebase SQL Connect queries are case-sensitive (e.g. `city: { eq: "SYDNEY" }`). Always normalize city values to uppercase.
@@ -370,3 +426,13 @@
 - The GraphQL `CreateReview` mutation expects the `publishedDate` variable to be a valid ISO 8601 Timestamp string. Relative dates (e.g., "3 months ago") must be omitted or normalized to prevent GraphQL validation errors.
 - When running Python inline code in the shell (`python3 -c`) containing literal strings (e.g. reviews), avoid placing double quotes around string parameters containing dollar signs (`$`) as the shell will interpret them as environment variables (e.g., `$5` expanding to empty); escape the dollar signs or wrap the script in single quotes.
 - Pushing a single review variables payload containing an existing `externalSourceId` to `agent_graphql_push.py --operation CreateReview` raises a GraphQL unique constraint validation error (`ALREADY_EXISTS`) and exits with code 1, which the calling agent can safely catch and ignore as the review is already stored.
+- When Google Maps has two active pins for a rebranded venue (e.g., 'CJs Dining (Formerly Potato Corner Craigieburn)' alongside legacy 'Potato Corner Craigieburn'), treat the successor as a new listing with its own Place ID/sourceUrl, since the UpdateListingData mutation does not accept name updates.
+- A Google Maps listing marked 'Temporarily closed' may actually be open; cross-reference with active posts or hours on their official Facebook page, as Facebook remains the most active channel for real-time operational updates.
+- A Google Maps visitor update claiming a venue is closed to the public (e.g., 'wholesale orders only') does not mean the business is permanently closed; cross-reference with ABN/ACN status and their website/socials to verify if they are active as a wholesale/online-only business.
+- Reusing variables (such as place_id or sourceUrl) from a previously processed candidate when manually creating payloads can lead to accidental duplicate merging into the wrong existing database listing (e.g. merging a catering business into a cafe/restaurant). Always extract the exact unique place ID from the candidate's Google Maps URL before pushing.
+- Distinct businesses sharing a physical venue (e.g. stalls inside Footscray Market) must not share the same `sourceUrl` (such as the market's generic Maps URL) to avoid triggering exact-URL duplicate matches and incorrect merges in the push script; use unique profile, website, or specific trader paths instead.
+
+
+
+
+
