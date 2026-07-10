@@ -46,40 +46,32 @@ GCP_PROJECT="fina-au"
 ```
 
 ### 3. Chrome DevTools MCP Configuration
-The web search, enrichment, and events agents require a running Chrome DevTools MCP server (`chrome_devtools`). The Places API search agent does **not** require a browser. Add it to the `"mcpServers"` object in either:
-- **Global Config**: `~/.gemini/config/mcp_config.json`
-- **Workspace Config**: `.gemini/antigravity/mcp_config.json`
+The web search, enrichment, and events agents require a running Chrome DevTools MCP server (`chrome_devtools`). The Places API search agent does **not** require a browser.
 
-#### Option A: Auto-Launch Mode (Recommended)
-The MCP server automatically launches and manages its own headless Chrome instance:
+Per [Rule 1.16](AGENTS.md#-rule-116-signed-in-browser-session-enforcement), the server **must** attach to the user's real signed-in Chrome (profile, cookies, sessions). Add the config to **both** files (Antigravity's IDE reads the first; the two share the `chrome_devtools` name, so keep them identical):
+- **IDE Config** (authoritative — what "View raw config" opens): `~/.gemini/antigravity/mcp_config.json`
+- **Shared IDE+CLI Config**: `~/.gemini/config/mcp_config.json`
+
 ```json
 "chrome_devtools": {
-  "command": "npx",
+  "command": "/bin/sh",
   "args": [
-    "-y",
-    "chrome-devtools-mcp@latest"
+    "/Users/ryan/src/fina-agent/scripts/chrome_devtools_mcp_wrapper.sh"
   ]
 }
 ```
 
-#### Option B: Active Browser Mode (Connect to Local Session)
-To let the agent interact with your active, logged-in Chrome window:
-1. Launch Chrome with remote debugging:
-   ```bash
-   /Applications/Google\ Chrome.app/Contents/MacOS/Google\ Chrome --remote-debugging-port=9222
-   ```
-2. Configure the MCP server to connect to port 9222:
-   ```json
-   "chrome_devtools": {
-     "command": "npx",
-     "args": [
-       "-y",
-       "chrome-devtools-mcp@latest",
-       "--browserUrl",
-       "http://127.0.0.1:9222"
-     ]
-   }
-   ```
+The wrapper ([`scripts/chrome_devtools_mcp_wrapper.sh`](scripts/chrome_devtools_mcp_wrapper.sh)) attaches to the running Chrome via `--autoConnect`. After editing either config, reload without restarting the IDE: **Agent panel → Manage MCP Servers → Refresh**.
+
+#### Prerequisites (one-time)
+1. **Enable remote debugging in your everyday Chrome**: open `chrome://inspect/#remote-debugging` and toggle it **on**. This persists across restarts. Do **not** relaunch Chrome with `--remote-debugging-port` — on the signed-in default profile Chrome 136+ ignores that flag.
+2. **Accept the consent dialog**: the first time the agent connects each session, Chrome shows a permission prompt (and a "controlled by automated test software" banner while attached) — click **Allow**.
+
+> [!IMPORTANT]
+> **Why not `--browserUrl http://127.0.0.1:9222`?** With the `chrome://inspect` toggle, Chrome 144+ **intentionally returns 404** for the `/json/*` HTTP discovery endpoints; the only usable entry point is the `ws://127.0.0.1:9222/devtools/browser/<uuid>` WebSocket, whose UUID lives in the profile's `DevToolsActivePort` file and **rotates on every Chrome restart**. There is no Chrome flag or enterprise policy to re-enable HTTP discovery for the signed-in default profile. `--autoConnect` (file-based rediscovery) is therefore the only mechanism that survives a Chrome restart. See [Rule 1.16](AGENTS.md#-rule-116-signed-in-browser-session-enforcement) for the full mechanism and the sandbox bridge it depends on.
+
+> [!WARNING]
+> Do **not** point the server at a bare `--userDataDir` without `--autoConnect`. That flag **launches a brand-new, signed-out Chrome** using that directory as its profile — it does not attach to your running browser, defeating Rule 1.16.
 
 ---
 

@@ -32,7 +32,11 @@ Before doing any work, verify that Chrome DevTools MCP is available by calling `
   - Step 6b (Browser verification of candidates)
   - Step 6e (Google Maps enrichment for Rounds 1-3 candidates)
 
-  To fix: Ensure the Chrome DevTools MCP server is running and connected.
+  To fix: Ensure the Chrome DevTools MCP server is running and connected. If the
+  call hung or timed out (rather than erroring instantly), Chrome is most likely
+  showing a debugging-consent dialog — switch to Chrome, click "Allow", then retry.
+  Also confirm remote debugging is toggled on at chrome://inspect/#remote-debugging
+  (see README §3 "Chrome DevTools MCP Configuration").
   ```
 
 ### Step 0.5: Activate Virtual Environment

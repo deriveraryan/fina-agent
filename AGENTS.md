@@ -264,6 +264,15 @@ pip install -r requirements.txt
 *   **Allowed tools**: `list_pages`, `select_page`, `navigate_page`, `new_page` (without `isolatedContext`), `close_page`, `take_snapshot`, `take_screenshot`, `click`, `fill`, `evaluate_script`, `wait_for`, `press_key`, `type_text`, `hover`, and other Chrome DevTools MCP tools.
 *   **Rationale**: The user's Chrome is pre-authenticated to Google, Facebook, and other platforms. Using any other browser mechanism loses these sessions, causing login walls, CAPTCHAs, and degraded data extraction.
 
+#### 🔌 Connection Mechanism (Chrome 144+ under the Antigravity sandbox)
+
+Attaching to the signed-in profile on modern Chrome is non-obvious. The `chrome_devtools` server is launched via [`scripts/chrome_devtools_mcp_wrapper.sh`](scripts/chrome_devtools_mcp_wrapper.sh), registered identically in both `~/.gemini/antigravity/mcp_config.json` (IDE-authoritative) and `~/.gemini/config/mcp_config.json` (shared IDE+CLI). The following constraints are **invariants** — do not "simplify" them back to `--browserUrl`:
+
+*   **`/json/*` 404 is by design.** Remote debugging is enabled via the `chrome://inspect/#remote-debugging` toggle (persisted as `devtools.remote_debugging.user-enabled`), **not** by relaunching Chrome with `--remote-debugging-port`. In toggle mode, Chrome 144+ deliberately 404s all HTTP `/json/*` discovery endpoints on `127.0.0.1:9222`. The only usable entry point is `ws://127.0.0.1:9222/devtools/browser/<uuid>`, and the UUID **rotates on every Chrome restart**. No Chrome flag or enterprise policy restores HTTP discovery for the signed-in default profile (unconditional since Chrome 136). Each new debugging session also requires the user to accept a **consent dialog** in Chrome.
+*   **`--autoConnect`, never `--userDataDir` alone.** `chrome-devtools-mcp` attaches to a running browser only with `--autoConnect` (reading the `<profile>/DevToolsActivePort` file) or an explicit `--wsEndpoint`. Passing `--userDataDir` *without* `--autoConnect` **launches a new, signed-out Chrome** — silently defeating this rule.
+*   **Sandbox bridge.** Antigravity may sandbox the spawned MCP process away from `~/Library`. The wrapper therefore mirrors Chrome's `DevToolsActivePort` into a workspace-local, sandbox-readable path (`tmp/chrome_bridge/`) via [`scripts/sync_devtools_bridge.sh`](scripts/sync_devtools_bridge.sh), then runs `--autoConnect --userDataDir tmp/chrome_bridge`. Because the server re-reads that file on every reconnect, a Chrome restart (new UUID) needs **no MCP restart and no config edit**. An optional launchd watcher ([`scripts/com.fina-agent.chrome-devtools-bridge.plist`](scripts/com.fina-agent.chrome-devtools-bridge.plist), not installed by default) re-syncs the mirror the instant Chrome rewrites the file.
+*   **Reload / EOF recovery.** After editing MCP config, reload via **Agent panel → Manage MCP Servers → Refresh**. A `connection closed: EOF` means the server process died before the handshake — check absolute paths and that the wrapper is executable, not the protocol.
+
 ---
 
 ## 2. Business Logic Architecture (Three-Tier Approach)
