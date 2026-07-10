@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<!-- Optional: keeps tmp/chrome_bridge/DevToolsActivePort in sync even when
+     Chrome restarts while the MCP server is already running.
+     Install:   cp scripts/com.fina-agent.chrome-devtools-bridge.plist ~/Library/LaunchAgents/ \
+                && launchctl load ~/Library/LaunchAgents/com.fina-agent.chrome-devtools-bridge.plist
+     Uninstall: launchctl unload ~/Library/LaunchAgents/com.fina-agent.chrome-devtools-bridge.plist \
+                && rm ~/Library/LaunchAgents/com.fina-agent.chrome-devtools-bridge.plist -->
+<dict>
+    <key>Label</key>
+    <string>com.fina-agent.chrome-devtools-bridge</string>
+    <key>ProgramArguments</key>
+    <array>
+        <string>/bin/sh</string>
+        <string>/Users/ryan/src/fina-agent/scripts/sync_devtools_bridge.sh</string>
+    </array>
+    <key>RunAtLoad</key>
+    <true/>
+    <key>WatchPaths</key>
+    <array>
+        <string>/Users/ryan/Library/Application Support/Google/Chrome/DevToolsActivePort</string>
+    </array>
+</dict>
+</plist>
