@@ -30,7 +30,7 @@ async def fetch_city_listings(city: str, trace_id: str | None = None) -> list[di
         variables={
             "city": city,
             "limit": 2000,
-            "verificationStatuses": ["VERIFIED", "UNVERIFIED"],
+            "verificationStatuses": ["VERIFIED", "UNVERIFIED", "FLAGGED"],
         },
     )
     listings = result.get("data", {}).get("listings", [])

@@ -433,8 +433,6 @@
 - Square Online websites (e.g. square.site) may display a location selection modal upon loading; close it or click "View menu" to see the main page, and inspect the modal's details to extract the exact street address and pickup instructions (e.g. 10 Cooloola Crescent).
 - Forex World Australia in Ingleburn is co-located with and shares the physical premises of Forex Cargo Australia at 18 Broadhurst Rd.
 - Cocoa Vanilla Cakes operates inside Calli's Grill at 22 Rooty Hill Rd S, Rooty Hill, NSW, and regularly sponsors and participates in St Luke's Catholic Parish Marsden Park community events.
-- The Filipino Walkers community group has updated its meeting point from Jannawi Gardens, Nurragingy Reserve to the Dyanmila picnic shelter at Bungarribee Park, Western Sydney Parklands (Arndell Park).
-
 ### Melbourne — Notable Operational Facts
 - Balikbayan box logistics services in Melbourne are highly centralized; suburb-level searches (such as in Sunshine) yield mainly national or metro-wide providers (like LBC, BMEXPRESS, J. Cordon) that are already registered, resulting in a 100% duplicate rate.
 - Barangay (barangay.com.au) is the sister catering/events brand of Palay (Fitzroy); they share the same physical address at 135 Greeves St but Barangay has no dine-in premises and belongs under SERVICES, not RESTAURANT.
@@ -497,3 +495,4 @@
 - Google Maps website links can sometimes point to a completely different company or competitor due to automated matching or user edits; verify company name, address, and phone number on the linked website against target business details before extracting contacts or social links.
 - Google Maps listings representing mobile food trucks or mobile caterers with no storefront can contain coordinates in completely different regions of the state (e.g., North Queensland coordinates for a Brisbane/Moreton Bay food truck); verify operational range via web search and geocode to the metropolitan center (e.g., approx. -27.4698, 153.0251 for Brisbane) with the 'online-org' tag if no physical storefront exists.
 - When verifying a candidate's geographic boundaries (e.g. Brisbane vs Sydney) and the official website lacks a physical address, searching ABN Lookup for the ACN/ABN and checking the registered 'Main Business Location' postcode/state is highly effective to identify its true home location.
+- When a deduplication plan candidate group contains a mixture of true duplicates and distinct unrelated listings (e.g. grouped due to broad fuzzy name matching), the agent must manually edit the candidate list in the plan JSON to retain only the true duplicates before recording a CONFIRMED_DUPLICATE verdict to prevent the execution engine from deleting unrelated listings.

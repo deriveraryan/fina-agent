@@ -72,7 +72,7 @@ async def main() -> None:
             variables={
                 "city": args.city,
                 "limit": 2000,
-                "verificationStatuses": ["VERIFIED", "UNVERIFIED"]
+                "verificationStatuses": ["VERIFIED", "UNVERIFIED", "FLAGGED"]
             }
         )
         listings = result.get("data", {}).get("listings", [])

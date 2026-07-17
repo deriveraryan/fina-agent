@@ -227,7 +227,7 @@ async def check_duplicate(
             variables={
                 "city": city,
                 "limit": 2000,
-                "verificationStatuses": ["VERIFIED", "UNVERIFIED"]
+                "verificationStatuses": ["VERIFIED", "UNVERIFIED", "FLAGGED"]
             },
         )
         listings = ((response or {}).get("data") or {}).get("listings") or []

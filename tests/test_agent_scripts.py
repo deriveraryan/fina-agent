@@ -300,7 +300,7 @@ class TestAgentScripts(unittest.IsolatedAsyncioTestCase):
             variables={
                 "city": "SYDNEY",
                 "limit": 2000,
-                "verificationStatuses": ["VERIFIED", "UNVERIFIED"]
+                "verificationStatuses": ["VERIFIED", "UNVERIFIED", "FLAGGED"]
             }
         )
         mock_stdout.write.assert_any_call(
